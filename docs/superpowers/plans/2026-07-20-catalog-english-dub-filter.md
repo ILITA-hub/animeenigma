@@ -1286,7 +1286,7 @@ Match the surrounding file's router/test harness — read the neighbouring tests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend/web && bunx vitest run src/composables/__tests__/useBrowseFilters.spec.ts`
+Run: `cd frontend/web && bunx vitest run src/composables/useBrowseFilters.spec.ts`
 Expected: FAIL — `endub` is filtered out as an unknown provider value.
 
 - [ ] **Step 3: Extend the Provider union**
@@ -1383,7 +1383,7 @@ The section title lives at `browse.filters.section.provider`; the chip labels at
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `cd frontend/web && bunx vitest run src/composables/__tests__/useBrowseFilters.spec.ts`
+Run: `cd frontend/web && bunx vitest run src/composables/useBrowseFilters.spec.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Run the frontend pre-flight gate**
