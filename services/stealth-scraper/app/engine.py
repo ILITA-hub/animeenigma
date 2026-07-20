@@ -1064,6 +1064,35 @@ class CamoufoxEngine:
                 continue
         return False
 
+    async def _log_challenge_dom_snapshot(self, page: Any) -> None:
+        """One-time diagnostic capture for a stuck challenge (2026-07-20):
+        the 2026-07-18 incident narrowed a 12h/1200+-attempt outage to
+        "_click_turnstile finds no matching frame on every poll" but had no
+        way to see what the DOM actually looked like — no screenshot/HTML-
+        dump capability existed, only a bare Prometheus counter. This logs
+        every frame URL plus whether "turnstile" appears anywhere in
+        page.content(), so the NEXT time Cloudflare changes the widget's
+        embed shape it's diagnosable straight from `docker compose logs`
+        instead of requiring a live human debug session. No network calls —
+        frames/content are already in memory. Caller gates this to once per
+        solve attempt; safe to no-op on any failure (best-effort only)."""
+        if not self._log:
+            return
+        try:
+            frame_urls = [(getattr(fr, "url", "") or "")[:200] for fr in page.frames]
+        except Exception:  # noqa: BLE001
+            frame_urls = []
+        has_turnstile_markup = False
+        try:
+            content = await page.content()
+            has_turnstile_markup = "turnstile" in content.lower()
+        except Exception:  # noqa: BLE001
+            pass
+        self._log.warning(
+            "challenge dom snapshot frames=%r turnstile_markup_present=%s",
+            frame_urls, has_turnstile_markup,
+        )
+
     async def _solve_cf_challenge(self, page: Any, context: Any, origin: str) -> bool:
         """Clear a Cloudflare managed/Turnstile challenge on the already-navigated
         ``page`` AND confirm it yields real content. Returns True only once
@@ -1099,6 +1128,7 @@ class CamoufoxEngine:
         clicks = 0
         clearance_since = 0.0
         last_reload = 0.0
+        dom_snapshot_logged = False
         while time.monotonic() < deadline:
             try:
                 title = await page.title()
@@ -1124,6 +1154,9 @@ class CamoufoxEngine:
                 clicked = await self._click_turnstile(page)
                 if clicked:
                     clicks += 1
+                elif not dom_snapshot_logged:
+                    await self._log_challenge_dom_snapshot(page)
+                    dom_snapshot_logged = True
             # Clearance present but page stuck on the interstitial with NOTHING to
             # click (interim cookie / no auto-reload): reload to apply the cookie.
             # Only after it's been stuck >6s (let CF's own auto-reload settle

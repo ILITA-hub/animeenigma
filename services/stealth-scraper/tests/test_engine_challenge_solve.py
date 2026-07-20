@@ -79,16 +79,20 @@ class _Page:
 
     url = "https://animepahe.pw/"
 
-    def __init__(self, frames, mouse):
+    def __init__(self, frames, mouse, html=""):
         self.frames = frames
         self.mouse = mouse
         self.closed = False
+        self.html = html
 
     async def title(self):
         return REAL_TITLE if self.mouse.clicks else CHALLENGE_TITLE
 
     async def goto(self, url, **k):
         return _Resp(403)
+
+    async def content(self):
+        return self.html
 
     async def close(self):
         self.closed = True
@@ -212,9 +216,11 @@ class TestSolveCfChallengeDiagnosticLog(unittest.TestCase):
         with _no_sleep():
             ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
         self.assertFalse(ok)
-        self.assertEqual(len(log.warnings), 1)
-        rendered = log.warnings[0]
-        self.assertIn("timed out", rendered)
+        # 2 warnings now: the one-time DOM snapshot (added 2026-07-20, see
+        # TestSolveCfChallengeDomDiagnostics) plus this timeout summary.
+        timeout_warnings = [w for w in log.warnings if "timed out" in w]
+        self.assertEqual(len(timeout_warnings), 1)
+        rendered = timeout_warnings[0]
         self.assertIn("host=animepahe.pw", rendered)
         self.assertIn("clicks=0", rendered)
         self.assertIn("clearance_obtained=False", rendered)
@@ -235,6 +241,84 @@ class TestSolveCfChallengeDiagnosticLog(unittest.TestCase):
     def test_no_logger_set_does_not_crash(self):
         # set_logger() is never called in production until app startup wires
         # it — the diagnostic log must not assume self._log is present.
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=40))
+        mouse = _Mouse()
+        page = _Page([_Frame("https://animepahe.pw/")], mouse)
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertFalse(ok)
+
+
+class TestSolveCfChallengeDomDiagnostics(unittest.TestCase):
+    """2026-07-20: the 2026-07-18 incident (clicks=0 on every poll, both
+    solve_challenge providers, 12h/1200+ attempts) narrowed the failure to
+    "the iframe _click_turnstile looks for is never in page.frames" but had
+    no way to see what the DOM actually looked like at the time — no
+    screenshot/HTML-dump capability existed. This is a one-time, log-only
+    capture (no new files, no permanent screenshot pipeline): the first time
+    a poll iteration is challenged but finds no matching frame to click, dump
+    every frame URL + whether "turnstile" appears anywhere in page.content()
+    so a future incident is diagnosable straight from `docker compose logs`
+    instead of requiring a live human debug session."""
+
+    def test_logs_dom_snapshot_once_when_no_matching_frame(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=40))
+        log = _FakeLog()
+        eng.set_logger(log)
+        mouse = _Mouse()
+        page = _Page(
+            [_Frame("https://animepahe.pw/"), _Frame("https://static.cf.example/x.js")],
+            mouse, html="<html><body>no widget here</body></html>",
+        )
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertFalse(ok)
+        snapshots = [w for w in log.warnings if "dom snapshot" in w]
+        # Exactly one snapshot despite many poll iterations before the deadline.
+        self.assertEqual(len(snapshots), 1)
+        self.assertIn("https://animepahe.pw/", snapshots[0])
+        self.assertIn("https://static.cf.example/x.js", snapshots[0])
+        self.assertIn("turnstile_markup_present=False", snapshots[0])
+
+    def test_dom_snapshot_flags_turnstile_markup_without_iframe(self):
+        # Models a Cloudflare embed change where the widget is no longer an
+        # iframe _click_turnstile can find, but "turnstile" still appears in
+        # the raw HTML (e.g. a web-component tag) — worth flagging distinctly
+        # from a page with no CF markup at all.
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=40))
+        log = _FakeLog()
+        eng.set_logger(log)
+        mouse = _Mouse()
+        page = _Page(
+            [_Frame("https://animepahe.pw/")], mouse,
+            html="<cf-turnstile widget-id='x'></cf-turnstile>",
+        )
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        snapshots = [w for w in log.warnings if "dom snapshot" in w]
+        self.assertEqual(len(snapshots), 1)
+        self.assertIn("turnstile_markup_present=True", snapshots[0])
+
+    def test_no_snapshot_logged_when_turnstile_frame_found(self):
+        eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
+                                     challenge_solve_timeout_ms=5000))
+        log = _FakeLog()
+        eng.set_logger(log)
+        mouse = _Mouse()
+        page = _Page([_Frame(TURNSTILE_URL)], mouse)
+        ctx = _Ctx(mouse)
+        with _no_sleep():
+            ok = run(eng._solve_cf_challenge(page, ctx, "https://animepahe.pw"))
+        self.assertTrue(ok)
+        self.assertFalse(any("dom snapshot" in w for w in log.warnings))
+
+    def test_no_logger_set_does_not_crash(self):
         eng = CamoufoxEngine(Config(pool_size=1, warming_enabled=False,
                                      challenge_solve_timeout_ms=40))
         mouse = _Mouse()
