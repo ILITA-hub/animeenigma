@@ -118,6 +118,10 @@ func main() {
 	}
 	defer redisCache.Close()
 
+	// Cadence-tiering last-checked store (spec §4) — per-anime "last
+	// parser-checked" timestamps backing the detector's tier filter.
+	checkedStore := job.NewCheckedStore(redisCache.Client())
+
 	// Activity-register effect producer (AR-EFFECT-01). Non-blocking +
 	// drop-on-full so an analytics outage never affects notifications.
 	analyticsURL := os.Getenv("ANALYTICS_INTERNAL_URL")
@@ -161,6 +165,7 @@ func main() {
 		notifService,
 		&cfg.Detector,
 		log,
+		checkedStore,
 	)
 	invalidationJob := job.NewRelevanceInvalidationJob(db.DB, log)
 	cleanupJob := job.NewDismissedRetentionCleanupJob(db.DB, cfg.Detector.RetentionDays, log)

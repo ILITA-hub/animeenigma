@@ -63,6 +63,13 @@ type DetectorConfig struct {
 	// "http://catalog:8081"). The detector hits
 	// /internal/anime/{shikimori_id}/episodes here.
 	CatalogURL string
+	// Cadence tiering (spec §4). HotWindow is the ± window on next_episode_at
+	// that keeps an ongoing on the hourly (every-run) tier; WarmEvery is the
+	// spacing for non-hot titles; TierFloor is the hard delivery floor —
+	// no combo is checked less often than this.
+	HotWindow time.Duration
+	WarmEvery time.Duration
+	TierFloor time.Duration
 }
 
 func Load() (*Config, error) {
@@ -112,6 +119,9 @@ func Load() (*Config, error) {
 			ParserTimeout:    getEnvDuration("NOTIFICATIONS_PARSER_TIMEOUT", 10*time.Second),
 			UnreadGaugeEvery: getEnvDuration("NOTIFICATIONS_UNREAD_GAUGE_INTERVAL", 5*time.Minute),
 			CatalogURL:       getEnv("CATALOG_URL", "http://catalog:8081"),
+			HotWindow:        getEnvDuration("NOTIF_HOT_WINDOW", 36*time.Hour),
+			WarmEvery:        getEnvDuration("NOTIF_WARM_EVERY", 3*time.Hour),
+			TierFloor:        getEnvDuration("NOTIF_TIER_FLOOR", 6*time.Hour),
 		},
 	}, nil
 }

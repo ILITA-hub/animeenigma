@@ -18,6 +18,7 @@ import (
 // by the admin trigger endpoint (`POST /internal/detector/run-once`).
 type RunReport struct {
 	CombosScanned         int    `json:"combos_scanned"`
+	CombosSelected        int    `json:"combos_selected"`
 	AffectedCombos        int    `json:"affected_combos"`
 	NotificationsUpserted int    `json:"notifications_upserted"`
 	ParserFailures        int    `json:"parser_failures"`
@@ -54,6 +55,10 @@ type NewEpisodeDetectorJob struct {
 	notif      *service.NotificationService
 	cfg        *config.DetectorConfig
 	log        *logger.Logger
+	// checked drives cadence tiering (spec §4): per-anime last-checked
+	// timestamps in Redis. Airing times reuse hotCombos (same DB) via
+	// AiringTimes — no second collector.
+	checked *CheckedStore
 }
 
 // NewEpisodeDetectorJobNew constructs the job. Naming is `NewEpisodeDetectorJobNew`
@@ -71,6 +76,7 @@ func NewEpisodeDetectorJobNew(
 	notif *service.NotificationService,
 	cfg *config.DetectorConfig,
 	log *logger.Logger,
+	checked *CheckedStore,
 ) *NewEpisodeDetectorJob {
 	return &NewEpisodeDetectorJob{
 		hotCombos:  hotCombos,
@@ -81,6 +87,7 @@ func NewEpisodeDetectorJobNew(
 		notif:      notif,
 		cfg:        cfg,
 		log:        log,
+		checked:    checked,
 	}
 }
 
@@ -115,6 +122,27 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		return report, nil
 	}
 
+	// Cadence tiering (spec §4): only check combos whose anime is due this
+	// run. Fail-open — an airing or Redis error includes everything (today's
+	// cadence). Never drops a combo on infrastructure failure.
+	animeIDs := distinctAnimeIDs(combos)
+	airing, err := j.hotCombos.AiringTimes(ctx, animeIDs)
+	if err != nil {
+		if j.log != nil {
+			j.log.Warnw("detector airing-times fetch failed; skipping tier filter", "error", err)
+		}
+		airing = nil // fail-open: nil map → all treated hot
+	}
+	lastChecked := j.checked.LastChecked(ctx, animeIDs)
+	w := TierWindows{Hot: j.cfg.HotWindow, Warm: j.cfg.WarmEvery, Floor: j.cfg.TierFloor}
+	combos = tierFilter(combos, airing, lastChecked, time.Now(), w)
+	report.CombosSelected = len(combos)
+	if len(combos) == 0 {
+		j.recordOutcome("success", &report)
+		j.logCompleted(report)
+		return report, nil
+	}
+
 	// Step 2 — bulk-load prior snapshots.
 	snapshotMap, err := j.snapshots.BulkLoad(ctx, combos)
 	if err != nil {
@@ -136,6 +164,11 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 	if err := j.snapshots.BulkUpsert(ctx, snapUpdates); err != nil {
 		return j.fail(&report, "detector snapshot bulk-upsert failed", err)
 	}
+
+	// Every anime whose combos were actually parser-checked this run is
+	// stamped now — before the affected-count branch, so a run with no
+	// diffs still resets the cadence clock (delivery-floor guarantee).
+	j.checked.MarkChecked(ctx, distinctAnimeIDs(combos))
 
 	if len(affected) == 0 {
 		// No diffs after bootstrap + never-lower filter — success even if
@@ -201,6 +234,22 @@ func (j *NewEpisodeDetectorJob) fail(report *RunReport, msg string, err error) (
 func snapKey(c domain.Combo) domain.Combo {
 	c.ShikimoriID = ""
 	return c
+}
+
+// distinctAnimeIDs collects the unique anime ids referenced across combos,
+// preserving first-seen order. Used to batch the airing-times and
+// last-checked lookups (and the post-run mark) per anime rather than per
+// combo.
+func distinctAnimeIDs(combos []domain.Combo) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(combos))
+	for _, c := range combos {
+		if _, ok := seen[c.AnimeID]; !ok {
+			seen[c.AnimeID] = struct{}{}
+			out = append(out, c.AnimeID)
+		}
+	}
+	return out
 }
 
 // checkCombos fans out per-combo parser lookups (errgroup capped by
@@ -398,6 +447,7 @@ func (j *NewEpisodeDetectorJob) logCompleted(r RunReport) {
 	}
 	j.log.Infow("detector run completed",
 		"combos_scanned", r.CombosScanned,
+		"combos_selected", r.CombosSelected,
 		"affected_combos", r.AffectedCombos,
 		"notifications_upserted", r.NotificationsUpserted,
 		"duration_ms", r.DurationMs,

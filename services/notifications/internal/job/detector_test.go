@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/database"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -78,7 +79,8 @@ func testDB(t *testing.T) *gorm.DB {
 			status TEXT,
 			name TEXT,
 			name_ru TEXT,
-			poster_url TEXT
+			poster_url TEXT,
+			next_episode_at DATETIME
 		)`,
 		`CREATE TABLE anime_list (
 			user_id TEXT,
@@ -125,6 +127,18 @@ func seedAnime(t *testing.T, db *gorm.DB, id, shikimoriID string) {
 	}
 }
 
+// seedAnimeWithNextEpisode is seedAnime plus an explicit next_episode_at —
+// used by the cadence-tiering test to drive AiringTimes.
+func seedAnimeWithNextEpisode(t *testing.T, db *gorm.DB, id, shikimoriID string, nextEpisodeAt time.Time) {
+	t.Helper()
+	if err := db.Exec(
+		`INSERT INTO animes (id, shikimori_id, status, name, name_ru, poster_url, next_episode_at) VALUES (?,?,?,?,?,?,?)`,
+		id, shikimoriID, "ongoing", "Show", "Шоу", "https://example/p.jpg", nextEpisodeAt,
+	).Error; err != nil {
+		t.Fatalf("seed anime with next episode: %v", err)
+	}
+}
+
 func seedList(t *testing.T, db *gorm.DB, userID, animeID, status string) {
 	t.Helper()
 	if err := db.Exec(
@@ -163,11 +177,29 @@ func seedProvider(t *testing.T, db *gorm.DB, name, playerKey string, animeLevel 
 	}
 }
 
-func newDetector(db *gorm.DB, checker service.EpisodeChecker) *NewEpisodeDetectorJob {
+// newDetector builds a detector job wired to a fresh, empty miniredis-backed
+// CheckedStore — every anime is "never checked", so tierFilter includes
+// everything and existing (pre-tiering) test behavior is preserved exactly.
+func newDetector(t *testing.T, db *gorm.DB, checker service.EpisodeChecker) *NewEpisodeDetectorJob {
+	t.Helper()
+	checked, _ := newTestChecked(t)
+	return newDetectorWithChecked(t, db, checker, checked)
+}
+
+// newDetectorWithChecked is newDetector but wired to a caller-supplied
+// CheckedStore instead of a fresh empty one — lets cadence-tiering tests
+// pre-mark last-checked timestamps before exercising Run.
+func newDetectorWithChecked(t *testing.T, db *gorm.DB, checker service.EpisodeChecker, checked *CheckedStore) *NewEpisodeDetectorJob {
+	t.Helper()
 	log := logger.Default()
 	notifRepo := repo.NewNotificationRepository(db)
 	notifService := service.NewNotificationService(notifRepo, log)
-	cfg := &config.DetectorConfig{WorkerLimit: 2}
+	cfg := &config.DetectorConfig{
+		WorkerLimit: 2,
+		HotWindow:   36 * time.Hour,
+		WarmEvery:   3 * time.Hour,
+		TierFloor:   6 * time.Hour,
+	}
 	return NewEpisodeDetectorJobNew(
 		NewHotCombosCollector(db, log),
 		checker,
@@ -177,6 +209,7 @@ func newDetector(db *gorm.DB, checker service.EpisodeChecker) *NewEpisodeDetecto
 		notifService,
 		cfg,
 		log,
+		checked,
 	)
 }
 
@@ -206,7 +239,7 @@ func Test_Detector_BootstrapProtection(t *testing.T) {
 		}: 6, // parser says ep 6 available
 	}}
 
-	det := newDetector(db, checker)
+	det := newDetector(t, db, checker)
 
 	report, err := det.Run(context.Background())
 	if err != nil {
@@ -261,7 +294,7 @@ func Test_Detector_FiresOnDiffAfterBootstrap(t *testing.T) {
 	seedWatch(t, db, userID, animeID, "animelib", "ru", "dub", "9999", 5)
 
 	checker := &stubChecker{byCombo: map[domain.Combo]int{combo: 5}, title: "AniRise"}
-	det := newDetector(db, checker)
+	det := newDetector(t, db, checker)
 
 	// First run: bootstrap.
 	if _, err := det.Run(context.Background()); err != nil {
@@ -315,7 +348,7 @@ func Test_Detector_Idempotency(t *testing.T) {
 	seedWatch(t, db, userID, animeID, "animelib", "ru", "dub", "9999", 5)
 
 	checker := &stubChecker{byCombo: map[domain.Combo]int{combo: 5}}
-	det := newDetector(db, checker)
+	det := newDetector(t, db, checker)
 
 	// Bootstrap at 5.
 	_, _ = det.Run(context.Background())
@@ -362,7 +395,7 @@ func Test_Detector_NeverLowersSnapshot(t *testing.T) {
 	seedWatch(t, db, userID, animeID, "animelib", "ru", "dub", "9999", 5)
 
 	checker := &stubChecker{byCombo: map[domain.Combo]int{combo: 10}}
-	det := newDetector(db, checker)
+	det := newDetector(t, db, checker)
 	// Bootstrap at 10.
 	_, _ = det.Run(context.Background())
 	// Parser regresses to 7. Must not lower snapshot.
@@ -399,7 +432,7 @@ func Test_Detector_ParserFailureIsolation(t *testing.T) {
 	seedWatch(t, db, userID, animeB, "animelib", "ru", "dub", "2", 3)
 
 	checker := &failingCheckerForB{success: map[domain.Combo]int{comboA: 5}}
-	det := newDetector(db, checker)
+	det := newDetector(t, db, checker)
 	// First run is bootstrap for both. Combo A bootstraps to 5, combo B
 	// fails parser — its snapshot is not recorded, but the run does not abort.
 	_, _ = det.Run(context.Background())
@@ -434,10 +467,97 @@ type errParser string
 
 func (e errParser) Error() string { return string(e) }
 
+// countingChecker counts LatestEpisode invocations on top of a static
+// fixture — used to assert the tier filter actually kept the parser from
+// being asked about a combo, rather than the parser being asked and merely
+// returning nothing.
+type countingChecker struct {
+	byCombo map[domain.Combo]int
+	calls   int
+}
+
+func (c *countingChecker) LatestEpisode(_ context.Context, combo domain.Combo) (service.EpisodeCheckResult, error) {
+	c.calls++
+	if v, ok := c.byCombo[combo]; ok {
+		return service.EpisodeCheckResult{Latest: v}, nil
+	}
+	return service.EpisodeCheckResult{}, nil
+}
+
+// Test_Detector_TierSkipsWarmRecentlyChecked is the cadence-tiering
+// integration assertion (spec §4, plan Task 4 Step 2): a warm anime (next
+// episode far outside HotWindow) that was checked recently (inside
+// WarmEvery) must be skipped entirely — the parser/episode-checker never
+// sees its combo. Once its last-checked timestamp ages past TierFloor, the
+// SAME anime must be checked regardless of tier (the delivery-floor
+// guarantee — Global Constraints: tiering only DELAYS a cold check, never
+// drops it).
+func Test_Detector_TierSkipsWarmRecentlyChecked(t *testing.T) {
+	db := testDB(t)
+
+	animeID := "warm1"
+	shikimoriID := "999"
+	userID := "user-1"
+	combo := domain.Combo{
+		AnimeID: animeID, ShikimoriID: shikimoriID,
+		Player: "animelib", Language: "ru", WatchType: "dub", TranslationID: "1",
+	}
+
+	// Next episode ~10 days out — well outside the 36h HotWindow, so this
+	// anime sits in the warm tier.
+	nextEpisode := time.Now().Add(10 * 24 * time.Hour)
+	seedAnimeWithNextEpisode(t, db, animeID, shikimoriID, nextEpisode)
+	seedList(t, db, userID, animeID, "watching")
+	seedWatch(t, db, userID, animeID, "animelib", "ru", "dub", "1", 5)
+
+	checked, _ := newTestChecked(t)
+
+	// Pre-mark "checked 1h ago" by temporarily faking the store's clock —
+	// inside WarmEvery(3h), so the warm tier is not yet due.
+	checked.now = func() time.Time { return time.Now().Add(-1 * time.Hour) }
+	checked.MarkChecked(context.Background(), []string{animeID})
+	checked.now = time.Now
+
+	checker := &countingChecker{byCombo: map[domain.Combo]int{combo: 5}}
+	det := newDetectorWithChecked(t, db, checker, checked)
+
+	report, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("detector run: %v", err)
+	}
+	if checker.calls != 0 {
+		t.Fatalf("warm + recently-checked combo must be skipped: expected 0 parser calls, got %d", checker.calls)
+	}
+	if report.CombosScanned != 1 {
+		t.Fatalf("expected combos_scanned=1 (pre-filter), got %d", report.CombosScanned)
+	}
+	if report.CombosSelected != 0 {
+		t.Fatalf("expected combos_selected=0 (tier-filtered out), got %d", report.CombosSelected)
+	}
+
+	// Push the last-checked timestamp past the 6h delivery floor — the SAME
+	// anime must now be checked regardless of its warm tier.
+	checked.now = func() time.Time { return time.Now().Add(-7 * time.Hour) }
+	checked.MarkChecked(context.Background(), []string{animeID})
+	checked.now = time.Now
+
+	report2, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("detector run 2: %v", err)
+	}
+	if checker.calls != 1 {
+		t.Fatalf("floor-expired combo must be checked: expected 1 parser call, got %d", checker.calls)
+	}
+	if report2.CombosSelected != 1 {
+		t.Fatalf("expected combos_selected=1 (floor forced due), got %d", report2.CombosSelected)
+	}
+}
+
 // Compile-time sanity: tests reference the public service.EpisodeChecker
 // surface — keeps the interface in sync with the production HTTP client.
 var _ service.EpisodeChecker = (*stubChecker)(nil)
 var _ service.EpisodeChecker = (*failingCheckerForB)(nil)
+var _ service.EpisodeChecker = (*countingChecker)(nil)
 
 // Sanity: import database to ensure the test binary links the same DB
 // driver tree the production binary uses (cross-checks go.mod resolution).
