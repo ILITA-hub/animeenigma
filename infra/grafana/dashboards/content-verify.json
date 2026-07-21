@@ -144,11 +144,24 @@
     },
     {
       "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
-      "description": "Percent of ongoing anime with a content_verifications row updated in the last 48 hours.",
+      "description": "Percent of currently-ongoing anime with a content_verifications row updated within a trailing 48h window, sampled hourly. Fixed 7-day trend (panel-level time override), independent of the dashboard time picker.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
           "mappings": [],
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -164,29 +177,22 @@
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "id": 4,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
+        "legend": { "showLegend": false, "displayMode": "list", "placement": "bottom", "calcs": [] },
+        "tooltip": { "mode": "single", "sort": "none" }
       },
       "pluginVersion": "10.3.3",
       "targets": [
         {
           "datasource": { "type": "postgres", "uid": "aenigma-postgres" },
-          "format": "table",
+          "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT 100.0 * count(DISTINCT cv.anime_id) FILTER (WHERE cv.updated_at > now() - interval '48 hours') / NULLIF(count(DISTINCT a.id), 0) AS coverage_pct FROM animes a LEFT JOIN content_verifications cv ON cv.anime_id = a.id WHERE a.status = 'ongoing';",
+          "rawSql": "WITH ongoing AS (SELECT id FROM animes WHERE status = 'ongoing'), total AS (SELECT count(*)::float AS n FROM ongoing), buckets AS (SELECT generate_series(date_trunc('hour', $__timeFrom()::timestamptz), date_trunc('hour', $__timeTo()::timestamptz), interval '1 hour') AS t) SELECT b.t AS \"time\", 100.0 * count(DISTINCT cv.anime_id) / NULLIF((SELECT n FROM total), 0) AS \"coverage\" FROM buckets b LEFT JOIN content_verifications cv ON cv.anime_id IN (SELECT id FROM ongoing) AND cv.updated_at > b.t - interval '48 hours' AND cv.updated_at <= b.t GROUP BY b.t ORDER BY b.t;",
           "refId": "A"
         }
       ],
+      "timeFrom": "7d",
       "title": "Ongoing coverage %",
-      "type": "stat"
+      "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
@@ -252,7 +258,7 @@
             "spanNulls": true
           },
           "min": 0,
-          "unit": "reqps"
+          "unit": "suffix:req/min"
         },
         "overrides": []
       },
@@ -273,7 +279,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (band)(rate(content_verify_probes_total[5m]))",
+          "expr": "sum by (band)(rate(content_verify_probes_total[5m])) * 60",
           "legendFormat": "{{band}}",
           "refId": "A"
         }
@@ -350,7 +356,7 @@
             "spanNulls": true
           },
           "min": 0,
-          "unit": "reqps"
+          "unit": "suffix:req/min"
         },
         "overrides": []
       },
@@ -371,7 +377,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (result)(rate(content_verify_probes_total[5m]))",
+          "expr": "sum by (result)(rate(content_verify_probes_total[5m])) * 60",
           "legendFormat": "{{result}}",
           "refId": "A"
         }
@@ -448,7 +454,7 @@
             "spanNulls": true
           },
           "min": 0,
-          "unit": "reqps"
+          "unit": "suffix:req/min"
         },
         "overrides": []
       },
@@ -469,13 +475,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (audio_lang)(rate(content_verify_verdicts_total[15m]))",
+          "expr": "sum by (audio_lang)(rate(content_verify_verdicts_total[15m])) * 60",
           "legendFormat": "audio {{audio_lang}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (lang)(rate(content_verify_hardsub_total[15m]))",
+          "expr": "sum by (lang)(rate(content_verify_hardsub_total[15m])) * 60",
           "legendFormat": "hardsub {{lang}}",
           "refId": "B"
         }
@@ -500,7 +506,7 @@
             "spanNulls": true
           },
           "min": 0,
-          "unit": "reqps"
+          "unit": "suffix:req/min"
         },
         "overrides": []
       },
@@ -521,7 +527,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (reason)(rate(content_verify_ticks_skipped_total[5m]))",
+          "expr": "sum by (reason)(rate(content_verify_ticks_skipped_total[5m])) * 60",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -589,7 +595,7 @@
             "spanNulls": true
           },
           "min": 0,
-          "unit": "reqps"
+          "unit": "suffix:req/min"
         },
         "overrides": []
       },
@@ -610,7 +616,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (result)(rate(content_verify_skip_probes_total[5m]))",
+          "expr": "sum by (result)(rate(content_verify_skip_probes_total[5m])) * 60",
           "legendFormat": "{{result}}",
           "refId": "A"
         }
@@ -643,6 +649,6 @@
   "timezone": "",
   "title": "Content Verify",
   "uid": "content-verify",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
