@@ -623,6 +623,70 @@
       ],
       "title": "OP/ED skip lane",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Graduated probe-loop cap (content_verify_worker_cap, kind=pressure/demand/effective — effective = min(pressure, demand)) vs actual in-flight probe leases (content_verify_inflight_leases). CV_CURVE maps pressure score to a cap; CV_DEMAND_PER_WORKER derives a demand-side cap from pending backlog.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 27 },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last"],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "content_verify_worker_cap{kind=\"pressure\"}",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "content_verify_worker_cap{kind=\"demand\"}",
+          "legendFormat": "{{kind}}",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "content_verify_worker_cap{kind=\"effective\"}",
+          "legendFormat": "{{kind}}",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "content_verify_inflight_leases",
+          "legendFormat": "active",
+          "refId": "D"
+        }
+      ],
+      "title": "content-verify worker cap",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
