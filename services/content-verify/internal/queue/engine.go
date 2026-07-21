@@ -176,6 +176,9 @@ func (e *Engine) bandedCandidates(ctx context.Context) []Candidate {
 		b := BandOf(c)
 		groups[b] = append(groups[b], c)
 	}
+	for _, b := range []Band{BandPinned, BandOngoing, BandWatchedTop, BandIdle} {
+		cvmetrics.BandDepth.WithLabelValues(b.Label()).Set(float64(len(groups[b])))
+	}
 	now := e.now()
 	for b := range groups {
 		g := groups[b]

@@ -34,4 +34,8 @@ var (
 		Name: "content_verify_provider_deferrals_total",
 		Help: "Deferrals recorded after an upstream 503 (provider down / negative-cached).",
 	}, []string{"provider"})
+	BandDepth = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "content_verify_band_depth",
+		Help: "Candidate count per priority band at the last queue build.",
+	}, []string{"band"})
 )
