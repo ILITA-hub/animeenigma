@@ -2134,6 +2134,17 @@
           "legendFormat": "kills {{mode}}",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "increase(stealth_stream_migrations_total[10m])",
+          "legendFormat": "migrations {{result}}",
+          "range": true,
+          "refId": "E"
         }
       ]
     }
