@@ -106,6 +106,23 @@ func TestWatcherScoreReadsKeyAndFailsOpen(t *testing.T) {
 		t.Fatalf("out of range: want 1.0, got %v", got)
 	}
 
+	// Out-of-range negative -> clamped to 0.0.
+	client.Set(ctx, DegradationScoreKey, "-3", time.Minute)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0 {
+		t.Fatalf("negative value: want 0, got %v", got)
+	}
+
+	// "NaN" parses cleanly via strconv.ParseFloat, but math.Max/Min do not
+	// clamp NaN -- must be caught explicitly and stored as 0, never
+	// propagated (review finding 3: a corrupted key must not publish NaN and
+	// fail Curve.Cap CLOSED downstream).
+	client.Set(ctx, DegradationScoreKey, "NaN", time.Minute)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0 {
+		t.Fatalf("NaN value: want 0, got %v", got)
+	}
+
 	// Dead governor (level key gone) must zero the score too, even though
 	// the score key itself is still populated.
 	client.Del(ctx, DegradationLevelKey)

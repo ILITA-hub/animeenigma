@@ -505,7 +505,16 @@ class DegradedKillMarkerCleanupTest(unittest.TestCase):
 class ForceKillRiderProtectionTest(unittest.TestCase):
     """Carry-forward from Task 7's review: a service-class survivor hosting a
     migrated (rider) stream must never be force-killed — even when
-    _scale_down_step routes it there as the LRU service-class victim."""
+    _scale_down_step routes it there as the LRU service-class victim.
+
+    Final-review finding 1: the OLD code let `_scale_down_step` set
+    `victim.draining = True` and THEN route a rider-hosting session to
+    `_force_kill`, which no-ops on the rider guard — stranding `draining`
+    True until TTL and quietly shrinking `_migrate_session`'s survivor pool
+    under sustained pressure. The fix excludes rider-hosting sessions from
+    `_pick_victim`'s SERVICE bucket outright (so `_force_kill` is never
+    reached for them) and, in `_force_kill` itself, clears `draining` on both
+    no-op guard paths as defense in depth."""
 
     def _run(self, coro):
         return asyncio.run(coro)
@@ -527,6 +536,65 @@ class ForceKillRiderProtectionTest(unittest.TestCase):
         self.assertIn("survivor", eng._sessions)
         self.assertIn("rider", eng._sessions)
         self.assertTrue(survivor.profile.leased)
+        # Finding 1: the survivor must never be left stuck draining=True — it
+        # was never a valid SERVICE-bucket candidate in the first place, so
+        # _force_kill's no-op path is never even reached for it.
+        self.assertFalse(survivor.draining)
+
+    def test_pick_victim_excludes_rider_hosting_service_session(self):
+        """A rider-hosting session must never surface from `_pick_victim`'s
+        SERVICE bucket while a plain (non-rider) service-class session is
+        available — even when the rider-hosting session has the smallest
+        expires_at (best LRU position)."""
+        eng = _engine()
+        survivor = _mk_session(eng, "survivor", user_key=None, in_use=0, expires_in=1)
+        rider = _mk_session(eng, "rider", user_key="alice", in_use=1, expires_in=9999)
+        rider.owns_profile = False
+        rider.profile = survivor.profile
+        _mk_session(eng, "other-service", user_key=None, in_use=0, expires_in=100)
+
+        picked = eng._pick_victim()
+        self.assertIsNotNone(picked)
+        sid, _s = picked
+        self.assertEqual(sid, "other-service")
+
+    def test_only_rider_hosting_service_session_over_threshold_no_kill_no_drain(self):
+        """When the rider-hosting session is the ONLY service-class session
+        over threshold, no kill occurs anywhere and nothing is left stuck
+        draining — `_pick_victim` falls through to the user bucket (the rider
+        itself), whose failed migration cleanly clears draining rather than
+        stranding it on the excluded survivor."""
+        eng = _engine()
+        eng.cfg.pool_curve = "0.60:1"
+        eng._pool_curve = scaling.parse_curve(eng.cfg.pool_curve)
+        # target=1 -> threshold ceil(1/2)+1 = 2; current=3 > threshold triggers.
+        survivor = _mk_session(eng, "survivor", user_key=None, in_use=0, expires_in=5)
+        rider = _mk_session(eng, "rider", user_key="alice", in_use=1, expires_in=9999)
+        rider.owns_profile = False
+        rider.profile = survivor.profile
+        # Padding session, already draining, so it can't itself be picked —
+        # only present to push current (3) over the threshold (2).
+        decoy = _mk_session(eng, "decoy", user_key=None, in_use=0, expires_in=9999)
+        decoy.draining = True
+
+        async def _no_survivor(sid):
+            return False
+
+        eng._migrate_session = _no_survivor
+        before = _counter_val(metrics.POOL_KILLS, **{"class": "service", "mode": "graceful"})
+
+        self.assertEqual(eng._pool_target(), 1)
+        self._run(eng._scale_down_step())
+
+        self.assertIn("survivor", eng._sessions)
+        self.assertIn("rider", eng._sessions)
+        self.assertIn("decoy", eng._sessions)
+        self.assertFalse(survivor.draining)
+        self.assertFalse(rider.draining)
+        self.assertEqual(
+            _counter_val(metrics.POOL_KILLS, **{"class": "service", "mode": "graceful"}),
+            before,
+        )
 
 
 if __name__ == "__main__":

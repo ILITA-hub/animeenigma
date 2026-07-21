@@ -117,5 +117,13 @@ func (w *DegradationWatcher) refresh(ctx context.Context) {
 		w.score.Store(0)
 		return
 	}
+	// strconv.ParseFloat accepts "NaN"/"nan", and math.Max/Min propagate NaN
+	// rather than clamping it — a corrupted key would otherwise publish NaN,
+	// which fails CLOSED downstream (Curve.Cap(NaN) hits the last-cap branch,
+	// e.g. 0 workers). Guard explicitly before the clamp (review finding 3).
+	if math.IsNaN(f) {
+		w.score.Store(0)
+		return
+	}
 	w.score.Store(math.Float64bits(math.Max(0, math.Min(1, f))))
 }

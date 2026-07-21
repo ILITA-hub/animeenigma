@@ -11,6 +11,9 @@ func TestCurveCapBands(t *testing.T) {
 		{0.0, 6}, {0.39, 6}, {0.40, 6},
 		{0.41, 5},          // floor(6 - 4*(0.01/0.20*... )) = floor(5.8)
 		{0.50, 4},          // midpoint of 6->2
+		{0.55, 3},          // epsilon parity: raw IEEE value is 2.999999999999999,
+		                    // not 3 — matches Python scaling.pool_target_for's
+		                    // +1e-9 guard (review finding 2).
 		{0.60, 2}, {0.70, 1}, {0.80, 0}, {0.95, 0}, {1.0, 0},
 	}
 	for _, tc := range cases {

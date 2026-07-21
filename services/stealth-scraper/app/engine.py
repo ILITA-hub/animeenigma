@@ -1695,12 +1695,22 @@ class CamoufoxEngine:
     def _pick_victim(self) -> tuple[str, Session] | None:
         """Scale-down victim: service-class browsers first (LRU by expires_at),
         else a user-class browser — which may only ever be DRAINED (migrated),
-        never force-killed. Draining sessions are already being handled."""
+        never force-killed. Draining sessions are already being handled.
+
+        A rider-hosting session is never a SERVICE-bucket candidate: routing it
+        to `_force_kill` would set `draining = True` then have that call no-op
+        on the rider guard, stranding the flag True until TTL (review finding
+        1) — excluding it here means `_force_kill` is simply never reached for
+        it. User-bucket picks stay unaffected (they are migration-only, so a
+        rider-hosting USER session is still a valid migration candidate)."""
         service, user = [], []
         for sid, s in self._sessions.items():
             if s.draining:
                 continue
-            (user if self._session_is_user(s) else service).append((s.expires_at, sid, s))
+            if self._session_is_user(s):
+                user.append((s.expires_at, sid, s))
+            elif not self._profile_has_rider(s.profile):
+                service.append((s.expires_at, sid, s))
         for bucket in (service, user):
             if bucket:
                 bucket.sort(key=lambda t: t[0])
@@ -1805,8 +1815,19 @@ class CamoufoxEngine:
         if s is None:
             return
         if self._session_is_user(s):  # defense in depth — never kill user streams
+            # Clear draining: a future caller must not find this session
+            # stranded in draining=True with no kill/migration ever completing
+            # (review finding 1 — _pick_victim already excludes this class from
+            # the SERVICE bucket, this is defense in depth for any other path
+            # that might route here).
+            s.draining = False
             return
         if self._profile_has_rider(s.profile):  # never kill a rider's host browser
+            # Same defense in depth: _pick_victim already excludes rider-hosting
+            # sessions from the SERVICE bucket, so this no-op should be
+            # unreachable in practice — but if it's ever hit, don't strand the
+            # flag (review finding 1).
+            s.draining = False
             return
         self._sessions.pop(sid, None)
         self._degraded_kills[sid] = time.time() + 120.0

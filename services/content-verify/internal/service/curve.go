@@ -58,7 +58,11 @@ func (c Curve) Cap(score float64) int {
 		if score <= c[i].Score {
 			a, b := c[i-1], c[i]
 			frac := (score - a.Score) / (b.Score - a.Score)
-			return int(math.Floor(float64(a.Cap) + frac*float64(b.Cap-a.Cap)))
+			// +epsilon: guards against float repr error landing just under an
+			// integer boundary (e.g. score=0.55 on the default curve computes
+			// 2.9999999999999987, not 3) without affecting any real band.
+			// Parity with Python's scaling.pool_target_for (review finding 2).
+			return int(math.Floor(float64(a.Cap) + frac*float64(b.Cap-a.Cap) + 1e-9))
 		}
 	}
 	return last.Cap
