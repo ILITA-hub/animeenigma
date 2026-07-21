@@ -2,13 +2,16 @@
 selection, and the per-tick drain-trigger threshold. Migration itself (the
 happy path + failure path) is exercised in the migration test class below with
 stubbed browser internals — no real Camoufox."""
+import asyncio
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from app.config import Config
 from app.engine import CamoufoxEngine, Session
 from app import metrics, scaling
+from tests.test_engine_degradation import _fake_response, _run_one_poll_tick
 
 
 def _engine(pool_size=6, **kw):
@@ -255,6 +258,170 @@ class MigrationSuccessTest(unittest.TestCase):
         # itself (the old victim's page-retire/lease-release is deferred to
         # _retire_after_drain, not asserted here).
         self.assertTrue(survivor.profile.leased)
+
+
+class ScaleDownStepLoopSurvivesTest(unittest.TestCase):
+    """Review finding 1 (Important): an unguarded `_scale_down_step()` call at
+    the tail of `_degradation_loop`'s `while True` would let ANY exception
+    raised inside it (e.g. from `_migrate_session`'s post-try `store.save`, or
+    `_force_kill`'s `store.delete`/`_safe_close_page`) propagate out and
+    permanently kill the poll loop that feeds level/score/target for the whole
+    fleet. The call site must catch-and-log instead."""
+
+    def test_loop_survives_scale_down_step_raising(self):
+        cfg = Config(
+            pool_size=6, warming_enabled=False,
+            governor_url="http://fake-governor",
+            degradation_poll_seconds=0.0,
+        )
+        eng = CamoufoxEngine(cfg)
+        eng._sample_ram = lambda: 0
+
+        calls = {"n": 0}
+
+        async def _boom():
+            calls["n"] += 1
+            raise RuntimeError("scale-down exploded")
+
+        eng._scale_down_step = _boom
+
+        payload = {"data": {"level": 0, "score": 0.42}}
+        with mock.patch("urllib.request.urlopen", return_value=_fake_response(payload)):
+            _run_one_poll_tick(eng)
+
+        # _scale_down_step raising on EVERY tick must not stop the loop from
+        # looping past the first raise — more than one call proves the `while
+        # True` kept going instead of dying on the first exception, and the
+        # score is still fresh (level/score keep being published on later ticks).
+        self.assertGreater(calls["n"], 1)
+        self.assertEqual(eng._degradation_score, 0.42)
+
+
+class SurvivorRiderProtectionTest(unittest.TestCase):
+    """Review finding 2 (Important): a migrated session (rider,
+    owns_profile=False) shares its survivor's profile/browser context.
+    Nothing protected the survivor before this fix — an idle survivor could be
+    picked by `_evict_one_lru` or closed by the expiry sweeps, tearing the
+    shared browser down under the rider's live stream. A rider itself stays
+    evictable — its own close releases no profile."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _rig(self, eng, *, survivor_expires_in, rider_expires_in):
+        survivor = _mk_session(
+            eng, "survivor", user_key=None, in_use=0, expires_in=survivor_expires_in
+        )
+        rider = _mk_session(
+            eng, "rider", user_key="alice", in_use=0, expires_in=rider_expires_in
+        )
+        rider.owns_profile = False
+        rider.profile = survivor.profile
+        return survivor, rider
+
+    def test_evict_one_lru_skips_rider_hosting_survivor(self):
+        eng = _engine()
+        survivor, rider = self._rig(eng, survivor_expires_in=1, rider_expires_in=9999)
+        # A plain decoy (no rider) with a LATER expires_at than the survivor —
+        # were the guard absent, the survivor (smallest expires_at) would be
+        # picked first as the LRU candidate. It must be skipped in favor of
+        # the decoy instead.
+        _mk_session(eng, "decoy", user_key=None, in_use=0, expires_in=100)
+        freed = eng._evict_one_lru()
+        self.assertTrue(freed)
+        self.assertIn("survivor", eng._sessions)
+        self.assertIn("rider", eng._sessions)
+        self.assertNotIn("decoy", eng._sessions)
+
+    def test_evict_expired_skips_rider_hosting_survivor(self):
+        eng = _engine()
+        survivor, rider = self._rig(eng, survivor_expires_in=-5, rider_expires_in=9999)
+        eng._evict_expired()
+        self.assertIn("survivor", eng._sessions)
+        self.assertTrue(survivor.profile.leased)
+
+    def test_reap_skips_rider_hosting_survivor(self):
+        eng = _engine()
+        survivor, rider = self._rig(eng, survivor_expires_in=-5, rider_expires_in=9999)
+        self._run(eng._reap())
+        self.assertIn("survivor", eng._sessions)
+        self.assertTrue(survivor.profile.leased)
+
+    def test_rider_itself_still_evictable_on_its_own_ttl(self):
+        eng = _engine()
+        survivor, rider = self._rig(eng, survivor_expires_in=9999, rider_expires_in=-5)
+        eng._evict_expired()
+        self.assertNotIn("rider", eng._sessions)
+        self.assertIn("survivor", eng._sessions)
+
+
+class MigrationInUseGuardTest(unittest.TestCase):
+    """Review finding 2 part 1: `_migrate_session` must hold `survivor.in_use`
+    for the ENTIRE migration window (first await on the survivor's context
+    through the verify fetch) so a concurrent evict path can't pick the
+    survivor mid-navigate — every eviction path already skips in_use > 0."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def _engine(self):
+        cfg = Config(pool_size=4, warming_enabled=False,
+                     profile_dir=tempfile.mkdtemp())
+        eng = CamoufoxEngine(cfg)
+        eng._sample_ram = lambda: 0
+        return eng
+
+    def test_survivor_in_use_during_migration_window(self):
+        eng = self._engine()
+        victim = _mk_session(eng, "victim", user_key="alice", in_use=0, age_s=5,
+                              expires_in=10)
+        victim.player_url = "https://player.example/watch/1"
+        victim.master_url = "https://cdn.example/master.m3u8"
+        survivor = _mk_session(eng, "survivor", user_key="bob", in_use=0, age_s=5,
+                                expires_in=9999)
+
+        page = _FakeGotoPage()
+        release_gate = asyncio.Event()
+        observed: dict = {}
+
+        async def _ensure(profile, proxy_id):
+            # Migration is now mid-flight — the guard must already be up.
+            observed["in_use_mid_flight"] = survivor.in_use
+            await release_gate.wait()
+            return _FakeSurvivorContext(page)
+
+        eng._ensure_browser = _ensure
+
+        async def _drive():
+            task = asyncio.ensure_future(eng._migrate_session("victim"))
+            await asyncio.sleep(0.05)
+            self.assertGreater(survivor.in_use, 0)
+            release_gate.set()
+            return await task
+
+        ok = asyncio.run(_drive())
+        self.assertTrue(ok)
+        self.assertEqual(observed.get("in_use_mid_flight"), 1)
+        # Released once the migration window closes (success path).
+        self.assertEqual(survivor.in_use, 0)
+
+    def test_survivor_in_use_released_on_migration_failure(self):
+        eng = self._engine()
+        victim = _mk_session(eng, "victim", user_key="alice", in_use=0, age_s=5,
+                              expires_in=10)
+        victim.player_url = "https://player.example/watch/1"
+        victim.master_url = "https://cdn.example/master.m3u8"
+        survivor = _mk_session(eng, "survivor", user_key="bob", in_use=0, age_s=5,
+                                expires_in=9999)
+
+        async def _ensure(profile, proxy_id):
+            raise RuntimeError("browser launch exploded")
+
+        eng._ensure_browser = _ensure
+
+        ok = self._run(eng._migrate_session("victim"))
+        self.assertFalse(ok)
+        self.assertEqual(survivor.in_use, 0)
 
 
 if __name__ == "__main__":

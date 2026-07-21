@@ -637,7 +637,11 @@ class CamoufoxEngine:
                 0 if self._degradation_level < 1 else self._degradation_level
             )
             metrics.POOL_TARGET.set(self._pool_target())
-            await self._scale_down_step()
+            try:
+                await self._scale_down_step()
+            except Exception:  # noqa: BLE001 — scale-down must never kill the poll loop
+                if self._log:
+                    self._log.exception("scale-down step failed; loop continues")
 
     def _shed_new_work(self) -> None:
         """Raise DegradedShed when the host is at Critical pressure — gates the
@@ -662,15 +666,25 @@ class CamoufoxEngine:
             return False
         return self._read_ram() < self.cfg.ram_soft_bytes
 
+    def _profile_has_rider(self, profile) -> bool:
+        """True when any rider (owns_profile=False) session shares this
+        profile — its browser must not be torn down under the rider."""
+        return any(
+            (not s.owns_profile) and s.profile is profile
+            for s in self._sessions.values()
+        )
+
     def _evict_one_lru(self) -> bool:
         """Evict the least-recently-used NOT-in-use session (smallest
         expires_at) to reclaim a browser slot. Returns True if one was freed.
-        Never touches an in-use session (a concurrent /hls fetch is awaiting it)
-        or a draining session (already being handled by scale-down)."""
+        Never touches an in-use session (a concurrent /hls fetch is awaiting it),
+        a draining session (already being handled by scale-down), or a survivor
+        currently hosting a rider (tearing its browser down would kill the
+        rider's live stream — user-stream sanctity)."""
         candidates = [
             (s.expires_at, sid, s)
             for sid, s in self._sessions.items()
-            if s.in_use <= 0 and not s.draining
+            if s.in_use <= 0 and not s.draining and not self._profile_has_rider(s.profile)
         ]
         if not candidates:
             return False
@@ -1499,10 +1513,19 @@ class CamoufoxEngine:
         """Drop expired, NOT-in-use sessions (cheap request-path sweep). The page
         close is scheduled via a retained task (get_running_loop, not the
         deprecated get_event_loop); the background reaper also closes pages, so a
-        missed schedule here can't strand one."""
+        missed schedule here can't strand one.
+
+        An owning (owns_profile=True) session whose profile is shared with a
+        rider (a migrated session, owns_profile=False) is skipped even past its
+        TTL: closing its page + releasing its profile would tear the shared
+        browser context down under the rider's live stream (user-stream
+        sanctity). A rider itself is never guarded — its own close releases no
+        profile, so it stays evictable on its own TTL."""
         now = time.time()
         for sid, session in list(self._sessions.items()):
             if session.expires_at <= now and session.in_use <= 0:
+                if session.owns_profile and self._profile_has_rider(session.profile):
+                    continue
                 self._sessions.pop(sid, None)
                 self.store.delete(sid)
                 self._spawn(_safe_close_page(session.page))
@@ -1539,6 +1562,10 @@ class CamoufoxEngine:
         now = time.time()
         for sid, session in list(self._sessions.items()):
             if session.expires_at <= now and session.in_use <= 0:
+                # Mirror _evict_expired's rider guard: don't close/release an
+                # owning session's shared browser out from under a rider.
+                if session.owns_profile and self._profile_has_rider(session.profile):
+                    continue
                 self._sessions.pop(sid, None)
                 await _safe_close_page(session.page)
                 if session.owns_profile:
@@ -1680,6 +1707,13 @@ class CamoufoxEngine:
         # freshest (largest expires_at) within each class.
         survivors.sort(key=lambda s: (not self._session_is_user(s), -s.expires_at))
         survivor = survivors[0]
+        # Shield the survivor for the whole migration window: it hosts the
+        # rider-to-be's browser/profile, so it must not be picked by
+        # _evict_one_lru / _evict_expired / _reap while we're mid-navigate —
+        # every eviction path already skips in_use > 0. Incremented before the
+        # first await, decremented in `finally` so it's released on every exit
+        # (success or any failure).
+        survivor.in_use += 1
         page = None
         try:
             context = await self._ensure_browser(survivor.profile, survivor.proxy_id)
@@ -1713,6 +1747,8 @@ class CamoufoxEngine:
                 await _safe_close_page(page)
             metrics.STREAM_MIGRATIONS.labels(result="failed").inc()
             return False
+        finally:
+            survivor.in_use = max(0, survivor.in_use - 1)
         self._sessions[sid] = moved
         moved.last_persist = time.time()
         self.store.save(self._session_record(moved))
