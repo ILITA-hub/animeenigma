@@ -36,3 +36,23 @@ func TestSmootherSnapsToZeroAndReset(t *testing.T) {
 		t.Fatalf("post-reset = %v; want 0", v)
 	}
 }
+
+func TestSmootherClampsOutOfRangeRaw(t *testing.T) {
+	s := NewSmoother(0.5, 0.05)
+	// raw 1.5 must clamp to 1.0 before smoothing: alphaUp=0.5 halves the 0->1
+	// gap, same as a legitimate raw of exactly 1.0 would.
+	if v := s.Tick(1.5); !almost(v, 0.5) {
+		t.Fatalf("Tick(1.5) = %v; want 0.5 (clamped to 1.0)", v)
+	}
+}
+
+func TestSmootherTreatsNaNAsZeroAndAllowsSnap(t *testing.T) {
+	s := NewSmoother(0.5, 0.05)
+	s.Tick(0.004) // tiny raw, residue lands below the 0.005 snap threshold
+	// A NaN sample (e.g. a bad scrape) must be treated as raw 0 — never
+	// propagated as NaN — and the raw==0 snap check must use the clamped
+	// value so a NaN input still snaps the tail to a clean 0.
+	if v := s.Tick(math.NaN()); v != 0 {
+		t.Fatalf("Tick(NaN) = %v; want exact 0 (NaN clamped to raw 0, snap applies)", v)
+	}
+}

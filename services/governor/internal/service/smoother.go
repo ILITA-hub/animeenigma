@@ -1,5 +1,7 @@
 package service
 
+import "math"
+
 // Smoother is the asymmetric EWMA over the raw pressure score: rise fast so a
 // genuine ramp is tracked in ~4 ticks (~60s at the 15s tick, mirroring the
 // level machine's enterTicks), decay slow (~5min, mirroring exitTicks) so the
@@ -22,14 +24,24 @@ func NewSmoother(alphaUp, alphaDown float64) *Smoother {
 	return &Smoother{alphaUp: alphaUp, alphaDown: alphaDown}
 }
 
-// Tick feeds one raw score sample and returns the smoothed value.
+// Tick feeds one raw score sample and returns the smoothed value. The input
+// is bounded defensively before smoothing: a NaN sample (e.g. a bad
+// Prometheus scrape) is treated as 0, and anything outside [0,1] is clamped —
+// a caller bug or upstream glitch must never propagate NaN/out-of-range
+// values into the published score.
 func (s *Smoother) Tick(raw float64) float64 {
+	if math.IsNaN(raw) {
+		raw = 0
+	}
+	raw = math.Max(0, math.Min(1, raw))
+
 	a := s.alphaDown
 	if raw > s.value {
 		a = s.alphaUp
 	}
 	s.value += a * (raw - s.value)
-	// Snap the asymptotic tail to a clean 0.00 once recovered.
+	// Snap the asymptotic tail to a clean 0.00 once recovered. Uses the
+	// clamped raw so a NaN sample (clamped to 0 above) still allows the snap.
 	if raw == 0 && s.value < 0.005 {
 		s.value = 0
 	}
