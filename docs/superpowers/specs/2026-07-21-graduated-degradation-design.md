@@ -34,18 +34,36 @@ counts that slide with pressure and demand instead of cliff-dropping, e.g.:
    graceful drain + stream migration when `current > ceil(pool_target/2)+1` (**relative to the
    current curve target**, owner-confirmed — NOT the static max); forceful kill + honest
    "high load" 503 when graceful is impossible or RAM stays over the hard budget.
+6. **Hard budgets raised** (owner-directed, amendment round 2): Camoufox RAM budgets and the
+   content-verify memory limit / worker clamp are increased so the "up to 6" bands are actually
+   reachable. Concrete numbers in Reality Constraints below.
+7. **User streams are sacred — forced kills are service-class only** (owner-directed, amendment
+   round 2): a browser currently streaming for a real user is NEVER killed, not even at the hard
+   RAM budget. The only permitted action is migration onto another living browser (preferring one
+   already serving users). If migration is impossible, the browser survives, even above target.
+   Browsers doing service-originated work (provider probes, playback-probe, content-verify
+   browser-engine resolves, warming) ARE killable — gracefully first, forcefully if needed, with
+   the "high load" 503 going to the service consumer.
 
-## Reality constraints (bind before the curve does)
+## Reality constraints + Phase-0 budget raises (owner-directed)
 
-- **Camoufox is RAM-bound:** pool capacity is governed by combined RSS (soft 2 GiB / hard 3 GiB,
-  `services/stealth-scraper/app/config.py`); `STEALTH_POOL_SIZE=4` is only a fail-safe ceiling. At
-  ~1 GiB per warm Firefox, 6 instances ≈ 6 GiB — double the hard budget. Effective capacity =
-  `min(curve(score), demand, ram_capacity, STEALTH_POOL_SIZE)`. Reaching 6 requires the owner to
-  raise RAM budgets (not recommended on this box); the curve design is identical either way.
-- **content-verify workers are clamped 1..4** (`clampWorkers`) and the container `mem_limit: 2g`
-  is sized for 2 concurrent whisper runs. 6 probes needs the clamp raised to 6 AND a mem_limit
-  decision (~1 GiB per concurrent whisper run). Same framing: curve = pressure ceiling, RAM = an
-  independent binding cap.
+The owner directed raising the hard budgets so the "up to 6" bands are reachable. Phase 0 of
+implementation (config-only, before any curve code):
+
+- **Camoufox** (`services/stealth-scraper/app/config.py` defaults + compose env):
+  `STEALTH_RAM_SOFT_BYTES` 2 GiB → **4 GiB**, `STEALTH_RAM_HARD_BYTES` 3 GiB → **6 GiB**,
+  `STEALTH_POOL_SIZE` 4 → **6** (stays a fail-safe ceiling; RSS budget remains the true governor).
+  At ~1 GiB per warm Firefox, 6 lightly-loaded instances fit the new hard budget with little slack.
+- **content-verify**: `clampWorkers` 1..4 → **1..6**; compose `mem_limit` 2g → **6g** (sized for
+  the worst case the curve permits — 6 concurrent whisper runs at ~1 GiB each — because
+  `mem_limit` is a hard OOM-kill boundary and must never be smaller than what the curve allows).
+
+**Box-level honesty:** the host has 15 Gi RAM (~7.5 Gi available at measurement, swap 4.7/8 Gi
+used). Both services maxed simultaneously ≈ 12 Gi — the box cannot sustain that statically. That
+is BY DESIGN under this spec: the static budgets become generous ceilings, and the **PSI score is
+the real regulator** — as memory pressure rises, `psi_mem_full` + `mem_available` push the score
+up and both curves shrink their caps well before OOM territory. Effective capacity everywhere =
+`min(curve(score), demand, ram_capacity, static ceiling)`.
 
 ## 1. Pressure score pipeline
 
@@ -117,37 +135,60 @@ relative to the CURRENT target:
 | 0.70 | 2 | 2 | 5 > 2 → drain |
 | 0.85 | 1 | 2 | 5 > 2 → drain; floor 1 survivor |
 
+**Session classification (decides killability).** Every session is classed at creation:
+- **user-class** — holds a `user_key` (the salted real-user identity the catalog supplies on
+  every user resolve; already stored per-session for the quota check, `engine.py
+  _enforce_user_quota`). Exception: the `ui_audit_bot` probe identity, if it ever reaches this
+  path, is classed as service.
+- **service-class** — everything else: anonymous resolves, warm `fetch::` provider sessions,
+  playback-probe / content-verify browser-engine resolves, warming.
+
+A **browser** is user-class if ANY session on it is user-class with a live or recently-active
+stream (`in_use > 0` or `/hls` activity within a short recency window); otherwise service-class.
+
 - **Stage 0 — lazy** (`current ≤ threshold`): stop warming above target, LRU-evict idle sessions
   only. No kills, streams untouched.
 - **Stage 1 — graceful drain + stream migration** (`current > threshold`):
-  - Victim selection: LRU order, preferring browsers with zero active streams, then fewest
-    (per-session `in_use` refcount already exists).
+  - Victim selection: **service-class browsers first**, LRU order; then user-class browsers with
+    zero active streams; user-class browsers with live streams are drain-ONLY candidates (see
+    below), never forced.
   - Victim marked **draining**: admits no new streams or resolves.
-  - Active streams on a victim are **migrated**: re-resolve the same `{provider, episode, server}`
-    on a surviving browser and atomically swap the session→browser mapping the `/hls` proxy uses.
-    (A stream cannot be literally handed over — `/hls` fetches ride the session's own cookies/TLS
-    fingerprint context — so "redirect" = fresh resolve on the survivor; the player never sees a
-    URL change.)
+  - Active user streams on a draining browser are **migrated**: re-resolve the same
+    `{provider, episode, server}` on a surviving browser — **preferring a survivor already
+    serving user streams** (consolidation: user load converges onto fewer browsers) — and
+    atomically swap the session→browser mapping the `/hls` proxy uses. (A stream cannot be
+    literally handed over — `/hls` fetches ride the session's own cookies/TLS-fingerprint
+    context — so "redirect" = fresh resolve on the survivor; the player never sees a URL change.)
   - Victim closes cleanly once its `in_use` reaches 0 (migrated or naturally ended).
-- **Stage 2 — forceful kill + honest 503** when graceful isn't enough:
-  - Triggers: no survivor capacity for the migration · provider needs a distinct profile ·
-    migration re-resolve fails · combined RSS still over the HARD budget after draining.
-  - Victim killed outright. Its in-flight `/hls` fetches and subsequent segment requests return
-    **503 `kind="degraded"` ("high load")** — the consumer-facing signal. The scraper already
-    parks on `"degraded"`; the player's self-heal / connection-badge path surfaces it honestly.
-  - A RAM hard-budget breach may skip Stage 1 (memory emergencies don't wait for drains).
+  - **If migration fails or no survivor fits: a user-streaming browser simply survives**, above
+    target, until its streams end naturally. The pool may temporarily exceed `pool_target` — an
+    accepted consequence of user-stream sanctity.
+- **Stage 2 — forceful kill + honest 503 — SERVICE-CLASS ONLY:**
+  - Triggers: drain not converging (probe/warm session pinned open) · no survivor capacity ·
+    combined RSS still over the HARD budget after Stage 1.
+  - Victim (service-class only) killed outright. Its in-flight fetches return **503
+    `kind="degraded"` ("high load")** — the scraper breaker already parks on `"degraded"`
+    (half-open retry after pressure clears); probe schedulers treat it as a shed tick, not a
+    provider failure.
+  - A RAM hard-budget breach may skip Stage 1 for service-class browsers (memory emergencies
+    don't wait for drains). **User-class browsers are exempt even here** — the worst case is the
+    pool riding above budget on user streams alone until they end.
 
-**Explicit revision of a Phase-3 guarantee:** Phase 3 promised in-flight sessions and `/hls` are
-never gated. Under sustained over-capacity that guarantee now bends: active streams are
-migrate-then-shed rather than sacred. Mitigation: redirect before kill; forced kills are the last
-rung and are honestly signaled. Session reuse and `/hls` on NON-victim sessions remain ungated.
+**Phase-3 guarantee RESTORED and sharpened** (supersedes the earlier draft's "bends" language):
+in-flight USER sessions and their `/hls` are never gated and their browsers never killed — the
+guarantee is now stronger than Phase 3's, since even graceful pressure only migrates, never
+drops, a user stream. What changed is service-originated browser work: it is now explicitly
+sheddable, up to and including forced kills with an honest high-load signal.
 
-**Backstop unchanged:** sustained L2 still refuses all new `resolve`/`browser_fetch` via
-`DegradedShed` 503; scraper breaker/park behavior unchanged.
+**Backstop unchanged:** sustained L2 still refuses all NEW `resolve`/`browser_fetch` via
+`DegradedShed` 503; scraper breaker/park behavior unchanged. (Existing user streams continue
+through L2, per the above.)
 
-Metrics: `stealth_pool_target`, `stealth_pool_kills_total{mode="graceful"|"forced"}`,
-`stealth_stream_migrations_total{result="ok"|"failed"}` (+ existing
-`stealth_degradation_level_seen`).
+Metrics: `stealth_pool_target`, `stealth_pool_kills_total{class="service",mode="graceful"|"forced"}`
+(class label fixed at "service" — a nonzero any-other-class series would be a bug alarm),
+`stealth_stream_migrations_total{result="ok"|"failed"}`,
+`stealth_pool_over_target` (gauge; >0 = user-stream survivors holding the pool above target)
+(+ existing `stealth_degradation_level_seen`).
 
 ## 4. Observability + safety
 
@@ -164,8 +205,10 @@ Metrics: `stealth_pool_target`, `stealth_pool_kills_total{mode="graceful"|"force
 - Governor: table-driven tests for per-signal normalization + asymmetric smoothing (pure funcs).
 - content-verify: extend worker tests — fake ShedChecker returning a score; assert per-loop
   sit-out at each band boundary and the pressure-vs-demand `min()` interplay.
-- Camoufox: unit tests for `pool_target` math, kill-threshold arithmetic, victim ordering, and
-  Stage-1→Stage-2 trigger conditions (mock sessions with `in_use` refcounts).
+- Camoufox: unit tests for `pool_target` math, kill-threshold arithmetic, victim ordering
+  (service-before-user), session/browser classification (user_key presence, ui_audit_bot
+  exception, warm `fetch::` sessions), user-class kill exemption (incl. the RAM-emergency path),
+  and Stage-1→Stage-2 trigger conditions (mock sessions with `in_use` refcounts).
 - Live E2E: override drill (`bin/degradation-override.sh set 1` ⇒ score 0.5 ⇒ cv cap ≈ 3, pool
   target ≈ 4; `set 2` ⇒ caps 0/1 + backstop) mirroring the Phase-3 verification, plus a
   drain-migration drill with an active stream on a victim browser.
