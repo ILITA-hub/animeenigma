@@ -13,7 +13,7 @@
         "target": {
           "queryType": "sql",
           "format": 1,
-          "rawSql": "SELECT toUnixTimestamp64Milli(ts) AS time, concat('L', toString(from_level), ' \u2192 L', toString(to_level), ': ', arrayStringConcat(reasons, ', ')) AS text FROM analytics.degradation_transitions WHERE $__timeFilter(ts) ORDER BY ts"
+          "rawSql": "SELECT toUnixTimestamp64Milli(ts) AS time, concat('L', toString(from_level), ' → L', toString(to_level), ': ', arrayStringConcat(reasons, ', ')) AS text FROM analytics.degradation_transitions WHERE $__timeFilter(ts) ORDER BY ts"
         }
       }
     ]
@@ -34,7 +34,7 @@
       },
       "id": 1,
       "panels": [],
-      "title": "Degradation state \u2014 what & when",
+      "title": "Degradation state — what & when",
       "type": "row"
     },
     {
@@ -45,7 +45,7 @@
       "id": 2,
       "type": "stat",
       "title": "Level (governor)",
-      "description": "AUTHORITATIVE published degradation level (ae_degradation_level): the governor's hysteresis-smoothed decision (enter ~60s, exit ~5min) plus owner override \u2014 exactly what consumers read from Redis. 0 Normal \u00b7 1 Elevated \u00b7 2 Critical.",
+      "description": "AUTHORITATIVE published degradation level (ae_degradation_level): the governor's hysteresis-smoothed decision (enter ~60s, exit ~5min) plus owner override — exactly what consumers read from Redis. 0 Normal · 1 Elevated · 2 Critical.",
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -213,7 +213,7 @@
       "id": 3,
       "type": "state-timeline",
       "title": "Level over time (when)",
-      "description": "Published (governor) degradation level across the selected range. Orange annotation markers = transitions from the ClickHouse history, labeled with from\u2192to and the reasons.",
+      "description": "Published (governor) degradation level across the selected range. Orange annotation markers = transitions from the ClickHouse history, labeled with from→to and the reasons.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -305,7 +305,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**What / when / why** for graceful degradation (spec: `docs/superpowers/specs/2026-07-10-graceful-degradation-design.md`).\n\n- **When** \u2014 governor level timeline (left); orange annotations = transitions with reasons (ClickHouse `degradation_transitions`, 365d).\n- **Why** \u2014 *Active reasons* below names what justifies the CURRENT level; *Breached signals* shows the raw threshold verdicts; host + bandwidth rows show the underlying signals.\n- **What** \u2014 *Heavy actors* row = shed candidates (Camoufox, library torrent/encode, upscaler). Phase 3 pauses their admission at Elevated+.\n- **Hysteresis**: enter after ~60s sustained breach, exit after ~5min clean \u2014 the preview stat flapping while the governor holds = working as intended.\n- **Override**: `bin/degradation-override.sh set 0|1|2` pins the level (reason `manual_override`); `clear` releases. Consumers read Redis `ae:degradation:level` (TTL'd \u2014 dead governor fails open to Normal).\n- **Thresholds** (Elevated \u2192 Critical): PSI cpu `some` 25\u219245% \u00b7 PSI io `full` 15\u219230% \u00b7 PSI mem `full` 5\u219215% \u00b7 MemAvailable 10\u21925%. Swap is context-only (chronically ~90% on this box by design)."
+        "content": "**What / when / why** for graceful degradation (spec: `docs/superpowers/specs/2026-07-10-graceful-degradation-design.md`).\n\n- **When** — governor level timeline (left); orange annotations = transitions with reasons (ClickHouse `degradation_transitions`, 365d).\n- **Why** — *Active reasons* below names what justifies the CURRENT level; *Breached signals* shows the raw threshold verdicts; host + bandwidth rows show the underlying signals.\n- **What** — *Heavy actors* row = shed candidates (Camoufox, library torrent/encode, upscaler). Phase 3 pauses their admission at Elevated+.\n- **Hysteresis**: enter after ~60s sustained breach, exit after ~5min clean — the preview stat flapping while the governor holds = working as intended.\n- **Override**: `bin/degradation-override.sh set 0|1|2` pins the level (reason `manual_override`); `clear` releases. Consumers read Redis `ae:degradation:level` (TTL'd — dead governor fails open to Normal).\n- **Thresholds** (Elevated → Critical): PSI cpu `some` 25→45% · PSI io `full` 15→30% · PSI mem `full` 5→15% · MemAvailable 10→5%. Swap is context-only (chronically ~90% on this box by design)."
       }
     },
     {
@@ -407,7 +407,7 @@
           },
           "editorMode": "code",
           "expr": "ae_degradation_reason_active{severity=\"elevated\"}",
-          "legendFormat": "{{signal}} \u00b7 elevated",
+          "legendFormat": "{{signal}} · elevated",
           "range": true,
           "refId": "A"
         },
@@ -418,7 +418,7 @@
           },
           "editorMode": "code",
           "expr": "ae_degradation_reason_active{severity=\"critical\"}",
-          "legendFormat": "{{signal}} \u00b7 critical",
+          "legendFormat": "{{signal}} · critical",
           "range": true,
           "refId": "B"
         },
@@ -519,7 +519,7 @@
           },
           "editorMode": "code",
           "expr": "ae:pressure_breach:elevated",
-          "legendFormat": "{{signal}} \u00b7 elevated",
+          "legendFormat": "{{signal}} · elevated",
           "range": true,
           "refId": "A"
         },
@@ -530,7 +530,7 @@
           },
           "editorMode": "code",
           "expr": "ae:pressure_breach:critical",
-          "legendFormat": "{{signal}} \u00b7 critical",
+          "legendFormat": "{{signal}} · critical",
           "range": true,
           "refId": "B"
         }
@@ -544,7 +544,7 @@
       "id": 23,
       "type": "state-timeline",
       "title": "Shed state (what is actually paused)",
-      "description": "ae_degradation_shed as reported by the consumers themselves: library download/encode claim gates + storyboard backfill, and the Camoufox sidecar (1 = new-work admission paused at Elevated, 2 = refusing at Critical). Scheduler skips are momentary \u2014 see scheduler_job_skipped_total{reason=\"degraded\"} instead.",
+      "description": "ae_degradation_shed as reported by the consumers themselves: library download/encode claim gates + storyboard backfill, and the Camoufox sidecar (1 = new-work admission paused at Elevated, 2 = refusing at Critical). Scheduler skips are momentary — see scheduler_job_skipped_total{reason=\"degraded\"} instead.",
       "gridPos": {
         "h": 6,
         "w": 24,
@@ -624,7 +624,7 @@
       "id": 24,
       "type": "timeseries",
       "title": "Pressure score (governor vs preview)",
-      "description": "The governor's EWMA-smoothed pressure score (ae_degradation_score{job=\"governor\"}, authoritative \u2014 drives the graduated caps) vs the instantaneous, unsmoothed preview (ae:pressure_score:preview). Threshold lines at 0.40 (Elevated-tier caps start biting) and 0.80 (Critical-tier caps).",
+      "description": "The governor's EWMA-smoothed pressure score (ae_degradation_score{job=\"governor\"}, authoritative — drives the graduated caps) vs the instantaneous, unsmoothed preview (ae:pressure_score:preview). Threshold lines at 0.40 (Elevated-tier caps start biting) and 0.80 (Critical-tier caps).",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -793,7 +793,7 @@
       },
       "id": 6,
       "panels": [],
-      "title": "Why \u2014 host pressure signals",
+      "title": "Why — host pressure signals",
       "type": "row"
     },
     {
@@ -803,7 +803,7 @@
       },
       "id": 7,
       "type": "timeseries",
-      "title": "PSI \u2014 pressure stall ratios",
+      "title": "PSI — pressure stall ratios",
       "description": "Kernel pressure-stall information: share of wall-clock time tasks were stalled waiting for the resource. 'some' = at least one task stalled; 'full' = all non-idle tasks stalled. These are the primary degradation triggers.",
       "gridPos": {
         "h": 9,
@@ -837,7 +837,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "cpu \u00b7 some"
+              "options": "cpu · some"
             },
             "properties": [
               {
@@ -852,7 +852,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "memory \u00b7 full"
+              "options": "memory · full"
             },
             "properties": [
               {
@@ -867,7 +867,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "io \u00b7 full"
+              "options": "io · full"
             },
             "properties": [
               {
@@ -882,7 +882,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "io \u00b7 some"
+              "options": "io · some"
             },
             "properties": [
               {
@@ -929,7 +929,7 @@
           },
           "editorMode": "code",
           "expr": "ae:host_psi_cpu_some:ratio",
-          "legendFormat": "cpu \u00b7 some",
+          "legendFormat": "cpu · some",
           "range": true,
           "refId": "A"
         },
@@ -940,7 +940,7 @@
           },
           "editorMode": "code",
           "expr": "ae:host_psi_mem_full:ratio",
-          "legendFormat": "memory \u00b7 full",
+          "legendFormat": "memory · full",
           "range": true,
           "refId": "B"
         },
@@ -951,7 +951,7 @@
           },
           "editorMode": "code",
           "expr": "ae:host_psi_io_full:ratio",
-          "legendFormat": "io \u00b7 full",
+          "legendFormat": "io · full",
           "range": true,
           "refId": "C"
         },
@@ -962,7 +962,7 @@
           },
           "editorMode": "code",
           "expr": "ae:host_psi_io_some:ratio",
-          "legendFormat": "io \u00b7 some",
+          "legendFormat": "io · some",
           "range": true,
           "refId": "D"
         }
@@ -1054,7 +1054,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Memory available / swap used",
-      "description": "MemAvailable/MemTotal is a trigger (Elevated <10%, Critical <5%). Swap-used is context only \u2014 this box intentionally runs ~90% swap; memory PSI is the honest stall signal.",
+      "description": "MemAvailable/MemTotal is a trigger (Elevated <10%, Critical <5%). Swap-used is context only — this box intentionally runs ~90% swap; memory PSI is the honest stall signal.",
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -1221,7 +1221,7 @@
       },
       "id": 11,
       "panels": [],
-      "title": "Why \u2014 bandwidth (uplink vs consumers)",
+      "title": "Why — bandwidth (uplink vs consumers)",
       "type": "row"
     },
     {
@@ -1232,7 +1232,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "Egress breakdown (bits/s)",
-      "description": "Pairs the vnstat uplink truth with per-consumer counters: playback (streaming HLS proxy \u2014 CRITICAL tier, must survive) vs torrent upload (HEAVY tier, shed first) vs everything else. 10m windows smooth vnstat's 5-minute buckets.",
+      "description": "Pairs the vnstat uplink truth with per-consumer counters: playback (streaming HLS proxy — CRITICAL tier, must survive) vs torrent upload (HEAVY tier, shed first) vs everything else. 10m windows smooth vnstat's 5-minute buckets.",
       "gridPos": {
         "h": 9,
         "w": 16,
@@ -1504,7 +1504,7 @@
       },
       "id": 14,
       "panels": [],
-      "title": "What \u2014 heavy actors (shed candidates)",
+      "title": "What — heavy actors (shed candidates)",
       "type": "row"
     },
     {
@@ -1812,7 +1812,7 @@
       "id": 19,
       "type": "timeseries",
       "title": "HLS proxy active connections (CRITICAL-tier demand)",
-      "description": "Live playback connections through the streaming proxy \u2014 the demand the degradation system protects. Rising connections + rising pressure = exactly when shedding should kick in.",
+      "description": "Live playback connections through the streaming proxy — the demand the degradation system protects. Rising connections + rising pressure = exactly when shedding should kick in.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1879,7 +1879,7 @@
       "id": 20,
       "type": "timeseries",
       "title": "Library disk free",
-      "description": "Free bytes on the library volume. The existing disk guard (LIBRARY_DISK_FREE_MIN_PCT=20) already refuses new downloads below its floor \u2014 an actuation primitive this design builds on.",
+      "description": "Free bytes on the library volume. The existing disk guard (LIBRARY_DISK_FREE_MIN_PCT=20) already refuses new downloads below its floor — an actuation primitive this design builds on.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1945,7 +1945,7 @@
       "id": 26,
       "type": "timeseries",
       "title": "content-verify worker cap",
-      "description": "Graduated probe-loop cap (content_verify_worker_cap, kind=pressure/demand/effective \u2014 effective = min(pressure, demand)) vs actual in-flight probe leases (content_verify_inflight_leases). Phase-derived: CV_CURVE maps pressure score to a cap; CV_DEMAND_PER_WORKER derives a demand-side cap from pending backlog.",
+      "description": "Graduated probe-loop cap (content_verify_worker_cap, kind=pressure/demand/effective — effective = min(pressure, demand)) vs actual in-flight probe leases (content_verify_inflight_leases). Phase-derived: CV_CURVE maps pressure score to a cap; CV_DEMAND_PER_WORKER derives a demand-side cap from pending backlog.",
       "gridPos": {
         "h": 8,
         "w": 12,
