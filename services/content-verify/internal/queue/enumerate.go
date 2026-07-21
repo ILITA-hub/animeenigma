@@ -34,7 +34,8 @@ type Unit struct {
 	// voice = RU dub, subtitles = original audio + burned RU subs), so the
 	// throttled probe budget is spent only where the answer is unknown.
 	Synth     *domain.UnitVerdict
-	StateRank int // active=0 recovering=1 degraded=2 — probe order
+	StateRank int  // active=0 recovering=1 degraded=2 — probe order
+	Band      Band // priority band this unit was claimed from (for metric labelling)
 }
 
 func stateRank(s string) int {

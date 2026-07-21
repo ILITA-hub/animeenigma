@@ -52,6 +52,22 @@ func BandOf(c Candidate) Band {
 	}
 }
 
+// Label returns the stable snake_case metric-label form of the band.
+func (b Band) Label() string {
+	switch b {
+	case BandPinned:
+		return "pinned"
+	case BandOngoing:
+		return "ongoing"
+	case BandWatchedTop:
+		return "watched_top"
+	case BandIdle:
+		return "idle"
+	default:
+		return "unknown"
+	}
+}
+
 // freshBoost reports whether an ongoing has an episode within ±window of now
 // (a just-aired or imminent episode), floating it to the front of Band 1.
 func freshBoost(c Candidate, now time.Time, window time.Duration) bool {

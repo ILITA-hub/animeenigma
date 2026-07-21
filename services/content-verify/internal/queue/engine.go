@@ -428,6 +428,13 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 		pending = e.filterAvailableUnits(ctx, pending)
 		if len(pending) > 0 {
 			if u, release, ok := e.claimVerifyUnit(pending); ok {
+				// Set here, before u escapes to the caller: this is the one
+				// spot in Claim where a *Unit is constructed for return, and
+				// it covers BOTH the normal-probe and synth-verdict units —
+				// both flow through the SAME pending list and claimVerifyUnit
+				// call (Synth-ness is just a field on Unit, not a separate
+				// code path).
+				u.Band = BandOf(cand)
 				return u, nil, release, nil
 			}
 			// Every pending unit is leased by another in-flight claim — the
