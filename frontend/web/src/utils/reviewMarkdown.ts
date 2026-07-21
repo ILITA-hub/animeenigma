@@ -18,20 +18,33 @@ export type ReviewBlock =
   | { type: 'ul'; items: ReviewLine[] }
 
 // Longest markers first so ** wins over *. Italic forbids inner newlines so a
-// line-leading "* " list marker never pairs with a later asterisk. Italic's
-// delimiters are also fenced with (?<!\*)/(?!\*) so a lone "*" that is really
-// half of an unmatched "**" pair (e.g. "**open *and ~~more") can never be
-// mistaken for an italic opener/closer — without the fence, matchAll's
-// non-backtracking-across-alternatives scan would greedily pair the second
-// "*" of "**" with the next stray "*" and swallow real text into a fake
-// italic token.
-const INLINE_RE = /\*\*([^*]+)\*\*|(?<!\*)\*(?!\*)([^*\n]+)(?<!\*)\*(?!\*)|~~([^~]+)~~|\|\|([^|]+)\|\|/g
+// line-leading "* " list marker never pairs with a later asterisk.
+//
+// No lookbehind: Safari/iOS <16.4 throws a SyntaxError parsing `(?<!...)` at
+// script-load time, which would crash the whole app on those devices. Instead
+// of fencing the italic opener with a lookbehind, we post-filter in
+// parseInline below: a candidate italic match whose immediately-preceding
+// source character is "*" is really the tail of an unmatched "**" pair (e.g.
+// "**open *and ~~more") and must be rejected and treated as literal text —
+// otherwise a lone "*" that is half of a "**" would get greedily paired with
+// the next stray "*" and swallow real text into a fake italic token. Only
+// lookahead survives ((?!\*) is supported everywhere), used to stop an
+// italic close from matching the first "*" of a following "**".
+const INLINE_RE = /\*\*([^*]+)\*\*|\*([^*\n]+)\*(?!\*)|~~([^~]+)~~|\|\|([^|]+)\|\|/g
 
 function parseInline(line: string): ReviewLine {
   const tokens: ReviewLine = []
   let last = 0
-  for (const m of line.matchAll(INLINE_RE)) {
-    const idx = m.index ?? 0
+  INLINE_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = INLINE_RE.exec(line))) {
+    const idx = m.index
+    if (m[2] !== undefined && idx > 0 && line[idx - 1] === '*') {
+      // Rejected italic candidate (preceded by "*") — not a real opener;
+      // resume scanning right after this "*" so later real tokens still match.
+      INLINE_RE.lastIndex = idx + 1
+      continue
+    }
     if (idx > last) tokens.push({ kind: 'text', text: line.slice(last, idx) })
     if (m[1] !== undefined) tokens.push({ kind: 'bold', text: m[1] })
     else if (m[2] !== undefined) tokens.push({ kind: 'italic', text: m[2] })

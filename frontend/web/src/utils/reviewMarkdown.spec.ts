@@ -47,6 +47,29 @@ describe('parseReviewMarkdown', () => {
     ])
   })
 
+  it('italic still parses when surrounded by spaces', () => {
+    const [p] = parseReviewMarkdown('a *i* b')
+    expect(p).toEqual({
+      type: 'p',
+      lines: [[
+        { kind: 'text', text: 'a ' },
+        { kind: 'italic', text: 'i' },
+        { kind: 'text', text: ' b' },
+      ]],
+    })
+  })
+
+  it('bold immediately followed by a "*i*" run: bold parses, the adjacent italic-looking run stays literal (pinned current behavior)', () => {
+    const [p] = parseReviewMarkdown('**b***i*')
+    expect(p).toEqual({
+      type: 'p',
+      lines: [[
+        { kind: 'bold', text: 'b' },
+        { kind: 'text', text: '*i*' },
+      ]],
+    })
+  })
+
   it('html in input stays inert text (XSS)', () => {
     const [p] = parseReviewMarkdown('<img src=x onerror=alert(1)> **<b>bold</b>**')
     expect(p.type).toBe('p')

@@ -129,10 +129,10 @@ const actions = [
 
 function onKeydown(e: KeyboardEvent) {
   if (!(e.ctrlKey || e.metaKey)) return
-  if (e.key === 'b') {
+  if (e.code === 'KeyB') {
     e.preventDefault()
     wrapSelection('**')
-  } else if (e.key === 'i') {
+  } else if (e.code === 'KeyI') {
     e.preventDefault()
     wrapSelection('*')
   }
