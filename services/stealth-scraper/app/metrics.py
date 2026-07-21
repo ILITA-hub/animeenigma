@@ -143,3 +143,9 @@ REHYDRATE_TOTAL = Counter(
     "Lazy session-rehydrate attempts by result",
     ["result"],  # ok|no_record|expired|build_mismatch|no_profile|verify_failed|error
 )
+
+STREAM_MIGRATIONS = Counter(
+    "stealth_stream_migrations_total",
+    "User-stream migrations onto a surviving browser during scale-down",
+    ["result"],  # ok|failed
+)

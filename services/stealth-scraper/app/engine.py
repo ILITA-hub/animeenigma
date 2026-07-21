@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
 import os
 import time
 import uuid
@@ -135,6 +136,11 @@ class Session:
     # Quota accounting key (opaque user id or salted IP hash; never logged in
     # clear). None ⇒ unbounded (the caller opted out of per-user accounting).
     user_key: str | None = None
+    # Graduated scale-down (spec 2026-07-21): a migrated session rides its
+    # survivor's browser — it does NOT own the profile lease, so close paths
+    # must not release it. `draining` blocks new-work admission on a victim.
+    owns_profile: bool = True
+    draining: bool = False
     # Wall-clock of the last persisted-record refresh (Layer B). Throttles
     # store writes to ~1/min instead of one per proxied segment.
     last_persist: float = 0.0
@@ -631,6 +637,7 @@ class CamoufoxEngine:
                 0 if self._degradation_level < 1 else self._degradation_level
             )
             metrics.POOL_TARGET.set(self._pool_target())
+            await self._scale_down_step()
 
     def _shed_new_work(self) -> None:
         """Raise DegradedShed when the host is at Critical pressure — gates the
@@ -658,11 +665,12 @@ class CamoufoxEngine:
     def _evict_one_lru(self) -> bool:
         """Evict the least-recently-used NOT-in-use session (smallest
         expires_at) to reclaim a browser slot. Returns True if one was freed.
-        Never touches an in-use session (a concurrent /hls fetch is awaiting it)."""
+        Never touches an in-use session (a concurrent /hls fetch is awaiting it)
+        or a draining session (already being handled by scale-down)."""
         candidates = [
             (s.expires_at, sid, s)
             for sid, s in self._sessions.items()
-            if s.in_use <= 0
+            if s.in_use <= 0 and not s.draining
         ]
         if not candidates:
             return False
@@ -671,7 +679,8 @@ class CamoufoxEngine:
         self._sessions.pop(sid, None)
         self.store.delete(sid)
         self._spawn(_safe_close_page(session.page))
-        self.profiles.release(session.profile, ok=True)
+        if session.owns_profile:
+            self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return True
 
@@ -1481,7 +1490,8 @@ class CamoufoxEngine:
             return False
         self.store.delete(sid)
         await _safe_close_page(session.page)
-        self.profiles.release(session.profile, ok=True)
+        if session.owns_profile:
+            self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return True
 
@@ -1496,7 +1506,8 @@ class CamoufoxEngine:
                 self._sessions.pop(sid, None)
                 self.store.delete(sid)
                 self._spawn(_safe_close_page(session.page))
-                self.profiles.release(session.profile, ok=True)
+                if session.owns_profile:
+                    self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
 
     def _spawn(self, coro) -> None:
@@ -1530,7 +1541,8 @@ class CamoufoxEngine:
             if session.expires_at <= now and session.in_use <= 0:
                 self._sessions.pop(sid, None)
                 await _safe_close_page(session.page)
-                self.profiles.release(session.profile, ok=True)
+                if session.owns_profile:
+                    self.profiles.release(session.profile, ok=True)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         # Drop persisted records of sessions that died with a previous process
         # (crash/redeploy without a clean aclose_session/_evict_* pass) so
@@ -1619,6 +1631,144 @@ class CamoufoxEngine:
                    if p.status == "healthy" and not p.leased)
         metrics.POOL_FREE.set(free)
         metrics.POOL_CRASHED.set(counts.get("crashed", 0))
+
+    # -- graduated scale-down (spec 2026-07-21) ----------------------------- #
+    def _session_is_user(self, s: Session) -> bool:
+        """User-class = held by a real user AND actively streaming: an in-flight
+        /hls fetch, or segment activity within 3 minutes (proxy_fetch refreshes
+        last_persist ~1/min). Idle user sessions are service-class (killable).
+        Probe/warm traffic carries no user_key, so it can never classify user."""
+        if not s.user_key:
+            return False
+        return s.in_use > 0 or (time.time() - s.last_persist) < 180.0
+
+    def _pick_victim(self) -> tuple[str, Session] | None:
+        """Scale-down victim: service-class browsers first (LRU by expires_at),
+        else a user-class browser — which may only ever be DRAINED (migrated),
+        never force-killed. Draining sessions are already being handled."""
+        service, user = [], []
+        for sid, s in self._sessions.items():
+            if s.draining:
+                continue
+            (user if self._session_is_user(s) else service).append((s.expires_at, sid, s))
+        for bucket in (service, user):
+            if bucket:
+                bucket.sort(key=lambda t: t[0])
+                _, sid, s = bucket[0]
+                return sid, s
+        return None
+
+    async def _migrate_session(self, sid: str) -> bool:
+        """Move a live user stream onto a surviving browser (graceful drain,
+        spec 2026-07-21). A stream cannot be handed over literally — /hls
+        fetches ride the session page's cookie/TLS-fingerprint context — so
+        "migrate" = open the victim's player_url on the survivor's context,
+        verify the master playlist fetches 200 there, then atomically swap
+        self._sessions[sid]. The player never sees a URL change. On ANY
+        failure the victim survives untouched (user-stream sanctity)."""
+        victim = self._sessions.get(sid)
+        if victim is None or not victim.player_url:
+            return False
+        survivors = [
+            s for other_sid, s in self._sessions.items()
+            if other_sid != sid and not s.draining and s.owns_profile
+        ]
+        if not survivors:
+            metrics.STREAM_MIGRATIONS.labels(result="failed").inc()
+            return False
+        # Consolidation preference: survivors already serving users first,
+        # freshest (largest expires_at) within each class.
+        survivors.sort(key=lambda s: (not self._session_is_user(s), -s.expires_at))
+        survivor = survivors[0]
+        page = None
+        try:
+            context = await self._ensure_browser(survivor.profile, survivor.proxy_id)
+            page = await context.new_page()
+            await page.goto(
+                victim.player_url,
+                wait_until="domcontentloaded",
+                timeout=self.cfg.nav_timeout_ms,
+            )
+            moved = Session(
+                id=sid,
+                profile=survivor.profile,
+                proxy_id=survivor.proxy_id,
+                referer=victim.referer,
+                user_agent=survivor.user_agent,
+                cdn_host=victim.cdn_host,
+                master_url=victim.master_url,
+                expires_at=time.time() + self.cfg.session_ttl_seconds,
+                page=page,
+                player_url=victim.player_url,
+                user_key=victim.user_key,
+                owns_profile=False,
+            )
+            status, _ctype, _final, _hdrs, _body = await self._in_page_fetch(
+                moved, victim.master_url
+            )
+            if status != 200:
+                raise RecipeError(f"migration verify: master fetch {status}")
+        except Exception:  # noqa: BLE001 — any failure: victim survives
+            if page is not None:
+                await _safe_close_page(page)
+            metrics.STREAM_MIGRATIONS.labels(result="failed").inc()
+            return False
+        self._sessions[sid] = moved
+        moved.last_persist = time.time()
+        self.store.save(self._session_record(moved))
+        self._spawn(self._retire_after_drain(victim))
+        metrics.STREAM_MIGRATIONS.labels(result="ok").inc()
+        if self._log:
+            self._log.info("stream migrated", extra={"sid": sid[:8]})
+        return True
+
+    async def _retire_after_drain(self, old: Session) -> None:
+        """Close a migrated-away session object once its in-flight fetches
+        drain (bounded wait — a wedged fetch must not pin the browser open
+        forever), then release its profile (it owned one)."""
+        deadline = time.time() + 60.0
+        while old.in_use > 0 and time.time() < deadline:
+            await asyncio.sleep(1.0)
+        await _safe_close_page(old.page)
+        if old.owns_profile:
+            self.profiles.release(old.profile, ok=True)
+
+    async def _force_kill(self, sid: str, mode: str = "graceful") -> None:
+        """Close a service-class scale-down victim (Task 8 replaces this stub
+        with the real service-class kill; ``mode`` is ignored for now). Mirrors
+        _evict_one_lru's close sequence exactly: pop, store.delete, close page,
+        conditional profile release."""
+        session = self._sessions.pop(sid, None)
+        if session is None:
+            return
+        self.store.delete(sid)
+        await _safe_close_page(session.page)
+        if session.owns_profile:
+            self.profiles.release(session.profile, ok=True)
+        metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+
+    async def _scale_down_step(self) -> None:
+        """One graduated scale-down step per degradation tick (~5s): act only
+        above the kill threshold ceil(target/2)+1 (relative to the CURRENT
+        target), one victim at a time — gradualism over burst kills."""
+        target = self._pool_target()
+        current = len(self._sessions)
+        metrics.POOL_OVER_TARGET.set(max(0, current - target))
+        if current <= math.ceil(target / 2) + 1:
+            return
+        picked = self._pick_victim()
+        if picked is None:
+            return
+        sid, victim = picked
+        victim.draining = True
+        if self._session_is_user(victim):
+            if not await self._migrate_session(sid):
+                # Migration impossible: the user-streaming browser SURVIVES
+                # above target (spec: user-stream sanctity). Clear draining so
+                # the stream keeps its session; we retry on a later tick.
+                victim.draining = False
+            return
+        await self._force_kill(sid, mode="graceful" if victim.in_use <= 0 else "forced")
 
     def session_state(self, sid: str) -> str:
         """Liveness for the scraper's cached-stream gate: ``alive`` (registered
