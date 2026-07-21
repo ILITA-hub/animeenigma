@@ -28,3 +28,14 @@ func TestVerdictAndHardsubCounters(t *testing.T) {
 		t.Error("probes_total{kodik,verified,ongoing} not incremented")
 	}
 }
+
+func TestConcurrencyAndIdleGauges(t *testing.T) {
+	InflightLeases.Set(2)
+	if testutil.ToFloat64(InflightLeases) != 2 {
+		t.Error("inflight_leases not set")
+	}
+	IdleCursor.Set(300)
+	if testutil.ToFloat64(IdleCursor) != 300 {
+		t.Error("idle_cursor not set")
+	}
+}

@@ -47,4 +47,16 @@ var (
 		Name: "content_verify_band_depth",
 		Help: "Candidate count per priority band at the last queue build.",
 	}, []string{"band"})
+	IdleCursor = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "content_verify_idle_cursor",
+		Help: "Current offset of the idle-backfill round-robin cursor.",
+	})
+	IdleTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "content_verify_idle_total",
+		Help: "Size of the idle (non-ongoing) catalog tail the cursor sweeps.",
+	})
+	InflightLeases = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "content_verify_inflight_leases",
+		Help: "In-process probe leases currently held (concurrency).",
+	})
 )

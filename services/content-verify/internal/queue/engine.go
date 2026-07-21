@@ -145,6 +145,7 @@ func (e *Engine) interest(ctx context.Context) *catalogclient.Interest {
 	e.mu.Unlock()
 
 	offset := e.sig.IdleCursor(ctx)
+	cvmetrics.IdleCursor.Set(float64(offset))
 	it, err := e.cat.InterestBands(ctx, offset, e.idleWindow)
 	if err != nil {
 		if e.log != nil {
@@ -154,7 +155,9 @@ func (e *Engine) interest(ctx context.Context) *catalogclient.Interest {
 		defer e.mu.Unlock()
 		return e.interestCache // possibly nil — BuildCandidates tolerates it
 	}
-	e.sig.AdvanceIdleCursor(ctx, e.idleWindow, it.IdleTotal)
+	newCursor := e.sig.AdvanceIdleCursor(ctx, e.idleWindow, it.IdleTotal)
+	cvmetrics.IdleCursor.Set(float64(newCursor))
+	cvmetrics.IdleTotal.Set(float64(it.IdleTotal))
 	e.mu.Lock()
 	e.interestCache, e.interestAt = it, e.now()
 	e.mu.Unlock()
@@ -365,12 +368,14 @@ func (e *Engine) lease(provider, key string) (release func(), ok bool) {
 	}
 	e.inflightProv[provider] = struct{}{}
 	e.inflightUnits[key] = struct{}{}
+	cvmetrics.InflightLeases.Set(float64(len(e.inflightUnits)))
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			e.mu.Lock()
 			delete(e.inflightProv, provider)
 			delete(e.inflightUnits, key)
+			cvmetrics.InflightLeases.Set(float64(len(e.inflightUnits)))
 			e.mu.Unlock()
 		})
 	}, true
