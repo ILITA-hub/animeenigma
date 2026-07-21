@@ -115,9 +115,9 @@ func (g *Governor) RunTick(ctx context.Context) {
 			g.publish(ctx, g.currentPublished(), g.smoother.Tick(0), g.Snapshot().Reasons)
 			return
 		}
-		if g.failCountAtLeast(g.promFailTicks) {
-			g.smoother.Reset() // sustained loss: fail-open to a clean 0
-		}
+		// Sustained loss (fails >= promFailTicks, having failed the grace
+		// check above): fail-open the smoother to a clean 0 too.
+		g.smoother.Reset()
 		// Fail-open: never shed on missing data.
 		verdict = domain.Verdict{Target: domain.LevelNormal}
 	} else {
@@ -188,14 +188,6 @@ func (g *Governor) currentPublished() domain.Level {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.published
-}
-
-// failCountAtLeast reports whether the consecutive Prometheus-failure count is
-// at least n. Small mu-guarded reader, mirrors currentPublished.
-func (g *Governor) failCountAtLeast(n int) bool {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.failCount >= n
 }
 
 // publish refreshes the Redis keys and the Prometheus gauges.

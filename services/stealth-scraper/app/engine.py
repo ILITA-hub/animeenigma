@@ -681,6 +681,13 @@ class CamoufoxEngine:
             for s in self._sessions.values()
         )
 
+    def _release_if_owned(self, session: Session) -> None:
+        """Release session's profile lease iff it owns one. A rider
+        (owns_profile=False) shares its survivor's profile and must never
+        release it out from under that survivor (user-stream sanctity)."""
+        if session.owns_profile:
+            self.profiles.release(session.profile, ok=True)
+
     def _evict_one_lru(self) -> bool:
         """Evict the least-recently-used NOT-in-use session (smallest
         expires_at) to reclaim a browser slot. Returns True if one was freed.
@@ -700,8 +707,7 @@ class CamoufoxEngine:
         self._sessions.pop(sid, None)
         self.store.delete(sid)
         self._spawn(_safe_close_page(session.page))
-        if session.owns_profile:
-            self.profiles.release(session.profile, ok=True)
+        self._release_if_owned(session)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return True
 
@@ -1520,8 +1526,7 @@ class CamoufoxEngine:
             return False
         self.store.delete(sid)
         await _safe_close_page(session.page)
-        if session.owns_profile:
-            self.profiles.release(session.profile, ok=True)
+        self._release_if_owned(session)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         return True
 
@@ -1545,8 +1550,7 @@ class CamoufoxEngine:
                 self._sessions.pop(sid, None)
                 self.store.delete(sid)
                 self._spawn(_safe_close_page(session.page))
-                if session.owns_profile:
-                    self.profiles.release(session.profile, ok=True)
+                self._release_if_owned(session)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
 
     def _spawn(self, coro) -> None:
@@ -1584,8 +1588,7 @@ class CamoufoxEngine:
                     continue
                 self._sessions.pop(sid, None)
                 await _safe_close_page(session.page)
-                if session.owns_profile:
-                    self.profiles.release(session.profile, ok=True)
+                self._release_if_owned(session)
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         # Drop persisted records of sessions that died with a previous process
         # (crash/redeploy without a clean aclose_session/_evict_* pass) so
@@ -1799,8 +1802,7 @@ class CamoufoxEngine:
         while old.in_use > 0 and time.time() < deadline:
             await asyncio.sleep(1.0)
         await _safe_close_page(old.page)
-        if old.owns_profile:
-            self.profiles.release(old.profile, ok=True)
+        self._release_if_owned(old)
 
     def _force_kill(self, sid: str, mode: str) -> None:
         """Kill a SERVICE-class browser outright (graduated Stage 2). Its
@@ -1833,8 +1835,7 @@ class CamoufoxEngine:
         self._degraded_kills[sid] = time.time() + 120.0
         self.store.delete(sid)
         self._spawn(_safe_close_page(s.page))
-        if s.owns_profile:
-            self.profiles.release(s.profile, ok=True)
+        self._release_if_owned(s)
         metrics.POOL_KILLS.labels("service", mode).inc()  # positional: "class" is a keyword
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
         if self._log:
