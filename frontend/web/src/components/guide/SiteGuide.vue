@@ -1,21 +1,19 @@
 <template>
   <template v-if="modelValue">
-    <!-- Picker mode deliberately leaves the catalog interactive: choosing any
-         anime is the action that advances into the player tour. -->
-    <div v-if="!isPicker" class="fixed inset-0 z-[69]" aria-hidden="true" data-testid="site-guide-blocker" />
+    <div class="fixed inset-0 z-[69]" aria-hidden="true" data-testid="site-guide-blocker" />
     <div
-      v-if="!isPicker && targetRect"
+      v-if="targetRect"
       class="site-guide-spotlight"
       :style="spotlightStyle"
       aria-hidden="true"
       data-testid="site-guide-spotlight"
     />
-    <div v-else-if="!isPicker" class="fixed inset-0 z-[70] bg-black/80" aria-hidden="true" data-testid="site-guide-backdrop" />
+    <div v-else class="fixed inset-0 z-[70] bg-black/80" aria-hidden="true" data-testid="site-guide-backdrop" />
 
     <section
       ref="panelRef"
       role="dialog"
-      :aria-modal="!isPicker"
+      aria-modal="true"
       :aria-labelledby="titleId"
       :aria-describedby="bodyId"
       tabindex="-1"
@@ -28,23 +26,19 @@
       <div class="flex items-start gap-3">
         <div class="size-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center flex-shrink-0">
           <Clapperboard v-if="mode === 'player'" class="size-5" aria-hidden="true" />
-          <MousePointerClick v-else-if="isPicker" class="size-5" aria-hidden="true" />
           <Compass v-else class="size-5" aria-hidden="true" />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center justify-between gap-3 mb-1">
-            <p v-if="!isPicker" class="text-xs text-primary font-medium tabular-nums">
+            <p class="text-xs text-primary font-medium tabular-nums">
               {{ t('siteGuide.progress', { current: currentIndex + 1, total: steps.length }) }}
-            </p>
-            <p v-else class="text-xs text-primary font-medium">
-              {{ t('siteGuide.playerPart') }}
             </p>
             <button
               type="button"
               class="text-xs text-muted-foreground hover:text-white transition-colors"
               @click="close"
             >
-              {{ isPicker ? t('common.cancel') : t('siteGuide.skip') }}
+              {{ t('siteGuide.skip') }}
             </button>
           </div>
           <h2 :id="titleId" class="text-lg font-semibold text-white">
@@ -56,7 +50,7 @@
         </div>
       </div>
 
-      <div v-if="!isPicker" class="mt-5 flex items-center justify-between gap-3">
+      <div class="mt-5 flex items-center justify-between gap-3">
         <Button
           variant="soft"
           size="sm"
@@ -74,8 +68,13 @@
             :class="index === currentIndex ? 'w-5 bg-primary' : 'w-1.5 bg-white/20'"
           />
         </div>
-        <Button size="sm" data-testid="site-guide-next" @click="next">
-          {{ currentIndex === steps.length - 1 ? t('siteGuide.finish') : t('common.next') }}
+        <Button
+          size="sm"
+          data-testid="site-guide-next"
+          :loading="playerLaunchPending && isSiteFinal"
+          @click="next"
+        >
+          {{ nextLabel }}
         </Button>
       </div>
     </section>
@@ -84,17 +83,19 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { Clapperboard, Compass, MousePointerClick } from 'lucide-vue-next'
+import { Clapperboard, Compass } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui'
 import { useFocusTrap } from '@/composables/useFocusTrap'
+import { playerGuideMenu, type PlayerGuideMenu } from '@/composables/siteGuideState'
 
-export type SiteGuideMode = 'site' | 'player-picker' | 'player'
+export type SiteGuideMode = 'site' | 'player'
 
 interface GuideStep {
-  target?: string
+  target: string
   titleKey: string
   bodyKey: string
+  menu?: PlayerGuideMenu
 }
 
 interface TargetRect {
@@ -104,10 +105,18 @@ interface TargetRect {
   height: number
 }
 
-const props = withDefaults(defineProps<{ modelValue: boolean; mode?: SiteGuideMode }>(), {
+const props = withDefaults(defineProps<{
+  modelValue: boolean
+  mode?: SiteGuideMode
+  playerLaunchPending?: boolean
+}>(), {
   mode: 'site',
+  playerLaunchPending: false,
 })
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'start-player': []
+}>()
 const { t } = useI18n()
 
 const SITE_STEPS: GuideStep[] = [
@@ -121,15 +130,11 @@ const SITE_STEPS: GuideStep[] = [
 
 const PLAYER_STEPS: GuideStep[] = [
   { target: 'player-screen', titleKey: 'siteGuide.playerSteps.screen.title', bodyKey: 'siteGuide.playerSteps.screen.body' },
-  { target: 'player-episodes', titleKey: 'siteGuide.playerSteps.episodes.title', bodyKey: 'siteGuide.playerSteps.episodes.body' },
-  { target: 'player-source', titleKey: 'siteGuide.playerSteps.source.title', bodyKey: 'siteGuide.playerSteps.source.body' },
-  { target: 'player-subs', titleKey: 'siteGuide.playerSteps.subtitles.title', bodyKey: 'siteGuide.playerSteps.subtitles.body' },
-  { target: 'player-settings', titleKey: 'siteGuide.playerSteps.settings.title', bodyKey: 'siteGuide.playerSteps.settings.body' },
+  { target: 'player-menu-episodes', titleKey: 'siteGuide.playerSteps.episodes.title', bodyKey: 'siteGuide.playerSteps.episodes.body', menu: 'episodes' },
+  { target: 'player-menu-source', titleKey: 'siteGuide.playerSteps.source.title', bodyKey: 'siteGuide.playerSteps.source.body', menu: 'source' },
+  { target: 'player-menu-subs', titleKey: 'siteGuide.playerSteps.subtitles.title', bodyKey: 'siteGuide.playerSteps.subtitles.body', menu: 'subs' },
+  { target: 'player-menu-settings', titleKey: 'siteGuide.playerSteps.settings.title', bodyKey: 'siteGuide.playerSteps.settings.body', menu: 'settings' },
   { target: 'player-view', titleKey: 'siteGuide.playerSteps.view.title', bodyKey: 'siteGuide.playerSteps.view.body' },
-]
-
-const PICKER_STEPS: GuideStep[] = [
-  { titleKey: 'siteGuide.picker.title', bodyKey: 'siteGuide.picker.body' },
 ]
 
 const currentIndex = ref(0)
@@ -137,8 +142,7 @@ const targetRect = ref<TargetRect | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const titleId = 'site-guide-title'
 const bodyId = 'site-guide-body'
-const isPicker = computed(() => props.mode === 'player-picker')
-const trapActive = computed(() => props.modelValue && !isPicker.value)
+const trapActive = computed(() => props.modelValue)
 let settleTimer: number | undefined
 let retryTimer: number | undefined
 let retryCount = 0
@@ -147,10 +151,14 @@ useFocusTrap({ active: trapActive, container: panelRef })
 
 const steps = computed(() => {
   if (props.mode === 'player') return PLAYER_STEPS
-  if (props.mode === 'player-picker') return PICKER_STEPS
   return SITE_STEPS
 })
 const currentStep = computed(() => steps.value[currentIndex.value])
+const isSiteFinal = computed(() => props.mode === 'site' && currentIndex.value === steps.value.length - 1)
+const nextLabel = computed(() => {
+  if (isSiteFinal.value) return t('siteGuide.continuePlayer')
+  return currentIndex.value === steps.value.length - 1 ? t('siteGuide.finish') : t('common.next')
+})
 const spotlightStyle = computed(() => {
   if (!targetRect.value) return undefined
   const r = targetRect.value
@@ -162,7 +170,6 @@ const spotlightStyle = computed(() => {
   }
 })
 const panelPlacement = computed(() => {
-  if (isPicker.value) return 'top-[calc(var(--header-offset)+1rem)]'
   if (targetRect.value && targetRect.value.top + targetRect.value.height > window.innerHeight * 0.55) {
     return 'top-[calc(var(--header-offset)+1rem)]'
   }
@@ -182,7 +189,7 @@ function visibleTarget(name: string): HTMLElement | null {
 }
 
 function retryMissingTarget(): void {
-  if (retryCount >= 30 || !props.modelValue || isPicker.value) return
+  if (retryCount >= 30 || !props.modelValue) return
   window.clearTimeout(retryTimer)
   retryCount += 1
   retryTimer = window.setTimeout(measureTarget, 300)
@@ -223,11 +230,13 @@ async function refreshTarget(): Promise<void> {
   targetRect.value = null
   retryCount = 0
   window.clearTimeout(retryTimer)
+  playerGuideMenu.value = props.mode === 'player' ? (currentStep.value.menu ?? null) : null
   await nextTick()
-  if (!isPicker.value) measureTarget()
+  measureTarget()
 }
 
 function close(): void {
+  playerGuideMenu.value = null
   emit('update:modelValue', false)
 }
 
@@ -237,6 +246,10 @@ function previous(): void {
 }
 
 function next(): void {
+  if (isSiteFinal.value) {
+    emit('start-player')
+    return
+  }
   if (currentIndex.value === steps.value.length - 1) {
     close()
     return
@@ -248,10 +261,10 @@ function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
     e.preventDefault()
     close()
-  } else if (!isPicker.value && e.key === 'ArrowRight') {
+  } else if (e.key === 'ArrowRight') {
     e.preventDefault()
     next()
-  } else if (!isPicker.value && e.key === 'ArrowLeft') {
+  } else if (e.key === 'ArrowLeft') {
     e.preventDefault()
     previous()
   }
@@ -261,7 +274,10 @@ watch(
   [() => props.modelValue, () => props.mode],
   ([open]) => {
     document.body.classList.toggle('site-guide-player-active', Boolean(open && props.mode === 'player'))
-    if (!open) return
+    if (!open) {
+      playerGuideMenu.value = null
+      return
+    }
     currentIndex.value = 0
     void refreshTarget()
   },
@@ -271,7 +287,7 @@ watch(
 watch(currentIndex, () => void refreshTarget())
 
 function onViewportChange(): void {
-  if (props.modelValue && !isPicker.value) measureTarget()
+  if (props.modelValue) measureTarget()
 }
 
 window.addEventListener('resize', onViewportChange)

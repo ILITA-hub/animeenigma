@@ -314,8 +314,9 @@
         v-if="openMenu === 'source'"
         ref="sourceMenuEl"
         class="pl-floating pl-floating--source"
+        data-site-guide="player-menu-source"
         :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
-        :style="{ '--prov': activeProviderHue }"
+        :style="{ '--prov': activeProviderHue, zIndex: playerGuideRequested && sheetTeleport ? 69 : undefined }"
         @click.stop
       >
         <SourcePanel
@@ -345,8 +346,9 @@
         v-if="openMenu === 'episodes'"
         ref="episodesMenuEl"
         class="pl-floating pl-floating--sheet"
+        data-site-guide="player-menu-episodes"
         :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
-        :style="{ '--prov': activeProviderHue }"
+        :style="{ '--prov': activeProviderHue, zIndex: playerGuideRequested && sheetTeleport ? 69 : undefined }"
         @click.stop
       >
         <EpisodesPanel
@@ -373,8 +375,9 @@
         v-if="openMenu === 'settings'"
         ref="settingsMenuEl"
         class="pl-floating pl-floating--btnmenu"
+        data-site-guide="player-menu-settings"
         :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
-        :style="{ '--prov': activeProviderHue }"
+        :style="{ '--prov': activeProviderHue, zIndex: playerGuideRequested && sheetTeleport ? 69 : undefined }"
         @click.stop
       >
         <PlaybackSettingsMenu
@@ -403,8 +406,9 @@
         v-if="openMenu === 'subs'"
         ref="subsMenuEl"
         class="pl-floating pl-floating--btnmenu"
+        data-site-guide="player-menu-subs"
         :class="{ 'pl-floating--mobile-sheet': sheetTeleport }"
-        :style="{ '--prov': activeProviderHue }"
+        :style="{ '--prov': activeProviderHue, zIndex: playerGuideRequested && sheetTeleport ? 69 : undefined }"
         @click.stop
       >
         <SubtitlesMenu
@@ -468,6 +472,7 @@
         v-if="sheetTeleport && anySheetOpen"
         class="pl-sheet-scrim"
         data-test="sheet-scrim"
+        :style="{ zIndex: playerGuideRequested ? 68 : undefined }"
         @click="closeAllSheets"
       />
     </Teleport>
@@ -541,6 +546,7 @@ import { useToast } from '@/composables/useToast'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { useConnectionHealth } from '@/composables/aePlayer/useConnectionHealth'
 import { recordPlayerEvent } from '@/utils/playerTelemetry'
+import { playerGuideMenu, playerGuideRequested } from '@/composables/siteGuideState'
 
 import { usePlayerSyncBridge } from '@/composables/usePlayerSyncBridge'
 import { makeOfflineResolver } from '@/offline/offlineAdapter'
@@ -1438,6 +1444,15 @@ const {
   anySheetOpen,
   closeAllSheets,
 } = menus
+
+// The player tour owns the currently demonstrated menu. Advancing or going
+// back opens the corresponding real panel so the explanation never points at
+// a closed trigger button.
+watch(playerGuideMenu, (menu) => {
+  if (!playerGuideRequested.value) return
+  openMenu.value = menu
+  browseOpen.value = false
+}, { immediate: true })
 
 // ─── Offline downloads (season-only, app-only) ──────────────────────────────
 

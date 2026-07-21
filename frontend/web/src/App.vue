@@ -84,7 +84,9 @@
     <SiteGuide
       :model-value="siteGuideOpen"
       :mode="siteGuideMode"
+      :player-launch-pending="playerGuideLaunching"
       @update:model-value="setSiteGuideOpen"
+      @start-player="launchPlayerGuide"
     />
 
     <!-- Card-launched season download flow (context menu → quality dialog → engine). -->
@@ -197,7 +199,12 @@ import { reportFeError } from '@/utils/feErrorLog'
 import { pickSecretFeature, roulettePoolAvailable, wantsNewTab } from '@/utils/secretFeatures'
 import { isHelpHotkey } from '@/utils/globalHotkeys'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
-import { playerGuideRequested } from '@/composables/siteGuideState'
+import {
+  playerGuideLaunching,
+  playerGuideMenu,
+  playerGuideRequested,
+  resolvePlayerGuideAnimeId,
+} from '@/composables/siteGuideState'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -209,27 +216,51 @@ const siteGuideMode = ref<SiteGuideMode>('site')
 
 function setSiteGuideOpen(open: boolean): void {
   siteGuideOpen.value = open
-  if (!open) playerGuideRequested.value = false
+  if (!open && !playerGuideLaunching.value) {
+    playerGuideRequested.value = false
+    playerGuideMenu.value = null
+  }
 }
 
-// The tips page launches the tour on Home through a short-lived query marker.
-// Remove the marker immediately so sharing/copying the current URL does not
-// unexpectedly auto-open the tour for somebody else.
+async function launchPlayerGuide(): Promise<void> {
+  if (playerGuideLaunching.value) return
+
+  siteGuideOpen.value = false
+  playerGuideRequested.value = true
+  playerGuideMenu.value = null
+  playerGuideLaunching.value = true
+
+  try {
+    const animeId = await resolvePlayerGuideAnimeId()
+    if (!animeId) {
+      playerGuideRequested.value = false
+      return
+    }
+    await router.push({ path: `/anime/${animeId}` })
+    siteGuideMode.value = 'player'
+    siteGuideOpen.value = true
+  } finally {
+    playerGuideLaunching.value = false
+  }
+}
+
+// Guide launchers use a short-lived query marker. Remove it immediately so
+// sharing/copying the current URL does not unexpectedly auto-open a tour.
 watch(
   () => route.query.guide,
   (guide) => {
     if (guide !== 'start' && guide !== 'player') return
-    if (guide === 'player' && route.name !== 'anime') {
-      playerGuideRequested.value = true
-      siteGuideMode.value = 'player-picker'
-    } else {
-      playerGuideRequested.value = guide === 'player'
-      siteGuideMode.value = guide === 'player' ? 'player' : 'site'
-    }
-    siteGuideOpen.value = true
     const query = { ...route.query }
     delete query.guide
     void router.replace({ path: route.path, query, hash: route.hash })
+    if (guide === 'player') {
+      void launchPlayerGuide()
+      return
+    }
+    playerGuideRequested.value = false
+    playerGuideMenu.value = null
+    siteGuideMode.value = 'site'
+    siteGuideOpen.value = true
   },
   { immediate: true },
 )

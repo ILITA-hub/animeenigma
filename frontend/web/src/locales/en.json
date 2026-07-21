@@ -1760,10 +1760,10 @@
   "siteGuide": {
     "launch": "Start the interactive tour",
     "launchPlayer": "Part 2: player guide",
-    "playerPart": "Part 2 · Player",
     "progress": "Step {current} of {total}",
     "skip": "Skip",
     "finish": "Done",
+    "continuePlayer": "Continue to part 2",
     "steps": {
       "home": {
         "title": "Home starts here",
@@ -1789,10 +1789,6 @@
         "title": "Tell us when something is off",
         "body": "Use this button to send a bug, question, or idea. For playback issues, include the anime, episode, and selected source."
       }
-    },
-    "picker": {
-      "title": "Choose an anime for part two",
-      "body": "Open any catalog card — the guide will automatically continue on its watch page."
     },
     "playerSteps": {
       "screen": {

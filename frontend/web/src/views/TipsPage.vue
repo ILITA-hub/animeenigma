@@ -15,7 +15,12 @@
           <template #icon><Compass class="size-4" aria-hidden="true" /></template>
           {{ t('siteGuide.launch') }}
         </Button>
-        <Button variant="outline" data-testid="player-guide-launch" @click="startPlayerGuide">
+        <Button
+          variant="outline"
+          data-testid="player-guide-launch"
+          :loading="playerGuideLaunching"
+          @click="startPlayerGuide"
+        >
           <template #icon><Clapperboard class="size-4" aria-hidden="true" /></template>
           {{ t('siteGuide.launchPlayer') }}
         </Button>
@@ -103,6 +108,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import HotkeyRows from '@/components/tips/HotkeyRows.vue'
+import { playerGuideLaunching } from '@/composables/siteGuideState'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -112,7 +118,7 @@ function startGuide(): void {
 }
 
 function startPlayerGuide(): void {
-  void router.push({ path: '/browse', query: { guide: 'player', status: 'ongoing' } })
+  void router.push({ path: '/tips', query: { guide: 'player' } })
 }
 
 // Mirrors composables/aePlayer/playerHotkeys.ts — keep in sync when the

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test.describe('secret interactive site guide', () => {
-  test('launches from hidden tips and completes the real interface tour', async ({ page }) => {
+  test('links part one directly to the automatically selected player tour', async ({ page }) => {
     await page.goto('/tips')
     await page.getByTestId('site-guide-launch').click()
 
@@ -21,34 +21,30 @@ test.describe('secret interactive site guide', () => {
     expect(panelBox!.y + panelBox!.height <= feedbackBox!.y || panelBox!.y >= feedbackBox!.y + feedbackBox!.height).toBe(true)
 
     await page.getByTestId('site-guide-next').click()
-    await expect(page.getByTestId('site-guide-panel')).toBeHidden()
+    await expect(page).toHaveURL(/\/anime\/[^/?]+/)
+    await expect(page.getByTestId('site-guide-panel')).toHaveAttribute('data-guide-mode', 'player')
+    await expect(page.locator('[data-test="ae-player"]')).toBeVisible()
   })
 
-  test('continues part two on the player of a chosen anime', async ({ page }) => {
+  test('opens Curator Recommends or popular top-1 and demonstrates every player menu', async ({ page }) => {
     // The guide must explain AePlayer even when this browser normally prefers
     // the Classic Kodik fallback; the persisted preference itself stays intact.
     await page.addInitScript(() => localStorage.setItem('classic_kodik_selected', 'true'))
     await page.goto('/tips')
     await page.getByTestId('player-guide-launch').click()
 
-    await expect(page).toHaveURL(/\/browse\?.*status=ongoing/)
-    await expect(page.getByTestId('site-guide-panel')).toHaveAttribute('data-guide-mode', 'player-picker')
-    await expect(page.getByTestId('site-guide-blocker')).toHaveCount(0)
-
-    const animeLink = page.locator('a[href^="/anime/"]').first()
-    await expect(animeLink).toBeVisible()
-    await animeLink.click()
-
     await expect(page).toHaveURL(/\/anime\/[^/?]+/)
     await expect(page.getByTestId('site-guide-panel')).toHaveAttribute('data-guide-mode', 'player')
     await expect(page.getByTestId('site-guide-spotlight')).toBeVisible()
     await expect(page.locator('[data-test="ae-player"]')).toBeVisible()
 
-    for (let step = 1; step < 6; step += 1) {
+    for (const menu of ['episodes', 'source', 'subs', 'settings']) {
       await page.getByTestId('site-guide-next').click()
-      await expect(page.getByTestId('site-guide-panel')).toBeVisible()
+      await expect(page.locator(`[data-site-guide="player-menu-${menu}"]`)).toBeVisible()
     }
 
+    await page.getByTestId('site-guide-next').click()
+    await expect(page.locator('[data-site-guide^="player-menu-"]')).toHaveCount(0)
     await page.getByTestId('site-guide-next').click()
     await expect(page.getByTestId('site-guide-panel')).toBeHidden()
   })

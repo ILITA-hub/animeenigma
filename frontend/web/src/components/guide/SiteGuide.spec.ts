@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SiteGuide from './SiteGuide.vue'
+import { playerGuideMenu } from '@/composables/siteGuideState'
 
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-i18n')>()),
@@ -10,9 +11,10 @@ vi.mock('vue-i18n', async (importOriginal) => ({
 describe('SiteGuide', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
+    playerGuideMenu.value = null
   })
 
-  it('walks through the guide and closes on the final step', async () => {
+  it('links the final site step directly to the player guide', async () => {
     const wrapper = mount(SiteGuide, { props: { modelValue: true }, attachTo: document.body })
 
     expect(wrapper.text()).toContain('siteGuide.steps.home.title')
@@ -20,8 +22,9 @@ describe('SiteGuide', () => {
       await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
     }
     expect(wrapper.text()).toContain('siteGuide.steps.feedback.title')
+    expect(wrapper.text()).toContain('siteGuide.continuePlayer')
     await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
-    expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+    expect(wrapper.emitted('start-player')).toEqual([[]])
     wrapper.unmount()
   })
 
@@ -53,19 +56,7 @@ describe('SiteGuide', () => {
     wrapper.unmount()
   })
 
-  it('keeps the catalog interactive while waiting for a player-tour title', () => {
-    const wrapper = mount(SiteGuide, {
-      props: { modelValue: true, mode: 'player-picker' },
-      attachTo: document.body,
-    })
-
-    expect(wrapper.text()).toContain('siteGuide.picker.title')
-    expect(wrapper.find('[data-testid="site-guide-blocker"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="site-guide-next"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('runs a separate player tour and keeps player chrome awake', async () => {
+  it('runs a separate player tour, opens each menu, and keeps player chrome awake', async () => {
     const wrapper = mount(SiteGuide, {
       props: { modelValue: true, mode: 'player' },
       attachTo: document.body,
@@ -73,6 +64,16 @@ describe('SiteGuide', () => {
 
     expect(wrapper.text()).toContain('siteGuide.playerSteps.screen.title')
     expect(document.body.classList.contains('site-guide-player-active')).toBe(true)
+    await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    expect(playerGuideMenu.value).toBe('episodes')
+    await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    expect(playerGuideMenu.value).toBe('source')
+    await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    expect(playerGuideMenu.value).toBe('subs')
+    await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    expect(playerGuideMenu.value).toBe('settings')
+    await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    expect(playerGuideMenu.value).toBeNull()
     await wrapper.setProps({ modelValue: false })
     expect(document.body.classList.contains('site-guide-player-active')).toBe(false)
     wrapper.unmount()
