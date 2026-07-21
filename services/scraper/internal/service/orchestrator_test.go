@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/scraper/internal/health"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // fakeProvider is a swappable domain.Provider for orchestrator contract tests.
@@ -1096,6 +1099,76 @@ func TestOrchestrator_GetStreamGated_AllProvidersFail(t *testing.T) {
 	}
 	if stream != nil {
 		t.Errorf("stream = %v; want nil on exhaustion", stream)
+	}
+}
+
+// TestOrchestrator_GetStreamGated_LogsEachProviderFailover — reproduces a
+// real on-call finding (2026-07-21 gogoanime recovery run): GetStreamGated's
+// loop only keeps the LAST provider's error (summarizeFailover), so when
+// gogoanime failed and the chain fell over to nineanime, the response only
+// ever surfaced nineanime's confusing "fetch host not allowed" error —
+// gogoanime's actual failure reason was completely invisible in both the API
+// response AND the logs (unlike the plain runFailoverNamed path, which WARN
+// logs every attempt via "scraper: provider failover"). This asserts the
+// gated path logs a WARN per failed attempt too, so the first provider's
+// real error is recoverable from logs even though the final returned error
+// is (correctly) the last one.
+func TestOrchestrator_GetStreamGated_LogsEachProviderFailover(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.WarnLevel)
+
+	gp := &fakeGatedProvider{
+		fakeProvider: fakeProvider{
+			nameVal: "gogoanime",
+			listServersFn: func(_ context.Context, _, _ string) ([]domain.Server, error) {
+				return []domain.Server{{ID: "https://gogoanime.me.uk/newplayer.php?type=hd-1"}}, nil
+			},
+		},
+		getStreamWithGateFn: func(_ context.Context, _, _, _ string, _ domain.Category, _ []domain.Server) (*domain.Stream, bool, error) {
+			return nil, true, domain.WrapProviderDown(
+				errors.New("megaplay: all 1 CDN candidate(s) unfetchable in-browser (last status=None) — stream removed/expired (9hjkrt.nekostream.site)"),
+				"gogoanime: browser provider_down")
+		},
+	}
+	plain := &fakeProvider{
+		nameVal: "nineanime",
+		getStreamFn: func(_ context.Context, _, _, _ string, _ domain.Category) (*domain.Stream, error) {
+			return nil, domain.WrapProviderDown(errors.New("fetch host not allowed for nineanime: None"), "sidecar: fetch")
+		},
+	}
+
+	o := NewOrchestrator(&logger.Logger{SugaredLogger: zap.New(core).Sugar()}, domain.NewRegistry(), nil)
+	o.Register(gp)
+	o.Register(plain)
+
+	_, _, err := o.GetStreamGated(context.Background(), "anime", "ep1", "", domain.CategorySub, "", false)
+	if err == nil {
+		t.Fatal("err = nil; want non-nil after exhaustion")
+	}
+
+	entries := logs.FilterMessage("scraper: provider failover").All()
+	if len(entries) != 2 {
+		t.Fatalf("provider failover warns = %d, want 2 (one per failed provider); all logs: %+v", len(entries), logs.All())
+	}
+
+	first := entries[0].ContextMap()
+	if first["from"] != "gogoanime" {
+		t.Errorf("entries[0][from] = %v; want gogoanime", first["from"])
+	}
+	if first["to"] != "nineanime" {
+		t.Errorf("entries[0][to] = %v; want nineanime", first["to"])
+	}
+	firstErr, _ := first["error"].(string)
+	if !strings.Contains(firstErr, "nekostream.site") {
+		t.Errorf("entries[0][error] = %q; want it to contain gogoanime's real failure (nekostream.site) — this is the exact information the API response silently drops", firstErr)
+	}
+
+	second := entries[1].ContextMap()
+	if second["from"] != "nineanime" {
+		t.Errorf("entries[1][from] = %v; want nineanime", second["from"])
+	}
+	if second["to"] != "" {
+		t.Errorf("entries[1][to] = %v; want empty (last provider in chain)", second["to"])
 	}
 }
 

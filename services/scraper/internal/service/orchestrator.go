@@ -400,18 +400,26 @@ func runFailoverNamed[T any](
 			next = providers[i+1].Name()
 		}
 		metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
-		if log != nil {
-			log.Warnw("scraper: provider failover",
-				"from", p.Name(),
-				"to", next,
-				"kind", kind,
-				"error", err.Error(),
-			)
-		}
+		logProviderFailover(log, p.Name(), next, kind, err)
 		errs = append(errs, err)
 	}
 
 	return zero, "", summarizeFailover(errs)
+}
+
+// logProviderFailover emits the shared "scraper: provider failover" WARN both
+// runFailoverNamed and GetStreamGated use on a retryable per-provider error —
+// kept as one function so the two failover loops can't drift on message/fields.
+func logProviderFailover(log *logger.Logger, from, to, kind string, err error) {
+	if log == nil {
+		return
+	}
+	log.Warnw("scraper: provider failover",
+		"from", from,
+		"to", to,
+		"kind", kind,
+		"error", err.Error(),
+	)
 }
 
 // OrderedProviderNames returns the names of registered providers in the
@@ -599,7 +607,7 @@ func (o *Orchestrator) GetStreamGated(
 			return stream, gated, nil
 		}
 
-		retry, _, terminalErr := classifyProviderErr(ctx, err)
+		retry, kind, terminalErr := classifyProviderErr(ctx, err)
 		if !retry {
 			return nil, false, terminalErr
 		}
@@ -608,6 +616,10 @@ func (o *Orchestrator) GetStreamGated(
 			next = providers[i+1].Name()
 		}
 		metrics.ParserFallbackTotal.WithLabelValues(p.Name(), next).Inc()
+		// Mirrors runFailoverNamed's WARN below — see
+		// TestOrchestrator_GetStreamGated_LogsEachProviderFailover for the
+		// incident (masked gogoanime root cause) this fixes.
+		logProviderFailover(o.log, p.Name(), next, kind, err)
 		errs = append(errs, err)
 	}
 
