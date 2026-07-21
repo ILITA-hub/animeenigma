@@ -1,7 +1,8 @@
 // Daily community-review spotlight.
 //
-// DailyReviewResolver selects one written (non-blank) public review for the
-// UTC day. Selection is deterministic for a date via md5(review_id + date),
+// DailyReviewResolver selects one substantial public review for the UTC day.
+// Eligible reviews contain at least 100 characters after trimming outer
+// spaces. Selection is deterministic for a date via md5(review_id + date),
 // so every viewer sees the same card and multiple catalog replicas converge
 // even before Redis is warm. The selected payload is cached under a date-keyed
 // key for 24 hours. Empty pools are never cached, allowing later reviews to
@@ -14,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -40,9 +42,14 @@ func (a *gormDailyReviewAdapter) RawScan(ctx context.Context, dest any, sql stri
 	return a.db.WithContext(ctx).Raw(sql, args...).Scan(dest).Error
 }
 
-// dailyReviewSQL returns exactly one non-empty written review. Public profile
-// fields come from users so renamed users/current avatars stay fresh. The
-// anime_list user_id is used only for the join and is never projected.
+const (
+	dailyReviewMinChars    = 100
+	dailyReviewCachePrefix = "spotlight:daily_review:v2:"
+)
+
+// dailyReviewSQL returns exactly one sufficiently long written review. Public
+// profile fields come from users so renamed users/current avatars stay fresh.
+// The anime_list user_id is used only for the join and is never projected.
 const dailyReviewSQL = `
 SELECT al.id AS review_id,
        al.score,
@@ -59,7 +66,7 @@ SELECT al.id AS review_id,
 FROM anime_list al
 JOIN users u  ON u.id = al.user_id
 JOIN animes a ON a.id = al.anime_id
-WHERE NULLIF(BTRIM(al.review_text), '') IS NOT NULL
+WHERE CHAR_LENGTH(BTRIM(al.review_text)) >= ?
   AND COALESCE(a.hidden, false) = false
 ORDER BY md5(al.id::text || ?)
 LIMIT 1
@@ -93,20 +100,26 @@ func NewDailyReviewResolver(db dailyReviewDB, c cache.Cache, log *logger.Logger)
 
 func (r *DailyReviewResolver) Type() string { return "daily_review" }
 
+func dailyReviewMeetsMinimum(text string) bool {
+	return utf8.RuneCountInString(text) >= dailyReviewMinChars
+}
+
 func (r *DailyReviewResolver) Resolve(ctx context.Context, _ *string) (*spotlight.Card, error) {
 	now := time.Now()
 	dateKey := spotlight.DateKeyUTC(now)
-	key := "spotlight:daily_review:" + dateKey
+	key := dailyReviewCachePrefix + dateKey
 
 	var cached spotlight.DailyReviewData
 	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		return &spotlight.Card{Type: r.Type(), Data: cached}, nil
+		if dailyReviewMeetsMinimum(cached.ReviewText) {
+			return &spotlight.Card{Type: r.Type(), Data: cached}, nil
+		}
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		r.log.Warnw("spotlight.cache_get_failed", "type", r.Type(), "key", key, "error", err)
 	}
 
 	var rows []dailyReviewRow
-	if err := r.db.RawScan(ctx, &rows, dailyReviewSQL, dateKey); err != nil {
+	if err := r.db.RawScan(ctx, &rows, dailyReviewSQL, dailyReviewMinChars, dateKey); err != nil {
 		return nil, fmt.Errorf("daily_review: db: %w", err)
 	}
 	if len(rows) == 0 {
@@ -114,6 +127,11 @@ func (r *DailyReviewResolver) Resolve(ctx context.Context, _ *string) (*spotligh
 	}
 
 	row := rows[0]
+	// Defense in depth for alternate/fake adapters: production SQL already
+	// enforces the same Unicode-character boundary before selecting a row.
+	if !dailyReviewMeetsMinimum(row.ReviewText) {
+		return nil, nil
+	}
 	data := spotlight.DailyReviewData{
 		ReviewID: row.ReviewID,
 		Anime: spotlight.DailyReviewAnime{
