@@ -7,24 +7,24 @@
 // FE→BE trace_id join returned 0 rows.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-async function lastEnvelope(beacon: ReturnType<typeof vi.fn>) {
-  const blob = beacon.mock.calls.at(-1)![1] as Blob
-  return JSON.parse(await blob.text())
+function lastEnvelope(fetchMock: ReturnType<typeof vi.fn>) {
+  const init = fetchMock.mock.calls.at(-1)![1] as RequestInit
+  return JSON.parse(init.body as string)
 }
 
 describe('register-field serialization boundary', () => {
-  let beacon: ReturnType<typeof vi.fn>
+  let fetchMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     vi.resetModules()
     localStorage.clear()
-    beacon = vi.fn().mockReturnValue(true)
-    // @ts-expect-error jsdom lacks sendBeacon
-    navigator.sendBeacon = beacon
+    fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -39,7 +39,7 @@ describe('register-field serialization boundary', () => {
       target_kind: 'route',
     })
     analytics.flushNow()
-    const env = await lastEnvelope(beacon)
+    const env = lastEnvelope(fetchMock)
     const ev = env.events.find((e: { event_name?: string }) => e.event_name === 'fe.call')
     expect(ev).toBeTruthy()
     // Top-level register fields — the collector reads these directly.
@@ -55,7 +55,7 @@ describe('register-field serialization boundary', () => {
     analytics.init({ endpoint: '/x', flushMs: 999999 })
     analytics.track('fe.call', { source: 'fe', trace_id: 't1' })
     analytics.flushNow()
-    const env = await lastEnvelope(beacon)
+    const env = lastEnvelope(fetchMock)
     const ev = env.events.find((e: { event_name?: string }) => e.event_name === 'fe.call')
     // properties is omitted (or at least carries no register keys).
     const props = ev.properties ?? {}
@@ -75,7 +75,7 @@ describe('register-field serialization boundary', () => {
       duration_ms: 120,
     })
     analytics.flushNow()
-    const env = await lastEnvelope(beacon)
+    const env = lastEnvelope(fetchMock)
     const ev = env.events.find((e: { event_name?: string }) => e.event_name === 'rum.resource')
     expect(ev.source).toBe('fe_rum')
     expect(ev.target_kind).toBe('host')
@@ -89,7 +89,7 @@ describe('register-field serialization boundary', () => {
     analytics.init({ endpoint: '/x', flushMs: 999999 })
     analytics.track('custom.evt', { source: 'fe', foo: 'bar', count: 7 })
     analytics.flushNow()
-    const env = await lastEnvelope(beacon)
+    const env = lastEnvelope(fetchMock)
     const ev = env.events.find((e: { event_name?: string }) => e.event_name === 'custom.evt')
     expect(ev.source).toBe('fe') // register field lifted
     expect(ev.properties).toEqual({ foo: 'bar', count: 7 }) // arbitrary props stay nested
@@ -100,7 +100,7 @@ describe('register-field serialization boundary', () => {
     analytics.init({ endpoint: '/x', flushMs: 999999 })
     analytics.track('fe.call', { source: 'fe', trace_id: 't2' })
     analytics.flushNow()
-    const env = await lastEnvelope(beacon)
+    const env = lastEnvelope(fetchMock)
     const ev = env.events.find((e: { event_name?: string }) => e.event_name === 'fe.call')
     expect(ev.properties).toBeUndefined()
   })

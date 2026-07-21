@@ -1,18 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 describe('analytics singleton', () => {
-  let beacon: ReturnType<typeof vi.fn>
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  function lastEnvelope() {
+    const init = fetchMock.mock.calls.at(-1)![1] as RequestInit
+    return JSON.parse(init.body as string)
+  }
 
   beforeEach(() => {
     vi.resetModules()
     localStorage.clear()
-    beacon = vi.fn().mockReturnValue(true)
-    // @ts-expect-error jsdom lacks sendBeacon
-    navigator.sendBeacon = beacon
+    fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -21,7 +26,7 @@ describe('analytics singleton', () => {
     analytics.page()
     analytics.track('foo')
     analytics.flushNow()
-    expect(beacon).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('page() enqueues a pageview that flushes', async () => {
@@ -29,8 +34,8 @@ describe('analytics singleton', () => {
     analytics.init({ endpoint: '/api/analytics/collect', flushMs: 999999 })
     analytics.page()
     analytics.flushNow()
-    expect(beacon).toHaveBeenCalledTimes(1)
-    const env = JSON.parse(await (beacon.mock.calls[0][1] as Blob).text())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const env = lastEnvelope()
     expect(env.events[0].event_type).toBe('pageview')
   })
 
@@ -40,13 +45,13 @@ describe('analytics singleton', () => {
     analytics.identify('u1')
     analytics.track('after_login')
     analytics.flushNow()
-    let env = JSON.parse(await (beacon.mock.calls.at(-1)![1] as Blob).text())
+    let env = lastEnvelope()
     expect(env.user_id).toBe('u1')
 
     analytics.reset()
     analytics.track('after_logout')
     analytics.flushNow()
-    env = JSON.parse(await (beacon.mock.calls.at(-1)![1] as Blob).text())
+    env = lastEnvelope()
     expect(env.user_id).toBeNull()
   })
 
@@ -56,7 +61,7 @@ describe('analytics singleton', () => {
     analytics.identify('u1')
     analytics.identify('u1') // duplicate — should NOT emit a second identify
     analytics.flushNow()
-    const env = JSON.parse(await (beacon.mock.calls.at(-1)![1] as Blob).text())
+    const env = lastEnvelope()
     const identifies = env.events.filter((e: { event_type: string }) => e.event_type === 'identify')
     expect(identifies).toHaveLength(1)
   })
@@ -69,7 +74,7 @@ describe('analytics singleton', () => {
     document.body.appendChild(btn)
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     analytics.flushNow()
-    const env = JSON.parse(await (beacon.mock.calls.at(-1)![1] as Blob).text())
+    const env = lastEnvelope()
     const click = env.events.find((e: { event_type: string }) => e.event_type === 'click')
     expect(click).toBeTruthy()
     expect(click.el_selector).toContain('button#buy')
