@@ -195,13 +195,27 @@ func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerd
 	// here so both the probe and synth paths carry it. 0 (unknown) stays 0.
 	v.Episodes = unit.Episodes
 	if err := w.store.UpsertUnit(ctx, unit.AnimeID, unit.Provider, v); err != nil {
-		cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, "error").Inc()
+		cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, "error", unit.Band.Label()).Inc()
 		if w.log != nil {
 			w.log.Errorw("verdict upsert failed", "anime_id", unit.AnimeID, "provider", unit.Provider, "error", err)
 		}
 		return
 	}
-	cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, result).Inc()
+	cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, result, unit.Band.Label()).Inc()
+	if v.Audio != nil {
+		lang := v.Audio.Lang
+		if lang == "" {
+			lang = "unknown"
+		}
+		cvmetrics.VerdictsTotal.WithLabelValues(lang).Inc()
+	}
+	if v.Hardsub != nil && v.Hardsub.Present {
+		lang := v.Hardsub.Lang
+		if lang == "" {
+			lang = "unknown"
+		}
+		cvmetrics.HardsubTotal.WithLabelValues(lang).Inc()
+	}
 	cvmetrics.LastProbeTS.Set(float64(time.Now().Unix()))
 	if w.log != nil {
 		w.log.Infow("unit probed", "anime_id", unit.AnimeID, "provider", unit.Provider,

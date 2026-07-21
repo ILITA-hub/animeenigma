@@ -12,3 +12,19 @@ func TestBandDepthGauge(t *testing.T) {
 		t.Errorf("band_depth{ongoing} = %v, want 7", got)
 	}
 }
+
+func TestVerdictAndHardsubCounters(t *testing.T) {
+	VerdictsTotal.WithLabelValues("ja").Inc()
+	if testutil.ToFloat64(VerdictsTotal.WithLabelValues("ja")) != 1 {
+		t.Error("verdicts_total{ja} not incremented")
+	}
+	HardsubTotal.WithLabelValues("unknown").Inc()
+	if testutil.ToFloat64(HardsubTotal.WithLabelValues("unknown")) != 1 {
+		t.Error("hardsub_total{unknown} not incremented")
+	}
+	// probes_total now takes three labels
+	ProbesTotal.WithLabelValues("kodik", "verified", "ongoing").Inc()
+	if testutil.ToFloat64(ProbesTotal.WithLabelValues("kodik", "verified", "ongoing")) != 1 {
+		t.Error("probes_total{kodik,verified,ongoing} not incremented")
+	}
+}

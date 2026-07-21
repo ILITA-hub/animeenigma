@@ -14,8 +14,17 @@ var (
 		Name: "content_verify_queue_depth", Help: "Candidates with a non-zero score at the last snapshot.",
 	})
 	ProbesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "content_verify_probes_total", Help: "Unit probes by provider and result.",
-	}, []string{"provider", "result"}) // result: verified|inconclusive|unreachable|error|synth
+		Name: "content_verify_probes_total",
+		Help: "Unit (full A/V) probes by provider, result, and priority band.",
+	}, []string{"provider", "result", "band"}) // result: verified|inconclusive|unreachable|error|synth
+	VerdictsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "content_verify_verdicts_total",
+		Help: "Audio-language verdicts produced, by detected language.",
+	}, []string{"audio_lang"})
+	HardsubTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "content_verify_hardsub_total",
+		Help: "Burned-in (hardsub) subtitle detections, by language.",
+	}, []string{"lang"})
 	ProbeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "content_verify_probe_duration_seconds",
 		Help:    "Wall time of one unit probe (resolve→extract→analyze).",
