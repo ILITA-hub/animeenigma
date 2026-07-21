@@ -23,7 +23,7 @@ type VerdictSource interface {
 // LevelStore publishes the level for consumers and reads the owner override
 // (repo.RedisStore).
 type LevelStore interface {
-	PublishLevel(ctx context.Context, level domain.Level, reasons []domain.Reason, ttl time.Duration) error
+	PublishLevel(ctx context.Context, level domain.Level, score float64, reasons []domain.Reason, ttl time.Duration) error
 	Override(ctx context.Context) (*domain.Level, error)
 }
 
@@ -44,7 +44,8 @@ type Governor struct {
 	levelTTL      time.Duration
 	promFailTicks int
 
-	machine *Machine
+	machine  *Machine
+	smoother *Smoother
 
 	mu        sync.RWMutex
 	snapshot  domain.Snapshot
@@ -53,9 +54,11 @@ type Governor struct {
 	now       func() time.Time // injectable for tests
 }
 
-// New builds a Governor. enterTicks/exitTicks parameterize the Machine.
+// New builds a Governor. enterTicks/exitTicks parameterize the Machine;
+// alphaUp/alphaDown parameterize the continuous score's Smoother.
 func New(source VerdictSource, store LevelStore, sink TransitionSink, log *logger.Logger,
-	tick, levelTTL time.Duration, enterTicks, exitTicks, promFailTicks int) *Governor {
+	tick, levelTTL time.Duration, enterTicks, exitTicks, promFailTicks int,
+	alphaUp, alphaDown float64) *Governor {
 	return &Governor{
 		source:        source,
 		store:         store,
@@ -65,6 +68,7 @@ func New(source VerdictSource, store LevelStore, sink TransitionSink, log *logge
 		levelTTL:      levelTTL,
 		promFailTicks: promFailTicks,
 		machine:       NewMachine(enterTicks, exitTicks),
+		smoother:      NewSmoother(alphaUp, alphaDown),
 		snapshot:      domain.Snapshot{Reasons: []domain.Reason{}, PromHealthy: true},
 		now:           time.Now,
 	}
@@ -106,9 +110,13 @@ func (g *Governor) RunTick(ctx context.Context) {
 		govmetrics.GovernorEvalFailuresTotal.Inc()
 		g.log.Warnw("prometheus poll failed", "consecutive", fails, "error", err)
 		if fails < g.promFailTicks {
-			// Grace window: keep the last published level alive (TTL refresh).
-			g.publish(ctx, g.currentPublished(), g.Snapshot().Reasons)
+			// Grace window: keep the last published level alive (TTL refresh),
+			// decaying the score one tick rather than freezing it.
+			g.publish(ctx, g.currentPublished(), g.smoother.Tick(0), g.Snapshot().Reasons)
 			return
+		}
+		if g.failCountAtLeast(g.promFailTicks) {
+			g.smoother.Reset() // sustained loss: fail-open to a clean 0
 		}
 		// Fail-open: never shed on missing data.
 		verdict = domain.Verdict{Target: domain.LevelNormal}
@@ -119,8 +127,10 @@ func (g *Governor) RunTick(ctx context.Context) {
 	}
 
 	computed := domain.LevelNormal
+	score := 0.0
 	if promHealthy {
 		computed, _ = g.machine.Tick(verdict.Target)
+		score = g.smoother.Tick(verdict.Score)
 	}
 
 	override, oerr := g.store.Override(ctx)
@@ -137,15 +147,19 @@ func (g *Governor) RunTick(ctx context.Context) {
 	if override != nil {
 		published = *override
 		reasons = append([]domain.Reason{{Signal: domain.ReasonManualOverride, Severity: domain.SeverityInfo}}, reasons...)
+		score = map[domain.Level]float64{
+			domain.LevelNormal: 0, domain.LevelElevated: 0.5, domain.LevelCritical: 1.0,
+		}[*override]
 	}
 
-	g.publish(ctx, published, reasons)
+	g.publish(ctx, published, score, reasons)
 
 	g.mu.Lock()
 	prev := g.published
 	g.published = published
 	g.snapshot = domain.Snapshot{
 		Level:       published,
+		Score:       score,
 		Reasons:     reasons,
 		Signals:     verdict.Signals,
 		Override:    override,
@@ -176,12 +190,21 @@ func (g *Governor) currentPublished() domain.Level {
 	return g.published
 }
 
+// failCountAtLeast reports whether the consecutive Prometheus-failure count is
+// at least n. Small mu-guarded reader, mirrors currentPublished.
+func (g *Governor) failCountAtLeast(n int) bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.failCount >= n
+}
+
 // publish refreshes the Redis keys and the Prometheus gauges.
-func (g *Governor) publish(ctx context.Context, level domain.Level, reasons []domain.Reason) {
-	if err := g.store.PublishLevel(ctx, level, reasons, g.levelTTL); err != nil {
+func (g *Governor) publish(ctx context.Context, level domain.Level, score float64, reasons []domain.Reason) {
+	if err := g.store.PublishLevel(ctx, level, score, reasons, g.levelTTL); err != nil {
 		g.log.Warnw("redis publish failed (consumers fail open)", "error", err)
 	}
 	govmetrics.DegradationLevel.Set(float64(level))
+	govmetrics.DegradationScore.Set(score)
 
 	active := map[string]bool{}
 	for _, r := range reasons {

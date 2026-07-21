@@ -21,6 +21,15 @@ var (
 		},
 	)
 
+	// DegradationScore is the authoritative smoothed pressure score (0.00-1.00)
+	// after asymmetric EWMA and override pinning.
+	DegradationScore = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ae_degradation_score",
+			Help: "Published continuous pressure score (0.00 normal .. 1.00 critical), smoothed.",
+		},
+	)
+
 	// DegradationReasonActive marks which signals currently justify the
 	// published level. Label universe is fixed and bounded: breach signals
 	// (psi_cpu_some, psi_io_full, psi_mem_full, mem_available) at severity

@@ -69,6 +69,7 @@ func main() {
 		repo.NewAnalyticsSink(cfg.AnalyticsURL, log),
 		log,
 		cfg.Tick, cfg.LevelTTL, cfg.EnterTicks, cfg.ExitTicks, cfg.PromFailTicks,
+		cfg.ScoreAlphaUp, cfg.ScoreAlphaDown,
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

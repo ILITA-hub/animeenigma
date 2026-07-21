@@ -25,6 +25,7 @@ const AllSignalsQuery = `{__name__=~"ae:.+"}`
 const (
 	breachElevatedName = "ae:pressure_breach:elevated"
 	breachCriticalName = "ae:pressure_breach:critical"
+	scoreName          = "ae:pressure_score:preview"
 	hostSignalPrefix   = "ae:host_"
 )
 
@@ -100,6 +101,8 @@ func (c *Client) FetchVerdict(ctx context.Context) (domain.Verdict, error) {
 			if val >= 1 {
 				elevated[s.Metric["signal"]] = true
 			}
+		case name == scoreName:
+			v.Score = val
 		case strings.HasPrefix(name, hostSignalPrefix):
 			// Host rules are single-series; keep the max defensively if a
 			// label split ever appears.

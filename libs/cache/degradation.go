@@ -12,6 +12,11 @@ import (
 // services/governor/internal/domain.RedisLevelKey — keep in sync.
 const DegradationLevelKey = "ae:degradation:level"
 
+// DegradationScoreKey is the Redis key the governor publishes the continuous
+// pressure score to ("0.00".."1.00", TTL'd). Mirrors
+// services/governor/internal/domain.RedisScoreKey — keep in sync.
+const DegradationScoreKey = "ae:degradation:score"
+
 // DegradationWatcher polls the governor-published degradation level and caches
 // it for cheap synchronous reads on hot paths (worker claim loops, cron
 // guards). FAIL-OPEN by design: a nil watcher, a nil cache, a missing/expired

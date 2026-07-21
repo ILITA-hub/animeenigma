@@ -35,6 +35,11 @@ type Config struct {
 	// PromFailTicks is how many consecutive failed Prometheus polls flip the
 	// governor to fail-open (publish LevelNormal + prometheus_unreachable).
 	PromFailTicks int
+	// ScoreAlphaUp / ScoreAlphaDown parameterize the continuous pressure
+	// score's asymmetric EWMA (rise fast, decay slow — mirrors
+	// EnterTicks/ExitTicks for the discrete level machine).
+	ScoreAlphaUp   float64
+	ScoreAlphaDown float64
 }
 
 type ServerConfig struct {
@@ -51,13 +56,15 @@ func Load() (*Config, error) {
 			Host: getEnv("REDIS_HOST", "redis"), Port: getEnvInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""), DB: getEnvInt("REDIS_DB", 0),
 		},
-		PrometheusURL: getEnv("GOVERNOR_PROMETHEUS_URL", "http://prometheus:9090/prometheus"),
-		AnalyticsURL:  getEnv("GOVERNOR_ANALYTICS_URL", "http://analytics:8092"),
-		Tick:          getEnvDuration("GOVERNOR_TICK", 15*time.Second),
-		EnterTicks:    getEnvInt("GOVERNOR_ENTER_TICKS", 4),
-		ExitTicks:     getEnvInt("GOVERNOR_EXIT_TICKS", 20),
-		LevelTTL:      getEnvDuration("GOVERNOR_LEVEL_TTL", 60*time.Second),
-		PromFailTicks: getEnvInt("GOVERNOR_PROM_FAIL_TICKS", 3),
+		PrometheusURL:  getEnv("GOVERNOR_PROMETHEUS_URL", "http://prometheus:9090/prometheus"),
+		AnalyticsURL:   getEnv("GOVERNOR_ANALYTICS_URL", "http://analytics:8092"),
+		Tick:           getEnvDuration("GOVERNOR_TICK", 15*time.Second),
+		EnterTicks:     getEnvInt("GOVERNOR_ENTER_TICKS", 4),
+		ExitTicks:      getEnvInt("GOVERNOR_EXIT_TICKS", 20),
+		LevelTTL:       getEnvDuration("GOVERNOR_LEVEL_TTL", 60*time.Second),
+		PromFailTicks:  getEnvInt("GOVERNOR_PROM_FAIL_TICKS", 3),
+		ScoreAlphaUp:   getEnvFloat("GOVERNOR_SCORE_ALPHA_UP", 0.5),
+		ScoreAlphaDown: getEnvFloat("GOVERNOR_SCORE_ALPHA_DOWN", 0.05),
 	}
 	if cfg.Tick <= 0 {
 		return nil, fmt.Errorf("GOVERNOR_TICK must be positive")
@@ -76,6 +83,15 @@ func getEnvInt(k string, d int) int {
 	if v := os.Getenv(k); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return d
+}
+
+func getEnvFloat(k string, d float64) float64 {
+	if v := os.Getenv(k); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
 		}
 	}
 	return d

@@ -38,6 +38,7 @@ func (f *fakeSource) FetchVerdict(context.Context) (domain.Verdict, error) {
 type fakeStore struct {
 	mu        sync.Mutex
 	level     *domain.Level
+	score     float64
 	reasons   []domain.Reason
 	ttl       time.Duration
 	override  *domain.Level
@@ -45,10 +46,10 @@ type fakeStore struct {
 	publishes int
 }
 
-func (f *fakeStore) PublishLevel(_ context.Context, l domain.Level, r []domain.Reason, ttl time.Duration) error {
+func (f *fakeStore) PublishLevel(_ context.Context, l domain.Level, score float64, r []domain.Reason, ttl time.Duration) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.level, f.reasons, f.ttl = &l, r, ttl
+	f.level, f.score, f.reasons, f.ttl = &l, score, r, ttl
 	f.publishes++
 	return f.pubErr
 }
@@ -71,7 +72,7 @@ func (f *fakeSink) Report(_ context.Context, t domain.Transition) {
 }
 
 func newTestGovernor(src *fakeSource, store *fakeStore, sink *fakeSink, enter, exit, failTicks int) *Governor {
-	return New(src, store, sink, logger.Default(), time.Second, time.Minute, enter, exit, failTicks)
+	return New(src, store, sink, logger.Default(), time.Second, time.Minute, enter, exit, failTicks, 0.5, 0.05)
 }
 
 func breach(target domain.Level, sig, sev string) domain.Verdict {
@@ -150,6 +151,29 @@ func TestGovernor_PromFailureGraceThenFailOpen(t *testing.T) {
 	assert.Equal(t, domain.LevelNormal, snap.Level)
 	assert.False(t, snap.PromHealthy)
 	assert.Equal(t, domain.ReasonPrometheusUnreachable, snap.Reasons[0].Signal)
+}
+
+func TestGovernor_PublishesSmoothedScore(t *testing.T) {
+	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 1.0}}}
+	store := &fakeStore{}
+	sink := &fakeSink{}
+	g := newTestGovernor(src, store, sink, 2, 3, 3)
+
+	g.RunTick(context.Background())
+	assert.Equal(t, 0.5, store.score, "first tick, alphaUp 0.5 halves the 0->1 gap")
+	assert.Equal(t, 0.5, g.Snapshot().Score)
+}
+
+func TestGovernor_OverridePinsScore(t *testing.T) {
+	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 1.0}}}
+	pin := domain.LevelElevated
+	store := &fakeStore{override: &pin}
+	sink := &fakeSink{}
+	g := newTestGovernor(src, store, sink, 2, 3, 3)
+
+	g.RunTick(context.Background())
+	assert.Equal(t, 0.5, store.score, "override level 1 pins the score to 0.5 regardless of raw")
+	assert.Equal(t, 0.5, g.Snapshot().Score)
 }
 
 func TestGovernor_NoTransitionSpamWhenStable(t *testing.T) {

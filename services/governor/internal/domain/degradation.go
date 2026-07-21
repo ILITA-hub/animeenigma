@@ -29,6 +29,8 @@ const (
 	// Aliased to the shared consumer-side constant so producer and consumers
 	// can never drift apart.
 	RedisLevelKey = cache.DegradationLevelKey
+	// RedisScoreKey holds the smoothed pressure score as "0.00".."1.00".
+	RedisScoreKey = cache.DegradationScoreKey
 	// RedisReasonsKey holds the JSON-encoded reasons slice for the current level.
 	RedisReasonsKey = "ae:degradation:reasons"
 	// RedisOverrideKey, when set to "0" | "1" | "2" (by the owner via
@@ -73,11 +75,14 @@ type Verdict struct {
 	// Signals carries the raw ae:host_* signal values for observability
 	// (stored on transitions so "why" survives in ClickHouse).
 	Signals map[string]float64
+	// Score is the raw (pre-smoothing) ae:pressure_score:preview sample.
+	Score float64
 }
 
 // Snapshot is the currently-published state (served on /api/degradation/status).
 type Snapshot struct {
 	Level       Level              `json:"level"`
+	Score       float64            `json:"score"`
 	Reasons     []Reason           `json:"reasons"`
 	Signals     map[string]float64 `json:"signals,omitempty"`
 	Override    *Level             `json:"override,omitempty"`

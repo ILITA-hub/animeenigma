@@ -30,9 +30,12 @@ func NewRedisStore(client *redis.Client) *RedisStore {
 // PublishLevel refreshes the level + reasons keys with ttl. Called every tick;
 // the TTL is the fail-open mechanism (dead governor ⇒ keys expire ⇒ consumers
 // read "no key" ⇒ LevelNormal).
-func (s *RedisStore) PublishLevel(ctx context.Context, level domain.Level, reasons []domain.Reason, ttl time.Duration) error {
+func (s *RedisStore) PublishLevel(ctx context.Context, level domain.Level, score float64, reasons []domain.Reason, ttl time.Duration) error {
 	if err := s.client.Set(ctx, domain.RedisLevelKey, strconv.Itoa(int(level)), ttl).Err(); err != nil {
 		return fmt.Errorf("set level: %w", err)
+	}
+	if err := s.client.Set(ctx, domain.RedisScoreKey, strconv.FormatFloat(score, 'f', 2, 64), ttl).Err(); err != nil {
+		return fmt.Errorf("set score: %w", err)
 	}
 	blob, err := json.Marshal(reasons)
 	if err != nil {
