@@ -203,24 +203,25 @@ func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerd
 	}
 	cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, result, unit.Band.Label()).Inc()
 	if v.Audio != nil {
-		lang := v.Audio.Lang
-		if lang == "" {
-			lang = "unknown"
-		}
-		cvmetrics.VerdictsTotal.WithLabelValues(lang).Inc()
+		cvmetrics.VerdictsTotal.WithLabelValues(orUnknown(v.Audio.Lang)).Inc()
 	}
 	if v.Hardsub != nil && v.Hardsub.Present {
-		lang := v.Hardsub.Lang
-		if lang == "" {
-			lang = "unknown"
-		}
-		cvmetrics.HardsubTotal.WithLabelValues(lang).Inc()
+		cvmetrics.HardsubTotal.WithLabelValues(orUnknown(v.Hardsub.Lang)).Inc()
 	}
 	cvmetrics.LastProbeTS.Set(float64(time.Now().Unix()))
 	if w.log != nil {
 		w.log.Infow("unit probed", "anime_id", unit.AnimeID, "provider", unit.Provider,
 			"key", v.Key.String(), "status", v.Status)
 	}
+}
+
+// orUnknown maps an empty language code to the metric label "unknown" so a
+// missing detection still emits a bounded, non-empty Prometheus label.
+func orUnknown(lang string) string {
+	if lang == "" {
+		return "unknown"
+	}
+	return lang
 }
 
 // tickSkip runs one skip-lane (OP/ED) probe: prevFails is read from the
