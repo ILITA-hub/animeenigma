@@ -119,3 +119,33 @@ groups:
       # tighter than elevated, so critical=1 implies elevated=1).
       - record: ae:pressure_level:preview
         expr: ae:pressure_elevated:bool + ae:pressure_critical:bool
+
+      # --- Continuous pressure score (graduated degradation, spec 2026-07-21) ---
+      # Piecewise-linear per-signal normalization anchored to the EXISTING
+      # thresholds: 0 at half-elevated, 0.5 at elevated, 1.0 at critical —
+      # so the score inherits the 07-14 baseline calibration. Governor smooths
+      # max() of these and publishes ae:degradation:score; consumers map the
+      # score to worker/instance caps via their own curves.
+      - record: ae:pressure_score:signal
+        expr: >-
+          0.5 * clamp_max(clamp_min((ae:host_psi_cpu_some:ratio - 0.125) / 0.125, 0), 1)
+          + 0.5 * clamp_max(clamp_min((ae:host_psi_cpu_some:ratio - 0.25) / 0.20, 0), 1)
+        labels: {signal: psi_cpu_some}
+      - record: ae:pressure_score:signal
+        expr: >-
+          0.5 * clamp_max(clamp_min((ae:host_psi_io_full:ratio - 0.125) / 0.125, 0), 1)
+          + 0.5 * clamp_max(clamp_min((ae:host_psi_io_full:ratio - 0.25) / 0.05, 0), 1)
+        labels: {signal: psi_io_full}
+      - record: ae:pressure_score:signal
+        expr: >-
+          0.5 * clamp_max(clamp_min((ae:host_psi_mem_full:ratio - 0.06) / 0.06, 0), 1)
+          + 0.5 * clamp_max(clamp_min((ae:host_psi_mem_full:ratio - 0.12) / 0.03, 0), 1)
+        labels: {signal: psi_mem_full}
+      # mem_available is inverted (lower = worse): 0 at 0.15, 0.5 at 0.10 (elevated), 1.0 at 0.05 (critical).
+      - record: ae:pressure_score:signal
+        expr: >-
+          0.5 * clamp_max(clamp_min((0.15 - ae:host_mem_available:ratio) / 0.05, 0), 1)
+          + 0.5 * clamp_max(clamp_min((0.10 - ae:host_mem_available:ratio) / 0.05, 0), 1)
+        labels: {signal: mem_available}
+      - record: ae:pressure_score:preview
+        expr: clamp_max(max(ae:pressure_score:signal), 1)
