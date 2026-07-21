@@ -692,6 +692,7 @@
     "tabs": {
       "showcase": "Showcase",
       "watchlist": "My Lists",
+      "reviews": "Reviews",
       "settings": "Settings",
       "advanced": "Advanced"
     },
@@ -751,6 +752,10 @@
       "startDate": "Start",
       "endDate": "End",
       "status": "Status"
+    },
+    "reviews": {
+      "empty": "No reviews yet. Rate an anime and write your first one!",
+      "openAnime": "Open anime page"
     },
     "empty": {
       "watchlist": "Your list is empty",

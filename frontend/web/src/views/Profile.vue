@@ -355,6 +355,11 @@
             </EmptyState>
           </template>
 
+          <!-- Reviews Tab — own profile only (endpoint is JWT-claims-based) -->
+          <template v-if="isOwnProfile" #reviews>
+            <MyReviewsTab />
+          </template>
+
           <!-- Settings Tab (own profile only) -->
           <template v-if="isOwnProfile" #settings>
             <div class="space-y-6">
@@ -894,6 +899,7 @@ import { useProfileWallVisible } from '@/utils/profileWallGate'
 import { AnimeContextMenu, PosterCard } from '@/components/anime'
 import WatchlistRow from '@/components/profile/WatchlistRow.vue'
 import WatchlistFilters from '@/components/profile/WatchlistFilters.vue'
+import MyReviewsTab from '@/components/profile/MyReviewsTab.vue'
 import WatchlistBulkBar from '@/components/profile/WatchlistBulkBar.vue'
 import type { WatchlistFacets, WatchlistFilterState } from '@/types/watchlist-facets'
 import { EMPTY_FILTER_STATE, filterParams, filterKey, activeFilterCount } from '@/types/watchlist-facets'
@@ -1091,6 +1097,9 @@ const tabs = computed(() => {
   const baseTabs: Array<{ value: string; label: string }> = []
   if (showcaseTabVisible.value) baseTabs.push({ value: 'showcase', label: t('profile.tabs.showcase') })
   baseTabs.push({ value: 'watchlist', label: t('profile.tabs.watchlist') })
+  if (isOwnProfile.value) {
+    baseTabs.push({ value: 'reviews', label: t('profile.tabs.reviews') })
+  }
   if (isOwnProfile.value && gachaVisible.value) {
     baseTabs.push({ value: 'collection', label: t('gacha.collection_tab') })
   }
