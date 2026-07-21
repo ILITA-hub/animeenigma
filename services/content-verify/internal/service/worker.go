@@ -13,9 +13,14 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/queue"
 )
 
-// ShedChecker is satisfied by *cache.DegradationWatcher.
-type ShedChecker interface {
-	ShouldShed(min int) bool
+// ScoreSource is satisfied by *cache.DegradationWatcher.
+type ScoreSource interface {
+	Score() float64
+}
+
+// DemandSource reports the pending probe backlog (satisfied by *queue.Engine).
+type DemandSource interface {
+	PendingCount() int
 }
 
 type UnitProber interface {
@@ -68,7 +73,7 @@ type Worker struct {
 	interval   time.Duration
 	workers    int
 	budget     time.Duration
-	shed       ShedChecker
+	score      ScoreSource
 	claimer    Claimer
 	prober     UnitProber
 	store      VerdictStore
@@ -76,15 +81,23 @@ type Worker struct {
 	skipStore  SkipStore
 	skipBudget time.Duration
 	log        *logger.Logger
+	curve      Curve
+	demandPer  int
+	demand     DemandSource
 }
 
-func NewWorker(interval time.Duration, workers int, budget time.Duration, shed ShedChecker, claimer Claimer, prober UnitProber, store VerdictStore,
-	skipProber SkipUnitProber, skipStore SkipStore, skipBudget time.Duration, log *logger.Logger) *Worker {
+func NewWorker(interval time.Duration, workers int, budget time.Duration, score ScoreSource, claimer Claimer, prober UnitProber, store VerdictStore,
+	skipProber SkipUnitProber, skipStore SkipStore, skipBudget time.Duration, log *logger.Logger,
+	curve Curve, demandPer int, demand DemandSource) *Worker {
 	if workers < 1 {
 		workers = 1
 	}
-	return &Worker{interval: interval, workers: workers, budget: budget, shed: shed, claimer: claimer, prober: prober, store: store,
-		skipProber: skipProber, skipStore: skipStore, skipBudget: skipBudget, log: log}
+	if demandPer < 1 {
+		demandPer = 1
+	}
+	return &Worker{interval: interval, workers: workers, budget: budget, score: score, claimer: claimer, prober: prober, store: store,
+		skipProber: skipProber, skipStore: skipStore, skipBudget: skipBudget, log: log,
+		curve: curve, demandPer: demandPer, demand: demand}
 }
 
 // Start launches w.workers in-process probe loops.
@@ -94,14 +107,12 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
-// runLoop is one probe loop. i (0-based) sets two things: the initial-tick
-// stagger, so w.workers loops don't all fire in lockstep, and shedMin =
-// w.workers-i, the governor level at which THIS loop stops claiming —
-// higher-indexed loops shed first as pressure rises, so degradation removes
-// workers one at a time rather than all-or-nothing. With workers=1, i=0
-// gives shedMin=1: today's single-loop semantics, unchanged.
+// runLoop is one probe loop. i (0-based, < w.workers) sets the initial-tick
+// stagger, so w.workers loops don't all fire in lockstep, and is passed to
+// tick unchanged as the loop's identity — the admission decision (whether i
+// participates this tick) is made fresh in tick from the current score and
+// demand, not fixed at loop-start.
 func (w *Worker) runLoop(ctx context.Context, i int) {
-	shedMin := w.workers - i
 	// Timer (not ticker): the interval pause runs AFTER each probe
 	// completes — spec: "перерыв между пробами - 1 минута". This lets
 	// the unit budget exceed the interval (browser-engine resolves alone
@@ -114,17 +125,36 @@ func (w *Worker) runLoop(ctx context.Context, i int) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			w.tick(ctx, shedMin)
+			w.tick(ctx, i)
 			timer.Reset(w.interval)
 		}
 	}
 }
 
-// tick runs one claim+probe cycle for a single worker loop. shedMin is that
-// loop's graduated-shedding floor (see runLoop) — the loop sits out this
-// tick when the governor-reported degradation level is at or above it.
-func (w *Worker) tick(ctx context.Context, shedMin int) {
-	if w.shed != nil && w.shed.ShouldShed(shedMin) {
+// tick runs one claim+probe cycle for loop i. The loop participates only
+// while i < min(curve(score), demandCap) — pressure removes loops from the
+// top one at a time; a shallow queue keeps most loops parked (demand cap
+// floors at 1 so a cold start can still build the first queue snapshot).
+func (w *Worker) tick(ctx context.Context, i int) {
+	pressureCap := w.curve.Cap(w.scoreValue())
+	demandCap := 1
+	if w.demand != nil {
+		if pc := w.demand.PendingCount(); pc > 0 {
+			demandCap = (pc + w.demandPer - 1) / w.demandPer
+		}
+	} else {
+		demandCap = w.workers
+	}
+	effective := pressureCap
+	if demandCap < effective {
+		effective = demandCap
+	}
+	if i == 0 { // one writer for the gauges — loop 0 ticks most often
+		cvmetrics.WorkerCap.WithLabelValues("pressure").Set(float64(pressureCap))
+		cvmetrics.WorkerCap.WithLabelValues("demand").Set(float64(demandCap))
+		cvmetrics.WorkerCap.WithLabelValues("effective").Set(float64(effective))
+	}
+	if i >= effective {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("degraded").Inc()
 		return
 	}
@@ -188,6 +218,13 @@ func (w *Worker) tick(ctx context.Context, shedMin int) {
 		return
 	}
 	w.persist(ctx, *unit, v, v.Status)
+}
+
+func (w *Worker) scoreValue() float64 {
+	if w.score == nil {
+		return 0
+	}
+	return w.score.Score()
 }
 
 func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerdict, result string) {

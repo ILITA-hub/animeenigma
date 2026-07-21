@@ -34,9 +34,10 @@ func TestTickDeferredVerdictDefersInsteadOfPersisting(t *testing.T) {
 		Status: domain.StatusDeferred, RetryAfter: 42 * time.Minute,
 	}}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if len(store.upserts) != 0 {
 		t.Fatalf("deferred verdict must not be persisted; upserts=%v", store.upserts)
@@ -56,9 +57,10 @@ func TestTickDeferredVerdictWithPlainClaimer(t *testing.T) {
 	claimer := &fakeClaimer{unit: &queue.Unit{AnimeID: "a-1", Provider: "miruro"}}
 	prober := &fakeProber{verdict: domain.UnitVerdict{Status: domain.StatusDeferred, RetryAfter: time.Hour}}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if len(store.upserts) != 0 {
 		t.Fatalf("deferred verdict must not be persisted; upserts=%v", store.upserts)

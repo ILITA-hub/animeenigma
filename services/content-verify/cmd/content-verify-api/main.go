@@ -87,7 +87,9 @@ func main() {
 			MinMatch: cfg.SkipMinMatch, MaxMatch: cfg.SkipMaxMatch, SimThreshold: cfg.SkipSimThreshold,
 		}
 		skipPb := prober.NewSkipProber(catClient, cfg.GatewayURL, cfg.FFmpegPath, cfg.WorkDir, runner, store, skipCfg, log)
-		worker := service.NewWorker(cfg.Interval, cfg.Workers, cfg.UnitBudget, shedWatcher, engine, pb, store, skipPb, store, cfg.SkipBudget, log)
+		curve := service.ParseCurve(cfg.Curve, service.Curve{{Score: 0.40, Cap: 6}, {Score: 0.60, Cap: 2}, {Score: 0.80, Cap: 0}})
+		worker := service.NewWorker(cfg.Interval, cfg.Workers, cfg.UnitBudget, shedWatcher, engine, pb, store, skipPb, store, cfg.SkipBudget, log,
+			curve, cfg.DemandPerWorker, engine)
 		worker.Start(ctx)
 		log.Infow("content-verify worker started", "interval", cfg.Interval, "workers", cfg.Workers, "budget", cfg.UnitBudget)
 	}

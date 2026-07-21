@@ -59,4 +59,8 @@ var (
 		Name: "content_verify_inflight_leases",
 		Help: "In-process probe leases currently held (concurrency).",
 	})
+	WorkerCap = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "content_verify_worker_cap",
+		Help: "Graduated worker cap by kind (pressure = curve(score), demand = ceil(pending/per), effective = min).",
+	}, []string{"kind"}) // kind: pressure|demand|effective
 )

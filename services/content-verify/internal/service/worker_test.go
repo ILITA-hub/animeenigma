@@ -12,29 +12,36 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/queue"
 )
 
-// --- fakes for the four Worker dependencies ---
+// --- fakes for the Worker dependencies ---
 
-type fakeShed struct{ shed bool }
+// fakeScore is a fixed ScoreSource — score 0 reproduces the pre-curve
+// "never shed" default used by the tests below that don't care about
+// pressure.
+type fakeScore struct{ v float64 }
 
-func (f fakeShed) ShouldShed(int) bool { return f.shed }
+func (f fakeScore) Score() float64 { return f.v }
 
-// fakeLeveledShed mirrors cache.DegradationWatcher.ShouldShed's real
-// level>=min semantics — fakeShed above is a static per-tick override,
-// this one models the governor's actual graduated-shedding contract so
-// TestTickGraduatedShedByWorkerIndex can exercise different shedMin values
-// against one fixed level.
-type fakeLeveledShed struct{ level int }
+// fakeDemand is a fixed DemandSource. pending: 100 with the default
+// demandPer (5) yields a demand cap of 20 — comfortably above the default
+// curve's pressure cap of 6 at score 0, so it doesn't constrain the tests
+// that only care about pressure.
+type fakeDemand struct{ pending int }
 
-func (f fakeLeveledShed) ShouldShed(min int) bool { return f.level >= min }
+func (f fakeDemand) PendingCount() int { return f.pending }
+
+// defaultCurve is the production default breakpoints, reused across tests.
+var defaultCurve = ParseCurve("0.40:6,0.60:2,0.80:0", nil)
 
 type fakeClaimer struct {
 	unit    *queue.Unit
 	task    *queue.SkipTask
 	release func()
 	err     error
+	calls   int // number of times Claim was invoked — proves whether the tick's admission gate let this loop through
 }
 
-func (f fakeClaimer) Claim(context.Context) (*queue.Unit, *queue.SkipTask, func(), error) {
+func (f *fakeClaimer) Claim(context.Context) (*queue.Unit, *queue.SkipTask, func(), error) {
+	f.calls++
 	return f.unit, f.task, f.release, f.err
 }
 
@@ -102,37 +109,16 @@ func (f *fakeSkipStore) UpsertSkip(_ context.Context, t domain.SkipTiming) error
 
 // --- cases ---
 
-func TestTickShedGateSkipsProbe(t *testing.T) {
-	before := testutil.ToFloat64(cvmetrics.TicksSkippedTotal.WithLabelValues("degraded"))
-
-	claimer := &fakeClaimer{unit: &queue.Unit{AnimeID: "a-1", Provider: "gogoanime"}}
-	prober := &fakeProber{}
-	store := &fakeStore{}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: true}, claimer, prober, store, nil, nil, 0, nil)
-
-	w.tick(context.Background(), 1)
-
-	if prober.calls != 0 {
-		t.Fatalf("prober must not be called on a shed tick, calls=%d", prober.calls)
-	}
-	if len(store.upserts) != 0 {
-		t.Fatalf("store must not be touched on a shed tick, upserts=%v", store.upserts)
-	}
-	after := testutil.ToFloat64(cvmetrics.TicksSkippedTotal.WithLabelValues("degraded"))
-	if after != before+1 {
-		t.Fatalf("degraded skip counter: before=%v after=%v, want +1", before, after)
-	}
-}
-
 func TestTickIdleQueueSkipsProbe(t *testing.T) {
 	before := testutil.ToFloat64(cvmetrics.TicksSkippedTotal.WithLabelValues("idle"))
 
 	claimer := &fakeClaimer{unit: nil}
 	prober := &fakeProber{}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if prober.calls != 0 {
 		t.Fatalf("prober must not be called on an idle claim, calls=%d", prober.calls)
@@ -155,9 +141,10 @@ func TestTickAeSynthUnitSkipsProbe(t *testing.T) {
 	claimer := &fakeClaimer{unit: unit}
 	prober := &fakeProber{}
 	store := &fakeStore{}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if prober.calls != 0 {
 		t.Fatalf("ae first-party unit must synthesize, not probe; calls=%d", prober.calls)
@@ -193,9 +180,10 @@ func TestTickNormalUnitProbesWithPrevFailsAndPersists(t *testing.T) {
 		Units: domain.UnitList{{Key: unit.Key, Fails: 2, Status: domain.StatusUnreachable}},
 	}
 	store := &fakeStore{getRow: prevRow}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if prober.calls != 1 {
 		t.Fatalf("prober must be called exactly once, calls=%d", prober.calls)
@@ -243,12 +231,12 @@ func TestTickSkipTaskProbesWithPrevFailsAndPersistsAllRows(t *testing.T) {
 		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 1, OpStatus: domain.SkipDetected},
 		{AnimeID: "a-1", Provider: "kodik", Team: "610", Episode: 2, OpStatus: domain.SkipDetected},
 	}}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store,
-		skipProber, skipStore, 20*time.Second, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store,
+		skipProber, skipStore, 20*time.Second, nil, defaultCurve, 5, fakeDemand{pending: 100})
 
 	before := testutil.ToFloat64(cvmetrics.SkipProbesTotal.WithLabelValues("kodik", domain.SkipDetected))
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if prober.calls != 0 {
 		t.Fatalf("verify prober must NOT be called for a skip claim, calls=%d", prober.calls)
@@ -287,10 +275,10 @@ func TestTickSkipTaskLocateSingleRow(t *testing.T) {
 	skipProber := &fakeSkipProber{rows: []domain.SkipTiming{
 		{AnimeID: "a-1", Provider: "gogoanime", Episode: 9, OpStatus: domain.SkipNoMatch, EdStatus: domain.SkipNoMatch},
 	}}
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store,
-		skipProber, skipStore, 20*time.Second, nil)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store,
+		skipProber, skipStore, 20*time.Second, nil, defaultCurve, 5, fakeDemand{pending: 100})
 
-	w.tick(context.Background(), 1)
+	w.tick(context.Background(), 0)
 
 	if prober.calls != 0 {
 		t.Fatalf("verify prober must NOT be called for a skip claim, calls=%d", prober.calls)
@@ -306,30 +294,81 @@ func TestTickSkipTaskLocateSingleRow(t *testing.T) {
 	}
 }
 
-// TestTickGraduatedShedByWorkerIndex covers graduated governor shedding: at
-// governor level 1, the shedMin=1 worker (the "extra" one — worker index 1
-// of a 2-worker pool, per runLoop's shedMin=workers-i) must shed, while the
-// shedMin=2 worker (index 0, the floor worker) must keep claiming. Level 1
-// thus halves probing instead of stopping it outright.
-func TestTickGraduatedShedByWorkerIndex(t *testing.T) {
-	shed := fakeLeveledShed{level: 1}
-	unit := &queue.Unit{
-		AnimeID: "a-1", Provider: "gogoanime",
-		Key: domain.UnitKey{Server: "hd-1", Category: "sub"},
-	}
+// TestTickPressureCapSitsOutHigherLoops covers graduated pressure shedding:
+// score 0.50 with the default curve => pressure cap 4 (floor(6-4*0.5)=4):
+// loops 0..3 claim, loops 4 and 5 sit out with the "degraded" skip reason.
+// The demand cap is held wide open (pending: 100) so only pressure gates.
+func TestTickPressureCapSitsOutHigherLoops(t *testing.T) {
+	before := testutil.ToFloat64(cvmetrics.TicksSkippedTotal.WithLabelValues("degraded"))
 
-	prober1 := &fakeProber{}
-	w1 := NewWorker(time.Minute, 2, 10*time.Second, shed, &fakeClaimer{unit: unit}, prober1, &fakeStore{}, nil, nil, 0, nil)
-	w1.tick(context.Background(), 1)
-	if prober1.calls != 0 {
-		t.Fatalf("shedMin=1 worker must shed at governor level 1, calls=%d", prober1.calls)
-	}
+	claimer := &fakeClaimer{}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+	w := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0.50}, claimer, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
 
-	prober2 := &fakeProber{}
-	w2 := NewWorker(time.Minute, 2, 10*time.Second, shed, &fakeClaimer{unit: unit}, prober2, &fakeStore{}, nil, nil, 0, nil)
-	w2.tick(context.Background(), 2)
-	if prober2.calls != 1 {
-		t.Fatalf("shedMin=2 worker must keep claiming at governor level 1 (graduated floor), calls=%d", prober2.calls)
+	w.tick(context.Background(), 3) // i=3 < cap 4 -> claims
+	if claimer.calls != 1 {
+		t.Fatalf("loop 3 should claim under cap 4; calls=%d", claimer.calls)
+	}
+	w.tick(context.Background(), 4) // i=4 >= cap 4 -> sits out
+	if claimer.calls != 1 {
+		t.Fatalf("loop 4 must sit out at score 0.50; calls=%d", claimer.calls)
+	}
+	after := testutil.ToFloat64(cvmetrics.TicksSkippedTotal.WithLabelValues("degraded"))
+	if after != before+1 {
+		t.Fatalf("degraded skip counter: before=%v after=%v, want +1", before, after)
+	}
+}
+
+// TestTickDemandCapShallowQueue covers demand-side gating: pending=3, per=5
+// => demand cap max(1, ceil(3/5)) = 1. With score 0 (pressure cap 6, wide
+// open), only loop 0 runs — loop 1 sits out even though pressure allows it.
+func TestTickDemandCapShallowQueue(t *testing.T) {
+	claimer := &fakeClaimer{}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+	w := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0}, claimer, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 3})
+
+	w.tick(context.Background(), 0)
+	if claimer.calls != 1 {
+		t.Fatalf("loop 0 should claim under demand cap 1; calls=%d", claimer.calls)
+	}
+	w.tick(context.Background(), 1)
+	if claimer.calls != 1 {
+		t.Fatalf("loop 1 must sit out under a shallow queue (demand cap 1); calls=%d", claimer.calls)
+	}
+}
+
+// TestTickDemandCapFloorsAtOne covers the cold-start bootstrap: pending=0
+// must still allow loop 0 to claim (the claim itself builds the queue
+// snapshot PendingCount reads next tick), never true starvation.
+func TestTickDemandCapFloorsAtOne(t *testing.T) {
+	claimer := &fakeClaimer{}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+	w := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0}, claimer, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 0})
+
+	w.tick(context.Background(), 0)
+	if claimer.calls != 1 {
+		t.Fatalf("loop 0 must claim even with an empty queue (bootstrap), calls=%d", claimer.calls)
+	}
+}
+
+// TestTickFullPressureStopsAllLoops covers the top of the curve: score 1.0
+// => cap 0, so even loop 0 sits out regardless of demand.
+func TestTickFullPressureStopsAllLoops(t *testing.T) {
+	claimer := &fakeClaimer{}
+	prober := &fakeProber{}
+	store := &fakeStore{}
+	w := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 1.0}, claimer, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
+
+	w.tick(context.Background(), 0)
+	if claimer.calls != 0 {
+		t.Fatalf("loop 0 must sit out at full pressure (score 1.0), calls=%d", claimer.calls)
 	}
 }
 
@@ -348,8 +387,9 @@ func TestTickReleaseRunsAfterPersist(t *testing.T) {
 	store := &fakeStore{order: &order}
 	claimer := &fakeClaimer{unit: unit, release: func() { order = append(order, "release") }}
 
-	w := NewWorker(time.Minute, 1, 10*time.Second, fakeShed{shed: false}, claimer, prober, store, nil, nil, 0, nil)
-	w.tick(context.Background(), 1)
+	w := NewWorker(time.Minute, 1, 10*time.Second, fakeScore{v: 0}, claimer, prober, store, nil, nil, 0, nil,
+		defaultCurve, 5, fakeDemand{pending: 100})
+	w.tick(context.Background(), 0)
 
 	if len(order) != 2 || order[0] != "persist" || order[1] != "release" {
 		t.Fatalf("expected [persist release] order, got %v", order)

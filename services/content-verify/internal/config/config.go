@@ -58,6 +58,9 @@ type Config struct {
 	SkipMinMatch     time.Duration // shortest accepted OP/ED match length
 	SkipMaxMatch     time.Duration // longest accepted OP/ED match length
 	SkipSimThreshold float64       // opskip analyzer similarity threshold, 0..1
+
+	Curve           string // CV_CURVE breakpoints "score:cap,..." for the graduated worker curve
+	DemandPerWorker int    // pending queue units that justify one active loop
 }
 
 func Load() (*Config, error) {
@@ -100,6 +103,9 @@ func Load() (*Config, error) {
 		SkipMinMatch:     getEnvDuration("CV_SKIP_MIN_MATCH", 50*time.Second),
 		SkipMaxMatch:     getEnvDuration("CV_SKIP_MAX_MATCH", 150*time.Second),
 		SkipSimThreshold: getEnvFloat("CV_SKIP_SIM_THRESHOLD", 0.75),
+
+		Curve:           getEnv("CV_CURVE", "0.40:6,0.60:2,0.80:0"),
+		DemandPerWorker: getEnvInt("CV_DEMAND_PER_WORKER", 5),
 	}
 	if cfg.Interval < 10*time.Second {
 		return nil, fmt.Errorf("CV_INTERVAL too small: %s", cfg.Interval)

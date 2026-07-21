@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -107,6 +108,11 @@ type Engine struct {
 	// can never collide with a verify key).
 	inflightUnits map[string]struct{}
 	inflightProv  map[string]struct{}
+
+	// pendingCount is the candidate count from the last bandedCandidates
+	// build — the worker's demand signal (see PendingCount). Updated
+	// lock-free (atomic) since it's read from worker goroutines outside mu.
+	pendingCount atomic.Int64
 }
 
 func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, weights [3]int, freshWindow, idleCooldown time.Duration, idleWindow int, log *logger.Logger) *Engine {
@@ -173,6 +179,7 @@ func (e *Engine) bandedCandidates(ctx context.Context) []Candidate {
 	visited := e.sig.VisitedAnime(ctx)
 	all := BuildCandidates(it, visited, e.pins, func(id string) int { return e.sig.UniqueVisitors(ctx, id) })
 	cvmetrics.QueueDepth.Set(float64(len(all)))
+	e.pendingCount.Store(int64(len(all)))
 
 	groups := map[Band][]Candidate{}
 	for _, c := range all {
@@ -486,6 +493,11 @@ func (e *Engine) Claim(ctx context.Context) (*Unit, *SkipTask, func(), error) {
 	}
 	return nil, nil, nil, nil
 }
+
+// PendingCount returns the candidate count from the last queue build — the
+// worker's demand signal. 0 before the first build (the demand cap floors at
+// one loop, so a cold start still claims and triggers the first build).
+func (e *Engine) PendingCount() int { return int(e.pendingCount.Load()) }
 
 type QueueEntry struct {
 	AnimeID  string `json:"anime_id"`
