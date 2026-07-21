@@ -130,6 +130,14 @@ DEGRADATION_LEVEL_SEEN = Gauge(
     "Last governor degradation level observed by the sidecar poller.",
 )
 
+POOL_TARGET = Gauge(
+    "stealth_pool_target", "Graduated warm-browser target from the pressure score curve"
+)
+POOL_OVER_TARGET = Gauge(
+    "stealth_pool_over_target",
+    "Sessions above pool_target that survive on user-stream sanctity (0 = converged)",
+)
+
 REHYDRATE_TOTAL = Counter(
     "stealth_rehydrate_total",
     "Lazy session-rehydrate attempts by result",

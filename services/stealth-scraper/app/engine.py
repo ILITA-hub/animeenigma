@@ -73,7 +73,7 @@ def _in_page_fetch_js(max_bytes: int, header_allowlist: tuple[str, ...] = ()) ->
 # exceeds the configured cap.
 _TOO_LARGE = "__TOO_LARGE__"
 
-from . import metrics
+from . import metrics, scaling
 from .config import Config
 from .fingerprint import build_launch_options, proxy_to_playwright
 from .profiles import Profile, ProfileManager
@@ -218,6 +218,8 @@ class CamoufoxEngine:
         # refreshed by _degradation_loop. 0 when the poller is disabled, the
         # governor is unreachable, or the level key is absent — FAIL-OPEN.
         self._degradation_level: int = 0
+        self._degradation_score: float = 0.0
+        self._pool_curve = scaling.parse_curve(cfg.pool_curve)
         self._degradation_task: Any = None
         self._degradation_warned: bool = False
 
@@ -592,20 +594,29 @@ class CamoufoxEngine:
 
         url = self.cfg.governor_url.rstrip("/") + "/api/degradation/status"
 
-        def _fetch() -> int:
+        def _fetch() -> tuple[int, float]:
             with _rq.urlopen(url, timeout=3) as resp:  # noqa: S310 (fixed internal URL)
                 body = _json.loads(resp.read(65536))
-            level = int(body.get("data", {}).get("level", 0))
-            return level if 0 <= level <= 2 else 0
+            data = body.get("data", {})
+            level = int(data.get("level", 0))
+            try:
+                score = float(data.get("score", 0.0))
+            except (TypeError, ValueError):
+                score = 0.0
+            return (
+                level if 0 <= level <= 2 else 0,
+                min(1.0, max(0.0, score)),
+            )
 
         loop = asyncio.get_running_loop()
         while True:
             try:
                 await asyncio.sleep(self.cfg.degradation_poll_seconds)
-                level = await loop.run_in_executor(None, _fetch)
+                level, score = await loop.run_in_executor(None, _fetch)
                 if level != self._degradation_level and self._log:
                     self._log.info("degradation level %d -> %d", self._degradation_level, level)
                 self._degradation_level = level
+                self._degradation_score = score
                 self._degradation_warned = False
             except asyncio.CancelledError:
                 break
@@ -614,10 +625,12 @@ class CamoufoxEngine:
                     self._log.warning("governor poll failed; degradation level fails open to 0")
                 self._degradation_warned = True
                 self._degradation_level = 0
+                self._degradation_score = 0.0
             metrics.DEGRADATION_LEVEL_SEEN.set(self._degradation_level)
             metrics.DEGRADATION_SHED.labels(subsystem="camoufox").set(
                 0 if self._degradation_level < 1 else self._degradation_level
             )
+            metrics.POOL_TARGET.set(self._pool_target())
 
     def _shed_new_work(self) -> None:
         """Raise DegradedShed when the host is at Critical pressure — gates the
@@ -627,11 +640,18 @@ class CamoufoxEngine:
         if self._degradation_level >= 2:
             raise DegradedShed("new work refused: host degradation level 2 (critical)")
 
+    def _pool_target(self) -> int:
+        """Warm-browser target from the graduated score curve (spec 2026-07-21)."""
+        return scaling.pool_target_for(
+            self._degradation_score, self._pool_curve, self.cfg.pool_size
+        )
+
     def _warming_allowed(self) -> bool:
-        """False once combined RSS reaches the soft budget — new profiles are
-        not warmed under back-pressure (existing leases untouched) — or while
-        the platform degradation level is Elevated+ (Phase 3 shedding)."""
-        if self._degradation_level >= 1:
+        """Warming admits a new profile only while the warm count is under the
+        graduated pool target (which shrinks with the pressure score — this
+        replaces the old binary stop-at-L1) and combined RSS is under the
+        soft budget (existing back-pressure, untouched)."""
+        if len(self._sessions) >= self._pool_target():
             return False
         return self._read_ram() < self.cfg.ram_soft_bytes
 
