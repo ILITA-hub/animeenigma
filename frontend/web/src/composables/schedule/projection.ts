@@ -7,7 +7,9 @@ const WEEK_MS = 7 * 86400000
 /**
  * Project an anime's weekly airings into [windowStart, windowEnd).
  * Anchor = next_episode_at (concrete next airing). Episode at anchor = episodes_aired + 1.
- * Each week k (… -1, 0, 1 …): date = anchor + k weeks, episode = episodes_aired + 1 + k.
+ * Each week k (0, 1, 2 …): date = anchor + k weeks, episode = episodes_aired + 1 + k.
+ * The anchor is the provider's known next airing, so occurrences before it must
+ * not be inferred: a hiatus would otherwise create phantom weekly episodes.
  * Included when ep >= 1 and (episodes_count <= 0 || ep <= episodes_count).
  *
  * `tz` shifts the anchor into that zone's wall-clock space BEFORE windowing,
@@ -32,7 +34,7 @@ export function projectOccurrences(
 
   const startMs = windowStart.getTime()
   const endMs = windowEnd.getTime()
-  const kFrom = Math.floor((startMs - anchorMs) / WEEK_MS) - 1
+  const kFrom = Math.max(0, Math.floor((startMs - anchorMs) / WEEK_MS) - 1)
   const kTo = Math.ceil((endMs - anchorMs) / WEEK_MS) + 1
 
   for (let k = kFrom; k <= kTo; k++) {

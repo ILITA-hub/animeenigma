@@ -45,6 +45,10 @@
       {
         "type": "fix",
         "message": "Maintenance policy switches now actually pause the maintenance bot, daily provider recovery, and disk cleanup jobs."
+      },
+      {
+        "type": "fix",
+        "message": "Schedule no longer invents weekly episodes before a show's confirmed next-airing date during broadcast breaks."
       }
     ]
   },
@@ -127,10 +131,6 @@
       {
         "type": "fix",
         "message": "📖 «Фанфик дня» теперь читают ВСЕ! Раньше кнопка «Читать» пускала только избранных, остальных молча выкидывало домой. Теперь дневная история открывается КАЖДОМУ — даже без входа. И превью в карточке — чистая проза, без мусорных чёрточек. ВЕЛИКОЛЕПНО."
-      },
-      {
-        "type": "feature",
-        "message": "🎯 Скип опенинга стал УМНЕЕ! Теперь система знает, ОТКУДА взяты тайминги: народные метки AniSkip — главные, а наш аудио-детектор закрывает дыры, где меток нет. В хакер-режиме видно источник каждого окна. Никто другой так не делает!"
       }
     ]
   }

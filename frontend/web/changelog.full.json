@@ -45,6 +45,10 @@
       {
         "type": "fix",
         "message": "Maintenance policy switches now actually pause the maintenance bot, daily provider recovery, and disk cleanup jobs."
+      },
+      {
+        "type": "fix",
+        "message": "Schedule no longer invents weekly episodes before a show's confirmed next-airing date during broadcast breaks."
       }
     ]
   },
