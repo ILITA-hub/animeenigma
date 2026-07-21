@@ -166,7 +166,7 @@ func TestPlatformStats_CacheHitSkipsPrometheus(t *testing.T) {
 			CDI:           "y",
 			MVQ:           "z",
 		},
-		Tiles: []spotlight.StatsTile{{Label: "L", Value: 5, Window: "day", Format: "int"}},
+		Tiles: []spotlight.StatsTile{{Label: parsedTiles[0].Label, Value: 5, Window: "day", Format: "int"}},
 	}
 	key := "spotlight:stats:" + spotlight.DateKeyUTC(time.Now())
 	b, err := json.Marshal(cached)
@@ -183,6 +183,9 @@ func TestPlatformStats_CacheHitSkipsPrometheus(t *testing.T) {
 	data := card.Data.(spotlightPlatformStatsData)
 	if data.Hero.UptimeQuip != "CACHED" || data.Hero.Tagline != "cached tagline" {
 		t.Fatalf("expected cached payload, got %+v", data.Hero)
+	}
+	if len(data.Tiles) != 1 || data.Tiles[0].ID != parsedTiles[0].ID {
+		t.Fatalf("expected legacy cached tile to gain id %q, got %+v", parsedTiles[0].ID, data.Tiles)
 	}
 	if prom.queryCalls != 0 || prom.healthCalls != 0 {
 		t.Fatalf("Prometheus must not be called on cache hit: query=%d health=%d",

@@ -62,6 +62,7 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 
 	var cached spotlight.PlatformStatsData
 	if err := r.cache.Get(ctx, key, &cached); err == nil {
+		hydrateStatsTileIDs(cached.Tiles)
 		return &spotlight.Card{Type: r.Type(), Data: cached}, nil
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		r.log.Warnw("spotlight.cache_get_failed", "type", r.Type(), "key", key, "error", err)
@@ -163,6 +164,24 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 		r.log.Warnw("spotlight.cache_set_failed", "type", r.Type(), "key", key, "error", err)
 	}
 	return &spotlight.Card{Type: r.Type(), Data: data}, nil
+}
+
+// hydrateStatsTileIDs upgrades same-day cache entries written before tile IDs
+// were added to the wire shape. Labels are the stable values from the embedded
+// allowlist, so the match is deterministic and old Redis data localizes
+// immediately without a cache flush.
+func hydrateStatsTileIDs(tiles []spotlight.StatsTile) {
+	for i := range tiles {
+		if tiles[i].ID != "" {
+			continue
+		}
+		for _, definition := range parsedTiles {
+			if tiles[i].Label == definition.Label {
+				tiles[i].ID = definition.ID
+				break
+			}
+		}
+	}
 }
 
 // dateSeededRng returns an RNG seeded from the UTC date key, so the daily
