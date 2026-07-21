@@ -47,7 +47,7 @@ class Config:
     # the default), "true" (true headless), or "false" (real headful display).
     # True headless Firefox is detectable; "virtual" passes where headless fails.
     headless: str = "virtual"
-    pool_size: int = 2
+    pool_size: int = 6
     profile_dir: str = "/data/profiles"
     geoip: bool = True          # camoufox: align locale/timezone/geo to the proxy IP
     humanize: bool = True       # camoufox: human-like cursor movement
@@ -138,12 +138,16 @@ class Config:
     # not-in-use session to reclaim.
     # STEALTH_POOL_SIZE survives only as a high fail-safe ceiling used when the
     # /proc RSS read fails.
-    # Host-fit budget: this deployment's box is RAM-tight (already swapping), so
-    # the combined Camoufox RSS budget lives INSIDE the existing 3500m container
-    # (mem_limit unchanged) — admission refuses at 3 GiB before the kernel OOMs.
-    ram_soft_bytes: int = 2 * 1024 * 1024 * 1024   # 2 GiB
-    ram_hard_bytes: int = 3 * 1024 * 1024 * 1024   # 3 GiB
+    # Host-fit budget raised 2026-07-21 (graduated-degradation Phase 0): the
+    # score curve is the regulator now; these are generous ceilings, not the
+    # primary brake. ~1 GiB per warm Firefox => 6 lightly-loaded instances
+    # fit the hard budget with little slack.
+    ram_soft_bytes: int = 4 * 1024 * 1024 * 1024   # 4 GiB
+    ram_hard_bytes: int = 6 * 1024 * 1024 * 1024   # 6 GiB
     ram_sample_seconds: float = 5.0
+    # Graduated pool curve (spec 2026-07-21): "score:cap,..." breakpoints,
+    # linear between points, floor()-rounded, clamped to [1, pool_size].
+    pool_curve: str = "0.40:6,0.60:2,0.80:1"
     # Max concurrent HELD sessions per user_key (fairness axis, Phase 2).
     user_quota: int = 2
 
@@ -171,7 +175,7 @@ class Config:
             host=g("HOST", "0.0.0.0"),
             port=_int(g("PORT"), 3000),
             headless=g("STEALTH_HEADLESS", "virtual").strip().lower(),
-            pool_size=_int(g("STEALTH_POOL_SIZE"), 2),
+            pool_size=_int(g("STEALTH_POOL_SIZE"), 6),
             profile_dir=g("STEALTH_PROFILE_DIR", "/data/profiles"),
             geoip=_bool(g("STEALTH_GEOIP"), True),
             humanize=_bool(g("STEALTH_HUMANIZE"), True),
@@ -197,9 +201,10 @@ class Config:
             max_body_bytes=_int(g("STEALTH_MAX_BODY_BYTES"), 64 * 1024 * 1024),
             unactivated_grace_seconds=_int(g("STEALTH_UNACTIVATED_GRACE_SECONDS"), 45),
             reaper_interval_seconds=float(_int(g("STEALTH_REAPER_INTERVAL_SECONDS"), 30)),
-            ram_soft_bytes=_int(g("STEALTH_RAM_SOFT_BYTES"), 2 * 1024 * 1024 * 1024),
-            ram_hard_bytes=_int(g("STEALTH_RAM_HARD_BYTES"), 3 * 1024 * 1024 * 1024),
+            ram_soft_bytes=_int(g("STEALTH_RAM_SOFT_BYTES"), 4 * 1024 * 1024 * 1024),
+            ram_hard_bytes=_int(g("STEALTH_RAM_HARD_BYTES"), 6 * 1024 * 1024 * 1024),
             ram_sample_seconds=float(_int(g("STEALTH_RAM_SAMPLE_SECONDS"), 5)),
+            pool_curve=g("STEALTH_POOL_CURVE", "0.40:6,0.60:2,0.80:1").strip(),
             user_quota=_int(g("STEALTH_USER_QUOTA"), 2),
             poison_max=_int(g("STEALTH_POISON_MAX"), 2),
             readyz_saturation_seconds=float(

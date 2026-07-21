@@ -26,7 +26,7 @@ type Config struct {
 	CatalogURL   string        // internal catalog base (membership, structure, streams)
 	GatewayURL   string        // public gateway base — ffmpeg reads hls-proxy through it
 	Interval     time.Duration // pause between probes (after each probe completes)
-	Workers      int           // concurrent in-process probe loops (clamped 1..4)
+	Workers      int           // concurrent in-process probe loops (clamped 1..6)
 	UnitBudget   time.Duration // hard per-unit budget; may exceed Interval (pause runs after the probe)
 	ReprobeTTL   time.Duration // verified/inconclusive re-probe age
 	FFmpegPath   string
@@ -107,17 +107,17 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// clampWorkers silently clamps CV_WORKERS to [1,4] — the in-process probe
+// clampWorkers silently clamps CV_WORKERS to [1,6] — the in-process probe
 // pool has no supervisor to report a misconfiguration to, so out-of-range
-// values are corrected rather than rejected (unlike the Interval floor,
-// which errors: a too-small interval is a resource-exhaustion risk, an
-// out-of-range worker count is not).
+// values are corrected rather than rejected. Ceiling raised 4→6 for the
+// graduated-degradation score curve (spec 2026-07-21); the curve + demand
+// cap decide how many of the spawned loops actually claim.
 func clampWorkers(n int) int {
 	if n < 1 {
 		return 1
 	}
-	if n > 4 {
-		return 4
+	if n > 6 {
+		return 6
 	}
 	return n
 }

@@ -88,8 +88,8 @@ func TestLoadWorkersClamped(t *testing.T) {
 		{"1", 1},
 		{"3", 3},
 		{"4", 4},
-		{"5", 4},
-		{"99", 4},
+		{"5", 5},
+		{"99", 6},
 	}
 	for _, tt := range tests {
 		t.Run(tt.env, func(t *testing.T) {
@@ -102,6 +102,19 @@ func TestLoadWorkersClamped(t *testing.T) {
 				t.Fatalf("CV_WORKERS=%s => Workers = %d, want %d", tt.env, cfg.Workers, tt.want)
 			}
 		})
+	}
+}
+
+// Graduated-degradation Phase 0: the worker ceiling is 6 (was 4) so the
+// score curve's top band is reachable. Floor stays 1.
+func TestClampWorkersBounds(t *testing.T) {
+	cases := []struct{ in, want int }{
+		{0, 1}, {-3, 1}, {1, 1}, {4, 4}, {6, 6}, {7, 6}, {100, 6},
+	}
+	for _, c := range cases {
+		if got := clampWorkers(c.in); got != c.want {
+			t.Errorf("clampWorkers(%d) = %d; want %d", c.in, got, c.want)
+		}
 	}
 }
 

@@ -169,12 +169,11 @@ services:
     cpus: "2.0"
     environment:
       STEALTH_HEADLESS: ${STEALTH_HEADLESS:-virtual}
-      STEALTH_POOL_SIZE: ${STEALTH_POOL_SIZE:-4}
-      # RAM-budgeted capacity (Phase 2). STEALTH_POOL_SIZE survives only as a
-      # high fail-safe ceiling used when the /proc RSS read fails; the live cap
-      # is the combined Camoufox RSS soft/hard budget below.
-      STEALTH_RAM_SOFT_BYTES: ${STEALTH_RAM_SOFT_BYTES:-2147483648}
-      STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-3221225472}
+      STEALTH_POOL_SIZE: ${STEALTH_POOL_SIZE:-6}
+      # RAM budgets raised 2026-07-21 (graduated degradation Phase 0): the
+      # PSI score curve is the regulator; these are ceilings. 4 GiB soft / 6 GiB hard.
+      STEALTH_RAM_SOFT_BYTES: ${STEALTH_RAM_SOFT_BYTES:-4294967296}
+      STEALTH_RAM_HARD_BYTES: ${STEALTH_RAM_HARD_BYTES:-6442450944}
       STEALTH_RAM_SAMPLE_SECONDS: ${STEALTH_RAM_SAMPLE_SECONDS:-5}
       STEALTH_USER_QUOTA: ${STEALTH_USER_QUOTA:-2}
       # Graceful-degradation Phase 3: poll the governor and shed under host
@@ -1145,7 +1144,7 @@ services:
       context: ..
       dockerfile: services/content-verify/Dockerfile
     container_name: animeenigma-content-verify
-    mem_limit: 2g # 2 concurrent CV_WORKERS probe loops => up to 2 whisper runs at once, don't fit in 1g
+    mem_limit: 6g # up to 6 CV_WORKERS probe loops => up to 6 whisper runs at ~1g each (graduated curve caps actual concurrency)
     restart: unless-stopped
     environment:
       SERVER_PORT: 8101
@@ -1157,6 +1156,7 @@ services:
       REDIS_HOST: redis
       CV_CATALOG_URL: http://catalog:8081
       CV_GATEWAY_URL: http://gateway:8000
+      CV_WORKERS: 6
       # Operator pin: "uuid[:provider],..." — pinned titles jump the probe
       # queue, bypass cooldowns, and plan the named provider's skip family
       # first. Set in docker/.env when needed; empty = no pins.
