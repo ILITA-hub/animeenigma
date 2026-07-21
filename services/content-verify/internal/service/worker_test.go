@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/cvmetrics"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/queue"
@@ -369,6 +370,32 @@ func TestTickFullPressureStopsAllLoops(t *testing.T) {
 	w.tick(context.Background(), 0)
 	if claimer.calls != 0 {
 		t.Fatalf("loop 0 must sit out at full pressure (score 1.0), calls=%d", claimer.calls)
+	}
+}
+
+// TestTickShedStateGauge pins the ae_degradation_shed{subsystem="content_verify"}
+// graded semantics (0 full, 1 reduced, 2 paused) — driven by the PRESSURE cap
+// only: a demand-parked idle queue must never read as shedding.
+func TestTickShedStateGauge(t *testing.T) {
+	gauge := gometrics.DegradationShed.WithLabelValues("content_verify")
+	cases := []struct {
+		name    string
+		score   float64
+		pending int
+		want    float64
+	}{
+		{"full speed", 0.0, 100, 0},
+		{"idle queue is not shedding", 0.0, 0, 0},
+		{"reduced at mid pressure", 0.5, 100, 1},
+		{"paused at full pressure", 1.0, 100, 2},
+	}
+	for _, tc := range cases {
+		w := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: tc.score}, &fakeClaimer{}, &fakeProber{}, &fakeStore{},
+			nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: tc.pending})
+		w.tick(context.Background(), 0)
+		if got := testutil.ToFloat64(gauge); got != tc.want {
+			t.Errorf("%s: shed gauge = %v; want %v", tc.name, got, tc.want)
+		}
 	}
 }
 

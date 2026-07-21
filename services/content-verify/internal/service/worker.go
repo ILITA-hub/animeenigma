@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/cvmetrics"
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
@@ -153,6 +154,18 @@ func (w *Worker) tick(ctx context.Context, i int) {
 		cvmetrics.WorkerCap.WithLabelValues("pressure").Set(float64(pressureCap))
 		cvmetrics.WorkerCap.WithLabelValues("demand").Set(float64(demandCap))
 		cvmetrics.WorkerCap.WithLabelValues("effective").Set(float64(effective))
+		// Shed-state family (dashboard "Shed state" panel): mirror the
+		// library_encode graded semantics — 0 full, 1 reduced, 2 paused.
+		// Demand-capped parking is not shedding, so only the PRESSURE cap
+		// drives this gauge.
+		shed := 0.0
+		switch {
+		case pressureCap <= 0:
+			shed = 2
+		case pressureCap < w.workers:
+			shed = 1
+		}
+		gometrics.DegradationShed.WithLabelValues("content_verify").Set(shed)
 	}
 	if i >= effective {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("degraded").Inc()
