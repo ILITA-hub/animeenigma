@@ -219,6 +219,39 @@ type DailyFanficData struct {
 	CreatedAt      string `json:"created_at"`
 }
 
+// DailyReviewAnime is the compact catalog projection used by the daily
+// community-review card. The card needs identity, localized titles and a
+// poster only; keeping this shape narrow avoids shipping an entire catalog
+// row for a short review feature.
+type DailyReviewAnime struct {
+	ID        string `json:"id"`
+	Name      string `json:"name,omitempty"`
+	NameRU    string `json:"name_ru,omitempty"`
+	NameJP    string `json:"name_jp,omitempty"`
+	PosterURL string `json:"poster_url,omitempty"`
+}
+
+// DailyReviewAuthor contains public-profile fields only. The private user
+// UUID never leaves SQL; PublicID is the stable /user/:id route identifier.
+type DailyReviewAuthor struct {
+	Username string `json:"username"`
+	PublicID string `json:"public_id,omitempty"`
+	Avatar   string `json:"avatar,omitempty"`
+}
+
+// DailyReviewData is the payload for Card{Type: "daily_review"}. Only rows
+// with non-blank ReviewText are eligible. The review, author and anime are
+// all already public on the anime detail page; this projection deliberately
+// excludes list notes, tags, progress and the author's private UUID.
+type DailyReviewData struct {
+	ReviewID   string            `json:"review_id"`
+	Anime      DailyReviewAnime  `json:"anime"`
+	Author     DailyReviewAuthor `json:"author"`
+	Score      int               `json:"score"`
+	ReviewText string            `json:"review_text"`
+	CreatedAt  string            `json:"created_at"`
+}
+
 // UpcomingForYouItem is one matched announced title. Anime and Reason are
 // forwarded VERBATIM from the recs service wire format (spec 2026-07-17) —
 // catalog does not re-shape recs payloads (personal_pick precedent).

@@ -144,6 +144,11 @@
             :key="`daily_fanfic:${currentIndex}`"
             :data="active.data"
           />
+          <DailyReviewCard
+            v-else-if="active.type === 'daily_review'"
+            :key="`daily_review:${currentIndex}`"
+            :data="active.data"
+          />
           <UpcomingForYouCard
             v-else-if="active.type === 'upcoming_for_you'"
             :key="`upcoming_for_you:${currentIndex}`"
@@ -190,6 +195,7 @@ import NotTimeYetCard from './cards/NotTimeYetCard.vue'
 import ContinueWatchingNewCard from './cards/ContinueWatchingNewCard.vue'
 import CuratedCard from './cards/CuratedCard.vue'
 import DailyFanficCard from './cards/DailyFanficCard.vue'
+import DailyReviewCard from './cards/DailyReviewCard.vue'
 import UpcomingForYouCard from './cards/UpcomingForYouCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { preloadImage } from '@/utils/preload-image'
@@ -412,6 +418,10 @@ function cardImageUrls(card: SpotlightCard): string[] {
         : []
     case 'daily_fanfic':
       return card.data.anime_poster ? [cardPosterUrl(card.data.anime_poster, 640)] : []
+    case 'daily_review':
+      return card.data.anime.poster_url
+        ? [cardPosterUrl(card.data.anime.poster_url, 640)]
+        : []
     case 'upcoming_for_you':
       return (card.data.items ?? [])
         .filter((it) => it.anime.poster_url)
@@ -531,6 +541,8 @@ function cardTitle(card: SpotlightCard): string {
       )
     case 'daily_fanfic':
       return t('spotlight.dailyFanfic.title')
+    case 'daily_review':
+      return t('spotlight.dailyReview.title')
     case 'upcoming_for_you': {
       const first = card.data.items[0]
       return first

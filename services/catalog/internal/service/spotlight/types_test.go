@@ -303,6 +303,30 @@ func TestNewCardDataShapes_RoundTrip(t *testing.T) {
 			t.Errorf("Credited lost: %v", out.Credited)
 		}
 	})
+
+	t.Run("DailyReviewData", func(t *testing.T) {
+		t.Parallel()
+		in := DailyReviewData{
+			ReviewID: "review-1",
+			Anime:    DailyReviewAnime{ID: "anime-1", Name: "Anime", PosterURL: "/poster.jpg"},
+			Author:   DailyReviewAuthor{Username: "alice", PublicID: "alice-public", Avatar: "/avatar.png"},
+			Score:    9, ReviewText: "Thoughtful", CreatedAt: "2026-07-20T12:00:00Z",
+		}
+		raw, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if strings.Contains(string(raw), `"user_id"`) {
+			t.Fatalf("private user_id must not appear: %s", raw)
+		}
+		var out DailyReviewData
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if out.ReviewID != "review-1" || out.Anime.ID != "anime-1" || out.Author.PublicID != "alice-public" {
+			t.Fatalf("daily review round-trip mismatch: %+v", out)
+		}
+	})
 }
 
 // TestPersonalPickData_ItemsMarshalAsArray ensures an empty Items slice

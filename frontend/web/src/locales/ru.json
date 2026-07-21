@@ -1957,6 +1957,10 @@
       "writeOwn": "Написать свою",
       "partsLabel": "{n} частей"
     },
+    "dailyReview": {
+      "title": "Отзыв дня",
+      "openCta": "Читать все отзывы"
+    },
     "randomTail": {
       "title": "Случайная находка",
       "subtitle": "Откройте что-то новое",

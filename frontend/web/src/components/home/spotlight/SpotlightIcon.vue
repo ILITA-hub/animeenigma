@@ -158,6 +158,22 @@
   >
     <path d="M12 2l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.8 6 21l1.2-6.6L2.4 9.8l6.6-.9z" />
   </svg>
+
+  <svg
+    v-else-if="name === 'quote'"
+    :class="forwardedClass"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    :aria-hidden="ariaHidden"
+    :aria-label="forwardedAriaLabel"
+    :role="role"
+  >
+    <path d="M7 17H4a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5h1v4H7a1 1 0 0 0-1 1v1h3v2a2 2 0 0 1-2 2ZM19 17h-3a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5h1v4h-1a1 1 0 0 0-1 1v1h3v2a2 2 0 0 1-2 2Z" />
+  </svg>
 </template>
 
 <script setup lang="ts">

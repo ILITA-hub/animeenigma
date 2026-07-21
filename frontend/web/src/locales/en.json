@@ -1957,6 +1957,10 @@
       "writeOwn": "Write your own",
       "partsLabel": "{n} parts"
     },
+    "dailyReview": {
+      "title": "Review of the day",
+      "openCta": "Read all reviews"
+    },
     "randomTail": {
       "title": "Random pick",
       "subtitle": "Discover something new",

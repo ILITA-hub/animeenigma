@@ -685,8 +685,9 @@ func main() {
 	})
 	subtitlesHandler := handler.NewSubtitlesHandler(subsAggregator, log)
 
-	// Workstream hero-spotlight, v1.0 Phase 3 (Plan 03-04) — hero spotlight
-	// aggregator wired with all 9 resolvers:
+	// Hero spotlight aggregator. The original four static and five dynamic
+	// resolvers now share the carousel with curated, daily fanfic, daily review,
+	// and upcoming-for-you cards.
 	//
 	//   Static cards (Phase 1):
 	//     1. featured            — curated-pin or daily pick (cached 24h)
@@ -700,6 +701,9 @@ func main() {
 	//     7. now_watching        — live watch_progress snapshot via postgres
 	//     8. not_time_yet        — login-only; planned/postponed list w/ aired eps
 	//     9. continue_watching_new — login-only; new aired ep since last view
+	//
+	//   Later additions:
+	//     curated, daily_fanfic, daily_review, upcoming_for_you
 	//
 	// HSB-BE-03 per-card 800ms / HSB-BE-04 overall 2s deadlines applied
 	// inside the aggregator. Endpoint mounted at /api/home/spotlight behind
@@ -735,6 +739,9 @@ func main() {
 		cards.NewCuratedResolver(animeRepo, redisCache, log, cfg.SpotlightCuratedShikimoriID),
 		// Daily fanfic spotlight — bot-authored fanfic teaser via fanfic-engine.
 		cards.NewDailyFanficResolver(spotlightFanficClient, redisCache, log),
+		// Daily community review — deterministic non-empty written review with
+		// public author + anime context from the shared database.
+		cards.NewDailyReviewResolver(cards.NewGormDailyReviewAdapter(db.DB), redisCache, log),
 		// Upcoming-for-you — announced titles matched to the user's taste
 		// via recs (spec 2026-07-17). Login-only.
 		cards.NewUpcomingForYouResolver(spotlightRecsClient, cards.NewGormListedFilter(db.DB), redisCache, log),

@@ -3,7 +3,7 @@
  * extended by Phase 3 (dynamic-cards-migration) Plan 03-05 with 5 new variants.
  *
  * Discriminated-union types for the `GET /api/home/spotlight` envelope. All
- * 9 SpotlightCard variants are declared here; HeroSpotlightBlock.vue dispatches
+ * SpotlightCard variants are declared here; HeroSpotlightBlock.vue dispatches
  * via an explicit v-if/v-else-if chain (NOT `<component :is>`) so vue-tsc
  * narrows `card.data` for each branch.
  *
@@ -260,6 +260,23 @@ export interface DailyFanficData {
   created_at: string
 }
 
+/** Public profile projection for the daily written-review card. */
+export interface DailyReviewAuthor {
+  username: string
+  public_id?: string
+  avatar?: string
+}
+
+/** One deterministic, non-empty community review selected for the UTC day. */
+export interface DailyReviewData {
+  review_id: string
+  anime: SpotlightAnime
+  author: DailyReviewAuthor
+  score: number
+  review_text: string
+  created_at: string
+}
+
 /**
  * UpcomingForYouCard — login-only announcement matches (spec 2026-07-17,
  * relevance-hardened 2026-07-18). `reason.kind`:
@@ -310,6 +327,7 @@ export type SpotlightCard = (
   | { type: 'continue_watching_new'; data: ContinueWatchingNewData }
   | { type: 'curated'; data: CuratedData }
   | { type: 'daily_fanfic'; data: DailyFanficData }
+  | { type: 'daily_review'; data: DailyReviewData }
   | { type: 'upcoming_for_you'; data: UpcomingForYouData }
 ) & { priority?: number }
 

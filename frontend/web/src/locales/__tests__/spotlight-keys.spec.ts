@@ -89,6 +89,7 @@ describe('spotlight i18n parity', () => {
     'notTimeYet',
     'continueWatchingNew',
     'dailyFanfic',
+    'dailyReview',
   ] as const
 
   it.each(expectedSubNamespaces)('en.json has spotlight.%s sub-namespace', (ns) => {
@@ -97,6 +98,13 @@ describe('spotlight i18n parity', () => {
 
   it.each(expectedSubNamespaces)('ru.json has spotlight.%s sub-namespace', (ns) => {
     expect((ruSpotlight as Record<string, unknown>)[ns]).toBeTypeOf('object')
+  })
+
+  const dailyReviewKeys = ['title', 'openCta'] as const
+  it.each(dailyReviewKeys)('spotlight.dailyReview.%s present in all 3 locales', (k) => {
+    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).dailyReview?.[k]).toBe('string')
+    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).dailyReview?.[k]).toBe('string')
+    expect(typeof ((ja as Record<string, unknown>).spotlight as Record<string, Record<string, unknown>>).dailyReview?.[k]).toBe('string')
   })
 
   const featuredKeys = [

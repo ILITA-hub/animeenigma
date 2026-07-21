@@ -36,6 +36,7 @@ export type SpotlightIconName =
   | 'wrench'
   | 'lightning'
   | 'star'
+  | 'quote'
 
 export interface CardToken {
   accent: SpotlightAccent
@@ -133,6 +134,7 @@ export const cardTokens: CardTokenMap = {
   continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
   curated:               { accent: 'cyan',   kickerKey: 'spotlight.curated.title',             icon: 'star'     },
   daily_fanfic:          { accent: 'pink',   kickerKey: 'spotlight.dailyFanfic.title',         icon: 'sparkles' },
+  daily_review:          { accent: 'pink',   kickerKey: 'spotlight.dailyReview.title',         icon: 'quote'    },
   upcoming_for_you:      { accent: 'cyan',   kickerKey: 'spotlight.upcomingForYou.title',      icon: 'clock'    },
 }
 

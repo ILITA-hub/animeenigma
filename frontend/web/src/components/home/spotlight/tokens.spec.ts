@@ -34,6 +34,7 @@ const EXPECTED_TYPES: readonly SpotlightCardType[] = [
   'continue_watching_new',
   'curated',
   'daily_fanfic',
+  'daily_review',
   'upcoming_for_you',
 ] as const
 
@@ -55,11 +56,12 @@ const VALID_ICONS: readonly SpotlightIconName[] = [
   'wrench',
   'lightning',
   'star',
+  'quote',
 ] as const
 
 describe('cardTokens', () => {
-  it('has exactly 12 entries — one per SpotlightCard variant', () => {
-    expect(Object.keys(cardTokens)).toHaveLength(12)
+  it('has exactly 13 entries — one per SpotlightCard variant', () => {
+    expect(Object.keys(cardTokens)).toHaveLength(13)
   })
 
   it.each(EXPECTED_TYPES)('has a token for %s', (type) => {
@@ -178,4 +180,3 @@ describe('cardTokens.latest_news extensions', () => {
     expect(t.labelByType.feature).toBeDefined()
   })
 })
-

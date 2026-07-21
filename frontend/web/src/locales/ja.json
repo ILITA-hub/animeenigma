@@ -1911,6 +1911,10 @@
       "writeOwn": "自分の作品を書く",
       "partsLabel": "全{n}話"
     },
+    "dailyReview": {
+      "title": "今日のレビュー",
+      "openCta": "すべてのレビューを読む"
+    },
     "randomTail": {
       "title": "ランダムピック",
       "subtitle": "新しい発見を",

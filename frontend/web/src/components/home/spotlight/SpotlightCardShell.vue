@@ -4,7 +4,7 @@
       Workstream hero-spotlight — DS alignment 2026-06-10 (spec:
       2026-06-10-spotlight-ds-alignment-design.md, block C, user-approved).
 
-      Shared anatomy frame for all 9 spotlight cards:
+      Shared anatomy frame for every spotlight card:
         · kicker row (SpotlightIcon + uppercase label) in the card's
           brand-triad accent — single place, single style;
         · default slot = the card's body;

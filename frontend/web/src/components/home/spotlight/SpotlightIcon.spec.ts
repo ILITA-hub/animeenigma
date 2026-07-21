@@ -1,7 +1,7 @@
 /**
  * Workstream hero-spotlight — v1.1-polish Phase 01 (HSB-V11-CC-03).
  *
- * Verifies SpotlightIcon.vue renders all 9 named icons via inline <svg>
+ * Verifies SpotlightIcon.vue renders every named icon via inline <svg>
  * and forwards the `class` attribute onto the SVG root.
  */
 
@@ -20,6 +20,8 @@ const ICONS: readonly SpotlightIconName[] = [
   'shuffle',
   'wrench',
   'lightning',
+  'star',
+  'quote',
 ] as const
 
 describe('SpotlightIcon', () => {
