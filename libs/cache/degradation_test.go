@@ -62,3 +62,61 @@ func TestDegradationWatcher_ReadsAndFailsOpen(t *testing.T) {
 		t.Fatalf("out of range: want 0, got %d", got)
 	}
 }
+
+func TestWatcherScoreReadsKeyAndFailsOpen(t *testing.T) {
+	c := newTestCache(t)
+	ctx := context.Background()
+	client := c.Client()
+	t.Cleanup(func() {
+		client.Del(ctx, DegradationScoreKey)
+		client.Del(ctx, DegradationLevelKey)
+	})
+
+	w := NewDegradationWatcher(c, time.Second)
+
+	// Score is only read once the level key resolves (a dead governor zeroes
+	// both) — keep it valid throughout so these cases exercise the score path.
+	client.Set(ctx, DegradationLevelKey, "0", time.Minute)
+
+	// Published score -> read verbatim.
+	client.Set(ctx, DegradationScoreKey, "0.42", time.Minute)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0.42 {
+		t.Fatalf("want 0.42, got %v", got)
+	}
+
+	// Missing key -> 0.
+	client.Del(ctx, DegradationScoreKey)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0 {
+		t.Fatalf("missing key: want 0, got %v", got)
+	}
+
+	// Garbage value -> fail open.
+	client.Set(ctx, DegradationScoreKey, "garbage", time.Minute)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0 {
+		t.Fatalf("garbage value: want 0, got %v", got)
+	}
+
+	// Out-of-range -> clamped to 1.0.
+	client.Set(ctx, DegradationScoreKey, "7.5", time.Minute)
+	w.refresh(ctx)
+	if got := w.Score(); got != 1.0 {
+		t.Fatalf("out of range: want 1.0, got %v", got)
+	}
+
+	// Dead governor (level key gone) must zero the score too, even though
+	// the score key itself is still populated.
+	client.Del(ctx, DegradationLevelKey)
+	w.refresh(ctx)
+	if got := w.Score(); got != 0 {
+		t.Fatalf("dead governor: want score 0, got %v", got)
+	}
+
+	// nil receiver -> 0, no panic.
+	var nilW *DegradationWatcher
+	if got := nilW.Score(); got != 0 {
+		t.Fatalf("nil receiver: want 0, got %v", got)
+	}
+}

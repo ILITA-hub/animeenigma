@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,7 @@ type DegradationWatcher struct {
 	cache *RedisCache
 	poll  time.Duration
 	level atomic.Int32
+	score atomic.Uint64 // math.Float64bits-encoded
 }
 
 // NewDegradationWatcher builds a watcher over c (nil c is allowed and pins the
@@ -76,6 +78,16 @@ func (w *DegradationWatcher) ShouldShed(min int) bool {
 	return w.Level() >= min
 }
 
+// Score returns the last-read continuous pressure score (0.00..1.00).
+// Safe on a nil receiver (returns 0). Fail-open: missing key, parse error,
+// or Redis error all read as 0.0.
+func (w *DegradationWatcher) Score() float64 {
+	if w == nil {
+		return 0
+	}
+	return math.Float64frombits(w.score.Load())
+}
+
 func (w *DegradationWatcher) refresh(ctx context.Context) {
 	rctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -84,12 +96,26 @@ func (w *DegradationWatcher) refresh(ctx context.Context) {
 		// redis.Nil (no key = governor down/undeployed) and transport errors
 		// alike fail open to Normal.
 		w.level.Store(0)
+		w.score.Store(0)
 		return
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 0 || n > 2 {
 		w.level.Store(0)
+		w.score.Store(0)
 		return
 	}
 	w.level.Store(int32(n))
+
+	sraw, serr := w.cache.Client().Get(rctx, DegradationScoreKey).Result()
+	if serr != nil {
+		w.score.Store(0)
+		return
+	}
+	f, serr := strconv.ParseFloat(sraw, 64)
+	if serr != nil {
+		w.score.Store(0)
+		return
+	}
+	w.score.Store(math.Float64bits(math.Max(0, math.Min(1, f))))
 }
