@@ -622,12 +622,7 @@
           <!-- Review Text -->
           <div class="mb-4">
             <label class="block text-white/60 text-sm mb-2">{{ $t('anime.reviewOptional') }}</label>
-            <textarea
-              v-model="reviewForm.text"
-              rows="4"
-              class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 transition-colors resize-none"
-              :placeholder="$t('anime.reviewPlaceholder')"
-            ></textarea>
+            <ReviewEditor v-model="reviewForm.text" :placeholder="$t('anime.reviewPlaceholder')" />
           </div>
 
           <!-- Submit Buttons -->
@@ -693,7 +688,7 @@
                 <span class="font-semibold">{{ review.score }}</span>
               </div>
             </div>
-            <p v-if="review.review_text" class="text-white/70 whitespace-pre-wrap">{{ review.review_text }}</p>
+            <ReviewMarkdown v-if="review.review_text" :source="review.review_text" collapsible class="text-white/70" />
             <ReviewReactions
               class="mt-3"
               :review-id="review.id"
@@ -974,6 +969,8 @@ import { useAuthStore } from '@/stores/auth'
 import { Avatar, Badge, Button, DropdownMenu, DropdownMenuItem, Input, ScoreDiamond, Spinner } from '@/components/ui'
 import { GenreChip, PosterCard, PosterImage, AnimeContextMenu } from '@/components/anime'
 import ReviewReactions from '@/components/anime/ReviewReactions.vue'
+import ReviewEditor from '@/components/anime/ReviewEditor.vue'
+import ReviewMarkdown from '@/components/anime/ReviewMarkdown.vue'
 import CharacterCard from '@/components/anime/CharacterCard.vue'
 import Carousel from '@/components/carousel/Carousel.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
