@@ -81,7 +81,11 @@
 
     <!-- Secret interactive site tour. It is only opened by the hidden tips
          page launcher (or its direct ?guide=start deep link). -->
-    <SiteGuide v-model="siteGuideOpen" />
+    <SiteGuide
+      :model-value="siteGuideOpen"
+      :mode="siteGuideMode"
+      @update:model-value="setSiteGuideOpen"
+    />
 
     <!-- Card-launched season download flow (context menu → quality dialog → engine). -->
     <SeasonDownloadHost />
@@ -185,7 +189,7 @@ import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 import SeasonDownloadHost from '@/components/SeasonDownloadHost.vue'
-import SiteGuide from '@/components/guide/SiteGuide.vue'
+import SiteGuide, { type SiteGuideMode } from '@/components/guide/SiteGuide.vue'
 import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
@@ -193,6 +197,7 @@ import { reportFeError } from '@/utils/feErrorLog'
 import { pickSecretFeature, roulettePoolAvailable, wantsNewTab } from '@/utils/secretFeatures'
 import { isHelpHotkey } from '@/utils/globalHotkeys'
 import { useFeatureVisibilityStore } from '@/stores/featureVisibility'
+import { playerGuideRequested } from '@/composables/siteGuideState'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -200,6 +205,12 @@ const route = useRoute()
 const notifStore = useNotificationsStore()
 const featureVisibilityStore = useFeatureVisibilityStore()
 const siteGuideOpen = ref(false)
+const siteGuideMode = ref<SiteGuideMode>('site')
+
+function setSiteGuideOpen(open: boolean): void {
+  siteGuideOpen.value = open
+  if (!open) playerGuideRequested.value = false
+}
 
 // The tips page launches the tour on Home through a short-lived query marker.
 // Remove the marker immediately so sharing/copying the current URL does not
@@ -207,13 +218,29 @@ const siteGuideOpen = ref(false)
 watch(
   () => route.query.guide,
   (guide) => {
-    if (guide !== 'start') return
+    if (guide !== 'start' && guide !== 'player') return
+    if (guide === 'player' && route.name !== 'anime') {
+      playerGuideRequested.value = true
+      siteGuideMode.value = 'player-picker'
+    } else {
+      playerGuideRequested.value = guide === 'player'
+      siteGuideMode.value = guide === 'player' ? 'player' : 'site'
+    }
     siteGuideOpen.value = true
     const query = { ...route.query }
     delete query.guide
     void router.replace({ path: route.path, query, hash: route.hash })
   },
   { immediate: true },
+)
+
+watch(
+  () => route.path,
+  (path) => {
+    if (!playerGuideRequested.value || !/^\/anime\/[^/]+$/.test(path)) return
+    siteGuideMode.value = 'player'
+    siteGuideOpen.value = true
+  },
 )
 
 // Workstream notifications / Phase 3 — feature flag baked at build time.

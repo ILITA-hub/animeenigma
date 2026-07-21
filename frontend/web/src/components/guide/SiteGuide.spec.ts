@@ -22,6 +22,7 @@ describe('SiteGuide', () => {
     expect(wrapper.text()).toContain('siteGuide.steps.feedback.title')
     await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+    wrapper.unmount()
   })
 
   it('highlights a visible matching interface element', async () => {
@@ -36,6 +37,7 @@ describe('SiteGuide', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-testid="site-guide-spotlight"]').exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('supports Escape and arrow-key navigation', async () => {
@@ -48,5 +50,50 @@ describe('SiteGuide', () => {
     expect(wrapper.text()).toContain('siteGuide.steps.home.title')
     await panel.trigger('keydown', { key: 'Escape' })
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+    wrapper.unmount()
+  })
+
+  it('keeps the catalog interactive while waiting for a player-tour title', () => {
+    const wrapper = mount(SiteGuide, {
+      props: { modelValue: true, mode: 'player-picker' },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.text()).toContain('siteGuide.picker.title')
+    expect(wrapper.find('[data-testid="site-guide-blocker"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="site-guide-next"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('runs a separate player tour and keeps player chrome awake', async () => {
+    const wrapper = mount(SiteGuide, {
+      props: { modelValue: true, mode: 'player' },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.text()).toContain('siteGuide.playerSteps.screen.title')
+    expect(document.body.classList.contains('site-guide-player-active')).toBe(true)
+    await wrapper.setProps({ modelValue: false })
+    expect(document.body.classList.contains('site-guide-player-active')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('moves the panel above a low target so Feedback remains visible', async () => {
+    const feedback = document.createElement('div')
+    feedback.dataset.siteGuide = 'feedback'
+    feedback.getBoundingClientRect = () => ({
+      top: 450, left: 30, right: 130, bottom: 500, width: 100, height: 50, x: 30, y: 450, toJSON: () => ({}),
+    })
+    document.body.appendChild(feedback)
+    const wrapper = mount(SiteGuide, { props: { modelValue: true }, attachTo: document.body })
+
+    for (let i = 0; i < 5; i += 1) {
+      await wrapper.get('[data-testid="site-guide-next"]').trigger('click')
+    }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="site-guide-panel"]').classes())
+      .toContain('top-[calc(var(--header-offset)+1rem)]')
+    wrapper.unmount()
   })
 })

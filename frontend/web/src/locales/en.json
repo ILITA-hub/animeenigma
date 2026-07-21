@@ -1759,6 +1759,8 @@
   },
   "siteGuide": {
     "launch": "Start the interactive tour",
+    "launchPlayer": "Part 2: player guide",
+    "playerPart": "Part 2 · Player",
     "progress": "Step {current} of {total}",
     "skip": "Skip",
     "finish": "Done",
@@ -1785,7 +1787,37 @@
       },
       "feedback": {
         "title": "Tell us when something is off",
-        "body": "Use feedback to send a bug, question, or idea. Report a broken stream directly from the player for faster diagnosis."
+        "body": "Use this button to send a bug, question, or idea. For playback issues, include the anime, episode, and selected source."
+      }
+    },
+    "picker": {
+      "title": "Choose an anime for part two",
+      "body": "Open any catalog card — the guide will automatically continue on its watch page."
+    },
+    "playerSteps": {
+      "screen": {
+        "title": "The main player screen",
+        "body": "Click or tap to pause, and double-tap on a phone to seek by 10 seconds. Your viewing position is saved automatically."
+      },
+      "episodes": {
+        "title": "Episodes and progress",
+        "body": "Choose episodes here and see saved progress and watched marks. In the installed app, this is also where you can download a season."
+      },
+      "source": {
+        "title": "Sources, audio, and language",
+        "body": "The source panel combines DUB and RAW, languages, and translation teams. If a stream breaks, the player automatically tries the next suitable source."
+      },
+      "subtitles": {
+        "title": "Subtitles under control",
+        "body": "The CC button selects a subtitle language and opens extended search. You can also adjust size, background, timing, and speech auto-sync."
+      },
+      "settings": {
+        "title": "Quality and viewing pace",
+        "body": "Settings include quality, speed, automatic next episode, intro and outro skipping, and a link to the current moment."
+      },
+      "view": {
+        "title": "Theater or fullscreen",
+        "body": "On desktop, theater mode widens the player without hiding the page. Fullscreen works everywhere, while PiP keeps video above other windows."
       }
     }
   },

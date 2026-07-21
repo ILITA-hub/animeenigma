@@ -10,10 +10,16 @@
         </h1>
       </div>
       <p class="text-white/60 text-lg">{{ t('tips.subtitle') }}</p>
-      <Button class="mt-5" data-testid="site-guide-launch" @click="startGuide">
-        <template #icon><Compass class="size-4" aria-hidden="true" /></template>
-        {{ t('siteGuide.launch') }}
-      </Button>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <Button data-testid="site-guide-launch" @click="startGuide">
+          <template #icon><Compass class="size-4" aria-hidden="true" /></template>
+          {{ t('siteGuide.launch') }}
+        </Button>
+        <Button variant="outline" data-testid="player-guide-launch" @click="startPlayerGuide">
+          <template #icon><Clapperboard class="size-4" aria-hidden="true" /></template>
+          {{ t('siteGuide.launchPlayer') }}
+        </Button>
+      </div>
     </header>
 
     <section :aria-label="t('tips.player.title')" class="mb-12">
@@ -79,6 +85,7 @@
 import type { Component } from 'vue'
 import {
   AudioLines,
+  Clapperboard,
   Compass,
   Film,
   Flag,
@@ -102,6 +109,10 @@ const router = useRouter()
 
 function startGuide(): void {
   void router.push({ path: '/', query: { guide: 'start' } })
+}
+
+function startPlayerGuide(): void {
+  void router.push({ path: '/browse', query: { guide: 'player', status: 'ongoing' } })
 }
 
 // Mirrors composables/aePlayer/playerHotkeys.ts — keep in sync when the

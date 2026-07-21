@@ -1,5 +1,5 @@
 <template>
-  <div class="pl-wrap" data-test="ae-player">
+  <div class="pl-wrap" data-test="ae-player" data-site-guide="player-screen">
     <div
       ref="rootRef"
       class="pl"
@@ -477,12 +477,12 @@
          player component so every mount point (anime page, /downloads) gets
          it with zero cross-component wiring. -->
     <div v-if="isMobile" class="pl-actions" data-test="pl-actions">
-      <Button variant="soft" size="sm" class="pl-action" data-test="action-episodes" @click="toggleMenu('episodes')">
+      <Button variant="soft" size="sm" class="pl-action" data-test="action-episodes" data-site-guide="player-episodes" @click="toggleMenu('episodes')">
         <ListVideo class="size-4" aria-hidden="true" />
         {{ $t('player.aePlayer.epAbbrev') }} {{ selectedEpisode?.number ?? initialEpisode ?? 1 }}
         <ChevronDown class="size-3.5 opacity-70" aria-hidden="true" />
       </Button>
-      <Button v-if="!offline" variant="soft" size="sm" class="pl-action pl-action--src" data-test="action-source" @click="toggleMenu('source')">
+      <Button v-if="!offline" variant="soft" size="sm" class="pl-action pl-action--src" data-test="action-source" data-site-guide="player-source" @click="toggleMenu('source')">
         <span class="pl-prov-dot" :style="{ background: activeProviderHue }" aria-hidden="true" />
         <span class="pl-action-srcname">{{ activeProviderName || $t('player.aePlayer.source') }}</span>
         <ChevronDown class="size-3.5 opacity-70" aria-hidden="true" />
@@ -1863,6 +1863,19 @@ onUnmounted(() => {
 .pl--ui-hidden :deep(.pl-controls) {
   opacity: 0;
   pointer-events: none;
+}
+
+/* The player tour points at real controls. Keep the chrome awake while the
+   modal overlay owns pointer movement, otherwise the normal idle timer would
+   fade the highlighted buttons halfway through the explanation. */
+:global(body.site-guide-player-active) .pl--ui-hidden {
+  cursor: default;
+}
+
+:global(body.site-guide-player-active) .pl--ui-hidden .pl-top,
+:global(body.site-guide-player-active) .pl--ui-hidden :deep(.pl-controls) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Top bar */

@@ -99,6 +99,7 @@
         class="pl-epbtn"
         :class="{ 'is-open': openMenu === 'episodes' }"
         data-test="episodes-pill"
+        data-site-guide="player-episodes"
         :aria-expanded="openMenu === 'episodes'"
         :aria-label="$t('player.aePlayer.episodes')"
         @click="emit('toggle-episodes')"
@@ -116,6 +117,7 @@
         class="pl-srcbtn"
         :class="{ 'is-open': openMenu === 'source' }"
         data-test="source-pill"
+        data-site-guide="player-source"
         :aria-label="$t('player.aePlayer.sourceAria', { provider: providerName, audio: audioLabel })"
         :aria-expanded="openMenu === 'source'"
         @click="emit('toggle-source')"
@@ -138,6 +140,7 @@
         :aria-expanded="openMenu === 'subs'"
         :aria-pressed="subsOn === true"
         data-test="toggle-subs"
+        data-site-guide="player-subs"
         @click="emit('toggle-subs')"
       >
         <Captions class="size-5" :class="subsOn ? 'text-[var(--brand-cyan)]' : ''" aria-hidden="true" />
@@ -149,6 +152,7 @@
         :aria-label="$t('player.aePlayer.settings')"
         :aria-expanded="openMenu === 'settings'"
         data-test="toggle-settings"
+        data-site-guide="player-settings"
         @click="emit('toggle-settings')"
       >
         <Settings class="size-5" aria-hidden="true" />
@@ -174,6 +178,7 @@
         :aria-label="theaterActive ? $t('player.theaterModeExit') : $t('player.theaterModeEnter')"
         :aria-pressed="theaterActive"
         data-test="toggle-theater"
+        data-site-guide="player-view"
         @click="emit('toggle-theater')"
       >
         <MonitorPlay class="size-5" aria-hidden="true" />
@@ -185,6 +190,7 @@
         class="pl-fs-btn"
         :aria-label="$t('player.aePlayer.fullscreen')"
         data-test="toggle-fullscreen"
+        data-site-guide="player-view"
         @click="emit('toggle-fullscreen')"
       >
         <Minimize v-if="fullscreenActive" class="size-5" aria-hidden="true" />

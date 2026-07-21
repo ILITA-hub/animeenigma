@@ -7,6 +7,7 @@ import type { WtCreateSeed } from '@/composables/aePlayer/wtCreateSeed'
 import type { ViewerContextData } from '@/stores/viewerContext'
 import { resolveInitialPlayerPref, CLASSIC_KODIK_KEY } from '@/views/animePlayerPrefs'
 import { nextWatchQuery, watchQueryChanged, type WatchUrlState } from '@/views/watchUrlSync'
+import { playerGuideRequested } from '@/composables/siteGuideState'
 
 export interface PlayerSurfaceDeps {
   /** ?provider= deep-link (from useAnimeDeepLinks) — forces the aePlayer surface. */
@@ -38,7 +39,10 @@ export function usePlayerSurface(deps: PlayerSurfaceDeps) {
     unified_player_selected: localStorage.getItem('unified_player_selected'),
     preferred_video_provider: localStorage.getItem('preferred_video_provider'),
   })
-  const classicKodik = ref(_playerPref.classicKodik)
+  // The interactive guide explains AePlayer controls. Temporarily mount that
+  // surface while the cross-route guide hand-off is active, without rewriting
+  // the user's persisted Classic Kodik preference.
+  const classicKodik = ref(playerGuideRequested.value ? false : _playerPref.classicKodik)
   watch(classicKodik, (on) => {
     localStorage.setItem(CLASSIC_KODIK_KEY, on ? 'true' : 'false')
   })
