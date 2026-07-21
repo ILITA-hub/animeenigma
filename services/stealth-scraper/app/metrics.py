@@ -149,3 +149,11 @@ STREAM_MIGRATIONS = Counter(
     "User-stream migrations onto a surviving browser during scale-down",
     ["result"],  # ok|failed
 )
+
+POOL_KILLS = Counter(
+    "stealth_pool_kills_total",
+    "Scale-down browser kills. class is hard-wired 'service' — any other value appearing is a bug.",
+    ["class", "mode"],  # class: service; mode: graceful|forced
+)
+# NOTE: "class" is a Python keyword, so increments MUST use positional labels:
+# metrics.POOL_KILLS.labels("service", mode).inc() — labels(class=...) is a SyntaxError.

@@ -91,8 +91,14 @@ class TestAdmission(unittest.TestCase):
         self.assertNotIn("old", eng._sessions)
 
     def test_hard_never_evicts_in_use_session(self):
+        """A USER-class in-use session (a live /hls fetch) is protected from
+        both LRU eviction and the RAM-emergency force-kill (Task 8) —
+        user-stream sanctity holds even under a hard RAM budget breach. A
+        service-class in-use session is NOT equivalently protected: see
+        test_ram_emergency_kills_service_class_only in
+        test_engine_scaledown.py, which asserts the opposite for that case."""
         eng = _engine(1000, 2000, ram=2500)
-        busy = _mk_session(eng, "busy", in_use=1)
+        busy = _mk_session(eng, "busy", user_key="alice", in_use=1)
         with self.assertRaises(CapacityExceeded):
             eng._admit_launch()
         self.assertIn("busy", eng._sessions)   # in-flight fetch protected

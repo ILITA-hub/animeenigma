@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 from app.config import Config
-from app.engine import CamoufoxEngine, Session
+from app.engine import CamoufoxEngine, CapacityExceeded, DegradedShed, Session
 from app import metrics, scaling
 from tests.test_engine_degradation import _fake_response, _run_one_poll_tick
 
@@ -422,6 +422,111 @@ class MigrationInUseGuardTest(unittest.TestCase):
         ok = self._run(eng._migrate_session("victim"))
         self.assertFalse(ok)
         self.assertEqual(survivor.in_use, 0)
+
+
+class ForceKillTest(unittest.TestCase):
+    """Task 8: real service-class force-kill, the degraded-kill /hls marker,
+    and the RAM-emergency kill path."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_user_streaming_browser_is_never_force_killed(self):
+        eng = _engine()
+        eng.cfg.pool_curve = "0.60:1"
+        eng._pool_curve = scaling.parse_curve(eng.cfg.pool_curve)
+        # ONLY user-live sessions; current (3) is over the threshold
+        # (target=1 -> ceil(1/2)+1 = 2).
+        _mk_session(eng, "u1", user_key="alice", in_use=1, expires_in=10)
+        _mk_session(eng, "u2", user_key="bob", in_use=1, expires_in=20)
+        _mk_session(eng, "u3", user_key="carol", in_use=1, expires_in=30)
+        self.assertEqual(eng._pool_target(), 1)
+
+        async def _no_survivor(sid):
+            return False
+
+        eng._migrate_session = _no_survivor
+        before = _counter_val(metrics.POOL_KILLS, **{"class": "service", "mode": "graceful"})
+
+        self._run(eng._scale_down_step())
+
+        self.assertEqual(len(eng._sessions), 3)
+        self.assertEqual(
+            _counter_val(metrics.POOL_KILLS, **{"class": "service", "mode": "graceful"}),
+            before,
+        )
+
+    def test_service_kill_marks_sid_degraded_for_hls(self):
+        eng = _engine()
+        _mk_session(eng, "svc", user_key=None, in_use=1, expires_in=600)
+
+        eng._force_kill("svc", mode="forced")
+
+        self.assertNotIn("svc", eng._sessions)
+        with self.assertRaises(DegradedShed):
+            self._run(eng.proxy_fetch("svc", "https://cdn.example/seg.ts"))
+
+    def test_ram_emergency_kills_service_class_only(self):
+        eng = _engine(ram_hard_bytes=100)
+        eng._sample_ram = lambda: 1000  # >= hard budget
+        _mk_session(eng, "user-live", user_key="alice", in_use=1, expires_in=600)
+        _mk_session(eng, "svc", user_key=None, in_use=1, expires_in=600)
+
+        async def _admit():
+            with self.assertRaises(CapacityExceeded):
+                eng._admit_launch()
+
+        self._run(_admit())
+
+        self.assertNotIn("svc", eng._sessions)
+        self.assertIn("user-live", eng._sessions)
+
+
+class DegradedKillMarkerCleanupTest(unittest.TestCase):
+    """The degraded-kill marker (self._degraded_kills) must not grow
+    unbounded: proxy_fetch only pops one lazily on a re-touch of that exact
+    sid, so an abandoned (never re-fetched) sid needs the background reaper
+    to prune it once its 120s window has passed."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_reap_prunes_expired_marker_but_keeps_live_one(self):
+        eng = _engine()
+        eng._degraded_kills["expired-sid"] = time.time() - 1.0
+        eng._degraded_kills["live-sid"] = time.time() + 120.0
+
+        self._run(eng._reap())
+
+        self.assertNotIn("expired-sid", eng._degraded_kills)
+        self.assertIn("live-sid", eng._degraded_kills)
+
+
+class ForceKillRiderProtectionTest(unittest.TestCase):
+    """Carry-forward from Task 7's review: a service-class survivor hosting a
+    migrated (rider) stream must never be force-killed — even when
+    _scale_down_step routes it there as the LRU service-class victim."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_idle_keyless_survivor_hosting_rider_survives_force_kill(self):
+        eng = _engine()
+        eng.cfg.pool_curve = "0.60:1"
+        eng._pool_curve = scaling.parse_curve(eng.cfg.pool_curve)
+        # target=1 -> threshold ceil(1/2)+1 = 2; current=3 > threshold triggers.
+        survivor = _mk_session(eng, "survivor", user_key=None, in_use=0, expires_in=5)
+        _mk_session(eng, "decoy", user_key=None, in_use=0, expires_in=9999)
+        rider = _mk_session(eng, "rider", user_key="alice", in_use=1, expires_in=9999)
+        rider.owns_profile = False
+        rider.profile = survivor.profile
+
+        self.assertEqual(eng._pool_target(), 1)
+        self._run(eng._scale_down_step())
+
+        self.assertIn("survivor", eng._sessions)
+        self.assertIn("rider", eng._sessions)
+        self.assertTrue(survivor.profile.leased)
 
 
 if __name__ == "__main__":

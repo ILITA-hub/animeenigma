@@ -220,6 +220,11 @@ async def hls(
         out = await engine.proxy_fetch(sid, url)
     except SessionGone as exc:
         return Response(str(exc), status_code=410, media_type="text/plain")
+    except DegradedShed as exc:
+        # Graduated scale-down Stage 2: this stream's browser was shed under
+        # host pressure. 503 = honest "high load" to the consumer (breaker
+        # parks; player self-heal/badge surfaces it) instead of a mystery 410.
+        return Response(str(exc), status_code=503, media_type="text/plain")
     except FetchTimeout as exc:
         # Hung upstream fetch; the session was torn down. 504 so the client/Go
         # side can re-resolve rather than retry a dead session.

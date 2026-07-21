@@ -228,6 +228,13 @@ class CamoufoxEngine:
         self._pool_curve = scaling.parse_curve(cfg.pool_curve)
         self._degradation_task: Any = None
         self._degradation_warned: bool = False
+        # Graduated scale-down Stage 2 (spec 2026-07-21): sid -> marker expiry
+        # (time.time() + 120) for a service-class session that was just
+        # force-killed. proxy_fetch consults this BEFORE the session lookup so
+        # an in-flight/follow-up /hls fetch for that sid gets an honest
+        # DegradedShed -> 503 kind=degraded ("high load"), not a mystery 410
+        # SessionGone. Expired entries are popped lazily on next touch.
+        self._degraded_kills: dict[str, float] = {}
 
     def set_logger(self, log: Any) -> None:
         self._log = log
@@ -725,9 +732,12 @@ class CamoufoxEngine:
         admits, and the pool_size ceiling still bounds the launch."""
         ram = self._read_ram()
         if ram >= self.cfg.ram_hard_bytes:
-            metrics.ADMISSION_TOTAL.labels(
-                action="hard_evict" if self._evict_one_lru() else "hard_refuse"
-            ).inc()
+            if self._emergency_kill_service():
+                metrics.ADMISSION_TOTAL.labels(action="hard_kill").inc()
+            else:
+                metrics.ADMISSION_TOTAL.labels(
+                    action="hard_evict" if self._evict_one_lru() else "hard_refuse"
+                ).inc()
             raise CapacityExceeded(
                 f"combined RSS {ram} >= hard budget {self.cfg.ram_hard_bytes}"
             )
@@ -947,6 +957,12 @@ class CamoufoxEngine:
         ONLY an in-page browser fetch passes (verified 2026-06-20). Playlists are
         rewritten so child URIs route back through this proxy. Returns
         {status, content_type, body(bytes)}."""
+        until = self._degraded_kills.get(sid)
+        if until is not None:
+            if time.time() < until:
+                raise DegradedShed("stream shed: high load (browser scaled down)")
+            self._degraded_kills.pop(sid, None)
+
         self._evict_expired()
         session = self._sessions.get(sid)
         if session is None:
@@ -1575,6 +1591,13 @@ class CamoufoxEngine:
         # (crash/redeploy without a clean aclose_session/_evict_* pass) so
         # they don't accumulate forever on the volume.
         self.store.sweep(time.time())
+        # Prune expired degraded-kill markers: proxy_fetch only pops one lazily
+        # when THAT sid is touched again, so a force-killed sid the client
+        # never re-fetches (stream abandoned) would otherwise sit in
+        # self._degraded_kills forever — bounded here to the reaper cadence.
+        for sid, until in list(self._degraded_kills.items()):
+            if until <= now:
+                self._degraded_kills.pop(sid, None)
         # Retire over-used, unleased profiles: tear the browser down and clear
         # the on-disk user_data_dir so cookie/cache cruft can't grow unbounded.
         for p in self.profiles.all():
@@ -1769,19 +1792,45 @@ class CamoufoxEngine:
         if old.owns_profile:
             self.profiles.release(old.profile, ok=True)
 
-    async def _force_kill(self, sid: str, mode: str = "graceful") -> None:
-        """Close a service-class scale-down victim (Task 8 replaces this stub
-        with the real service-class kill; ``mode`` is ignored for now). Mirrors
-        _evict_one_lru's close sequence exactly: pop, store.delete, close page,
-        conditional profile release."""
-        session = self._sessions.pop(sid, None)
-        if session is None:
+    def _force_kill(self, sid: str, mode: str) -> None:
+        """Kill a SERVICE-class browser outright (graduated Stage 2). Its
+        in-flight and follow-up /hls fetches see DegradedShed -> 503
+        kind=degraded ("high load") for 120s — an honest shed signal the
+        scraper breaker parks on, not a mystery 410. User-class browsers must
+        never reach this method (guarded at every call site; classification
+        is re-checked here as a last line), and a service-class survivor
+        currently hosting a migrated rider's browser must survive too (tearing
+        it down would kill the rider's live stream — user-stream sanctity)."""
+        s = self._sessions.get(sid)
+        if s is None:
             return
+        if self._session_is_user(s):  # defense in depth — never kill user streams
+            return
+        if self._profile_has_rider(s.profile):  # never kill a rider's host browser
+            return
+        self._sessions.pop(sid, None)
+        self._degraded_kills[sid] = time.time() + 120.0
         self.store.delete(sid)
-        await _safe_close_page(session.page)
-        if session.owns_profile:
-            self.profiles.release(session.profile, ok=True)
+        self._spawn(_safe_close_page(s.page))
+        if s.owns_profile:
+            self.profiles.release(s.profile, ok=True)
+        metrics.POOL_KILLS.labels("service", mode).inc()  # positional: "class" is a keyword
         metrics.ACTIVE_SESSIONS.set(len(self._sessions))
+        if self._log:
+            self._log.info("service session force-killed (%s)", mode, extra={"sid": sid[:8]})
+
+    def _emergency_kill_service(self) -> bool:
+        """RAM hard-budget emergency: force-kill ONE service-class session,
+        in-use or not (memory emergencies don't wait for drains). User-class
+        sessions are exempt even here — worst case the pool rides above
+        budget on user streams alone until they end (spec, owner decision 7).
+        A rider-hosting survivor is exempt too (guarded inside _force_kill)."""
+        for sid, s in sorted(self._sessions.items(), key=lambda kv: kv[1].expires_at):
+            if self._session_is_user(s) or self._profile_has_rider(s.profile):
+                continue
+            self._force_kill(sid, mode="forced")
+            return True
+        return False
 
     async def _scale_down_step(self) -> None:
         """One graduated scale-down step per degradation tick (~5s): act only
@@ -1804,7 +1853,7 @@ class CamoufoxEngine:
                 # the stream keeps its session; we retry on a later tick.
                 victim.draining = False
             return
-        await self._force_kill(sid, mode="graceful" if victim.in_use <= 0 else "forced")
+        self._force_kill(sid, mode="graceful" if victim.in_use <= 0 else "forced")
 
     def session_state(self, sid: str) -> str:
         """Liveness for the scraper's cached-stream gate: ``alive`` (registered
