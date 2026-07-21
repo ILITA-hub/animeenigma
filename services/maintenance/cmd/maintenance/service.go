@@ -174,6 +174,21 @@ func (s *service) run(ctx context.Context) {
 				}
 			}
 
+			// The maintenance daemon stays alive while paused so its health endpoint
+			// remains available and Telegram's update offset can keep advancing, but
+			// it must not analyze, reply to, or mutate state for queued work. The
+			// policy gate is fail-open, so a policy outage preserves the daemon's
+			// historical behavior.
+			if !s.maintenanceEnabled(ctx) {
+				log.Infow("maintenance work skipped: routine paused via /admin/policy",
+					"telegram_groups", len(telegramGroups),
+					"grafana_alerts", len(grafanaAlerts),
+					"reports", len(reports),
+					"webhook_events", len(webhookEvents),
+				)
+				continue
+			}
+
 			// Process webhook events: convert firing to ClassifiedMessages; resolve directly
 			for _, payload := range webhookEvents {
 				for _, wa := range payload.Alerts {
@@ -252,4 +267,8 @@ func (s *service) run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *service) maintenanceEnabled(ctx context.Context) bool {
+	return s.maint == nil || s.maint.Enabled(ctx, "maintenance_bot")
 }

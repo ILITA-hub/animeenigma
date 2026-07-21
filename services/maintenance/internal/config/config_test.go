@@ -72,6 +72,19 @@ func TestMaintenanceConfig_AdminsDefault(t *testing.T) {
 	}
 }
 
+func TestMaintenanceConfig_PolicyURLDefaultsToHostLoopback(t *testing.T) {
+	minimalEnv(t)
+	t.Setenv("POLICY_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.PolicyURL != "http://localhost:8098" {
+		t.Errorf("PolicyURL = %q; want host loopback policy endpoint", cfg.PolicyURL)
+	}
+}
+
 // TestMaintenanceConfig_TestModeFalsey asserts that other truthy-looking
 // values do NOT enable TestMode — only the literal "true" (canonical
 // boolean parsing) does. This guards against accidental activation from

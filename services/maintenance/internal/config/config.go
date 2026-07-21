@@ -141,7 +141,11 @@ func Load() (*Config, error) {
 		FeedbackBaseURL:   getEnv("FEEDBACK_BASE_URL", "https://animeenigma.org"),
 		TestMode:          getEnvBool("MAINTENANCE_TEST_MODE", false),
 		CatalogURL:        getEnv("CATALOG_URL", "http://catalog:8081"),
-		PolicyURL:         getEnv("POLICY_URL", "http://policy:8098"),
+		// Maintenance is a host-native systemd service, so policy is reached
+		// through its loopback-published port. "policy" is only resolvable on the
+		// Compose network and made this gate silently fail open on the host unless
+		// operators happened to provide an override.
+		PolicyURL: getEnv("POLICY_URL", "http://localhost:8098"),
 	}, nil
 }
 

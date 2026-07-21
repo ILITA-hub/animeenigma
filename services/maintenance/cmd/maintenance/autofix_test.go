@@ -154,6 +154,34 @@ func TestDecideAutoApply_GateDisabled(t *testing.T) {
 	}
 }
 
+func TestMaintenanceEnabled(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		srv := newGateServer(t, false, "")
+		s := newTestService(t, nil)
+		s.maint = maintenancegate.New(srv.URL, time.Second)
+		if s.maintenanceEnabled(t.Context()) {
+			t.Fatal("maintenanceEnabled = true; want false")
+		}
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		srv := newGateServer(t, true, "")
+		s := newTestService(t, nil)
+		s.maint = maintenancegate.New(srv.URL, time.Second)
+		if !s.maintenanceEnabled(t.Context()) {
+			t.Fatal("maintenanceEnabled = false; want true")
+		}
+	})
+
+	t.Run("unreachable fails open", func(t *testing.T) {
+		s := newTestService(t, nil)
+		s.maint = maintenancegate.New("http://127.0.0.1:1/", 200*time.Millisecond)
+		if !s.maintenanceEnabled(t.Context()) {
+			t.Fatal("maintenanceEnabled = false; unreachable policy must fail open")
+		}
+	})
+}
+
 // TestDecideAutoApply_RiskCeiling_LowCapsMedium: auto_apply_max_risk="low"
 // must cap a medium-risk admin-sourced bug fix that would otherwise auto-apply.
 func TestDecideAutoApply_RiskCeiling_LowCapsMedium(t *testing.T) {
@@ -252,4 +280,3 @@ func TestIsAdminMessage(t *testing.T) {
 		t.Error("empty username (grafana alert) should not match")
 	}
 }
-

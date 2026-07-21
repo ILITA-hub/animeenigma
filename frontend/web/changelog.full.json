@@ -41,6 +41,10 @@
       {
         "type": "feature",
         "message": "🎬 ВТОРАЯ ЧАСТЬ секретного гайда теперь стартует СРАЗУ: AnimeEnigma сама открывает текущую рекомендацию куратора (или топ популярного), а на каждом шаге плеер раскрывает нужное меню — серии, источники, субтитры и настройки. Из первой части теперь можно перейти напрямую!"
+      },
+      {
+        "type": "fix",
+        "message": "Maintenance policy switches now actually pause the maintenance bot, daily provider recovery, and disk cleanup jobs."
       }
     ]
   },
