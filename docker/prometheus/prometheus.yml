@@ -137,6 +137,15 @@ scrape_configs:
       - targets: ['storage:8099']
     metrics_path: /metrics
 
+  # content-verify (content probing queue, spec 2026-07-16). Never scraped since
+  # the service shipped, so the Content Verify dashboard read empty: its
+  # band_depth / idle_cursor / inflight_leases gauges and probes_total /
+  # verdicts_total counters are exposed only here.
+  - job_name: 'content-verify'
+    static_configs:
+      - targets: ['content-verify:8101']
+    metrics_path: /metrics
+
   # ClickHouse native self-metrics (v4.0 Activity Register Phase 1, AR-STORE-01).
   - job_name: 'clickhouse'
     static_configs:
