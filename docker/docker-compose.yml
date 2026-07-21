@@ -165,7 +165,7 @@ services:
     # Each active stream retains its resolving browser (the CDN is Cloudflare-
     # fingerprint-gated, so segments are restreamed through that browser's in-page
     # fetch). Pool size = max concurrent EN streams; sized for a small group.
-    mem_limit: 3500m            # host-fit: 3 GiB hard RAM budget (in-process admission) lives INSIDE this cap + Xvfb/python overhead; box is RAM-tight, no bump
+    mem_limit: 7g # host-fit: 6 GiB hard RAM budget (in-process admission) lives INSIDE this cap + Xvfb/python overhead (raised 2026-07-21 with the graduated-degradation budget bump)
     cpus: "2.0"
     environment:
       STEALTH_HEADLESS: ${STEALTH_HEADLESS:-virtual}
