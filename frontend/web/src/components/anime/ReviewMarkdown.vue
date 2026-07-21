@@ -54,7 +54,7 @@ const blocks = computed(() => parseReviewMarkdown(props.source))
 // Per-spoiler reveal state, keyed "block:line:token".
 const revealed = ref<Set<string>>(new Set())
 function reveal(key: string) {
-  revealed.value = new Set(revealed.value).add(key)
+  revealed.value.add(key)
 }
 
 // Collapse: clamp only when the rendered body actually overflows the clamp

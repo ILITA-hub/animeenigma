@@ -79,10 +79,10 @@ function autoGrow() {
 
 function onInput(e: Event) {
   emit('update:modelValue', (e.target as HTMLTextAreaElement).value)
-  autoGrow()
 }
 
-// External value changes (e.g. loading an existing review) also resize.
+// Single resize path: every modelValue change (typing, toolbar wraps, loading
+// an existing review) lands here via the v-model round-trip.
 watch(
   () => props.modelValue,
   () => void nextTick(autoGrow),
@@ -98,7 +98,6 @@ function wrapSelection(before: string, after = before) {
   void nextTick(() => {
     el.focus()
     el.setSelectionRange(s + before.length, e + before.length)
-    autoGrow()
   })
 }
 
@@ -113,10 +112,7 @@ function prefixLines() {
     .map((l) => (l.trim() ? `- ${l.replace(/^[-*]\s+/, '')}` : l))
     .join('\n')
   emit('update:modelValue', value.slice(0, start) + prefixed + value.slice(e))
-  void nextTick(() => {
-    el.focus()
-    autoGrow()
-  })
+  void nextTick(() => el.focus())
 }
 
 const actions = [
@@ -127,14 +123,12 @@ const actions = [
   { key: 'list', icon: List, run: prefixLines },
 ] as const
 
+// Ctrl/Cmd+B/I mirror the toolbar actions (single source for the markers).
 function onKeydown(e: KeyboardEvent) {
   if (!(e.ctrlKey || e.metaKey)) return
-  if (e.code === 'KeyB') {
-    e.preventDefault()
-    wrapSelection('**')
-  } else if (e.code === 'KeyI') {
-    e.preventDefault()
-    wrapSelection('*')
-  }
+  const key = e.code === 'KeyB' ? 'bold' : e.code === 'KeyI' ? 'italic' : null
+  if (!key) return
+  e.preventDefault()
+  actions.find((a) => a.key === key)?.run()
 }
 </script>
