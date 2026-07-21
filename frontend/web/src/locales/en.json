@@ -1757,6 +1757,38 @@
       }
     }
   },
+  "siteGuide": {
+    "launch": "Start the interactive tour",
+    "progress": "Step {current} of {total}",
+    "skip": "Skip",
+    "finish": "Done",
+    "steps": {
+      "home": {
+        "title": "Home starts here",
+        "body": "The logo always takes you home — to continue watching, recommendations, and fresh releases."
+      },
+      "search": {
+        "title": "Search your way",
+        "body": "Enter a title in any language — suggestions appear as you type, and Enter opens all results."
+      },
+      "catalog": {
+        "title": "The full catalog, with filters",
+        "body": "Filter anime by genre, year, status, and type, then sort the results."
+      },
+      "schedule": {
+        "title": "Never miss a new episode",
+        "body": "The schedule shows releases by day and respects your time zone."
+      },
+      "account": {
+        "title": "Your list and progress stay close",
+        "body": "Your profile keeps your watchlist, scores, and progress. On mobile, find these sections in the menu."
+      },
+      "feedback": {
+        "title": "Tell us when something is off",
+        "body": "Use feedback to send a bug, question, or idea. Report a broken stream directly from the player for faster diagnosis."
+      }
+    }
+  },
   "tips": {
     "title": "Secret tips & hotkeys",
     "subtitle": "You found the hidden page. Everything the interface never tells you — keyboard shortcuts and features tucked away around the site.",

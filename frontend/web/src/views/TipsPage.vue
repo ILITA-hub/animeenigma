@@ -10,6 +10,10 @@
         </h1>
       </div>
       <p class="text-white/60 text-lg">{{ t('tips.subtitle') }}</p>
+      <Button class="mt-5" data-testid="site-guide-launch" @click="startGuide">
+        <template #icon><Compass class="size-4" aria-hidden="true" /></template>
+        {{ t('siteGuide.launch') }}
+      </Button>
     </header>
 
     <section :aria-label="t('tips.player.title')" class="mb-12">
@@ -75,6 +79,7 @@
 import type { Component } from 'vue'
 import {
   AudioLines,
+  Compass,
   Film,
   Flag,
   Globe,
@@ -88,10 +93,16 @@ import {
   Wand2,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { useRouter } from 'vue-router'
+import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import HotkeyRows from '@/components/tips/HotkeyRows.vue'
 
 const { t } = useI18n()
+const router = useRouter()
+
+function startGuide(): void {
+  void router.push({ path: '/', query: { guide: 'start' } })
+}
 
 // Mirrors composables/aePlayer/playerHotkeys.ts — keep in sync when the
 // player's key→action contract changes.

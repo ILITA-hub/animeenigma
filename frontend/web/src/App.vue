@@ -79,6 +79,10 @@
          for native window.confirm(). Mounted once, like <Toaster />. -->
     <ConfirmDialogHost />
 
+    <!-- Secret interactive site tour. It is only opened by the hidden tips
+         page launcher (or its direct ?guide=start deep link). -->
+    <SiteGuide v-model="siteGuideOpen" />
+
     <!-- Card-launched season download flow (context menu → quality dialog → engine). -->
     <SeasonDownloadHost />
 
@@ -110,7 +114,7 @@
           </a>
         </template>
         <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
-        <FeedbackButton />
+        <FeedbackButton data-site-guide="feedback" />
         <template v-if="MY_FEEDBACK_ENABLED && authStore.isAuthenticated">
           <span class="text-brand-cyan/30 text-sm select-none" aria-hidden="true">&bull;</span>
           <router-link
@@ -181,6 +185,7 @@ import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
 import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 import SeasonDownloadHost from '@/components/SeasonDownloadHost.vue'
+import SiteGuide from '@/components/guide/SiteGuide.vue'
 import { useStandaloneDisplay } from '@/pwa/standalone'
 import { useMobilePlayer } from '@/composables/aePlayer/useMobilePlayer'
 import { tryReloadOnChunkError } from '@/utils/chunk-reload'
@@ -194,6 +199,22 @@ const router = useRouter()
 const route = useRoute()
 const notifStore = useNotificationsStore()
 const featureVisibilityStore = useFeatureVisibilityStore()
+const siteGuideOpen = ref(false)
+
+// The tips page launches the tour on Home through a short-lived query marker.
+// Remove the marker immediately so sharing/copying the current URL does not
+// unexpectedly auto-open the tour for somebody else.
+watch(
+  () => route.query.guide,
+  (guide) => {
+    if (guide !== 'start') return
+    siteGuideOpen.value = true
+    const query = { ...route.query }
+    delete query.guide
+    void router.replace({ path: route.path, query, hash: route.hash })
+  },
+  { immediate: true },
+)
 
 // Workstream notifications / Phase 3 — feature flag baked at build time.
 // When false (rollback), skip mounting the toast AND skip starting the

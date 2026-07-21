@@ -60,7 +60,7 @@
             <ArrowLeft class="size-5" />
           </button>
           <!-- Logo — BrandMark icon + wordmark -->
-          <router-link to="/" class="brand-link">
+          <router-link to="/" class="brand-link" data-site-guide="brand">
             <BrandMark />
             <span class="brand-wordmark">
               <span class="brand-b1">Anime</span><span class="brand-b2">Enigma</span>
@@ -78,6 +78,7 @@
             class="nav-link-nt"
             :active-class="link.to === '/' ? '' : 'nav-link-nt--active'"
             :exact-active-class="link.to === '/' ? 'nav-link-nt--active' : ''"
+            :data-site-guide="link.to === '/browse' ? 'catalog' : link.to === '/schedule' ? 'schedule' : undefined"
           >
             {{ $t(link.label) }}
           </router-link>
@@ -100,6 +101,7 @@
             <button
               v-if="!searchOpen"
               class="icon-btn-nt"
+              data-site-guide="search"
               :aria-label="$t('nav.search')"
               @click="openSearch"
             >
@@ -224,6 +226,7 @@
             <router-link
               to="/profile"
               class="group flex-shrink-0"
+              data-site-guide="account"
               :aria-label="authStore.user?.username || $t('nav.profile')"
             >
               <Avatar
@@ -236,7 +239,7 @@
             </router-link>
           </template>
           <template v-else>
-            <Button size="sm" variant="outline" @click="showLogin">
+            <Button size="sm" variant="outline" data-site-guide="account" @click="showLogin">
               {{ $t('nav.login') }}
             </Button>
           </template>
@@ -247,6 +250,7 @@
           id="navbar-mobile-toggle"
           ref="hamburgerButtonRef"
           class="md:hidden p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-white/70 hover:text-white"
+          data-site-guide="account"
           @click="mobileMenuOpen = !mobileMenuOpen"
           :aria-label="mobileMenuOpen ? $t('nav.closeMenu') : $t('nav.openMenu')"
           :aria-expanded="mobileMenuOpen"
@@ -277,6 +281,7 @@
               class="px-4 py-3 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               :active-class="link.to === '/' ? '' : 'text-cyan-400 bg-cyan-500/10'"
               :exact-active-class="link.to === '/' ? 'text-cyan-400 bg-cyan-500/10' : ''"
+              :data-site-guide="link.to === '/browse' ? 'catalog' : link.to === '/schedule' ? 'schedule' : undefined"
               @click="mobileMenuOpen = false"
             >
               {{ $t(link.label) }}

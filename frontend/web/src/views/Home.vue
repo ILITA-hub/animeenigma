@@ -10,7 +10,7 @@
     <!-- Search Bar -->
     <h1 class="sr-only">AnimeEnigma</h1>
     <div class="pt-4 px-4 lg:px-8 max-w-7xl mx-auto mb-8">
-      <div class="search-row relative z-40">
+      <div class="search-row relative z-40" data-site-guide="search">
         <!-- Search wrapper — Neon Tokyo .search shell wrapping the SearchAutocomplete -->
         <div class="search-shell">
           <SearchAutocomplete
@@ -26,6 +26,7 @@
           to="/schedule"
           :aria-label="$t('nav.scheduleLink')"
           class="btn-ghost-accent"
+          data-site-guide="schedule"
         >
           <Calendar class="size-5 flex-shrink-0" aria-hidden="true" />
           <span class="hidden sm:inline">{{ $t('nav.schedule') }}</span>
