@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Guarded host helper for AnimeEnigma manual todo entries.
 
-Commands intentionally never print report descriptions or diagnostics:
+Commands expose full data only for explicitly manual todo entries:
   list [--limit N] [--status STATUS]
   exists REPORT_ID
+  show REPORT_ID [--attachments-dir DIR]
+  attachment REPORT_ID NAME --output PATH
   create --category CATEGORY --text TEXT [--updated-by ACTOR]
   upsert REPORT_ID --marker NAME --text TEXT [--updated-by ACTOR]
   status REPORT_ID STATUS [--updated-by ACTOR]
@@ -16,9 +18,12 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
+import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,13 +34,20 @@ from typing import NoReturn
 
 REPORTS_DIR = Path("/var/lib/docker/volumes/docker_player_reports/_data")
 STATUS_FILE = REPORTS_DIR / "_status.json"
+STATUS_HISTORY_FILE = REPORTS_DIR / "_status_history.json"
+ATTACHMENTS_DIR = REPORTS_DIR / "_attachments"
 ROOT = Path(__file__).resolve().parent.parent
 ID_RE = re.compile(r"^[0-9A-Za-z:_\-]+$")
+ATTACHMENT_RE = re.compile(r"^[0-9A-Za-z._\-]+$")
 MARKER_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 ACTOR_RE = re.compile(r"^[0-9A-Za-z_-]{1,64}$")
 ALLOWED_CATEGORIES = {"", "bug", "issue", "feature"}
 AI_STATUSES = {"new", "in_progress", "ai_done", "not_relevant"}
 MAX_TEXT_CHARS = 20_000
+
+
+class AttachmentError(Exception):
+    """An attachment reference is missing or unsafe."""
 
 
 def fail(message: str) -> NoReturn:
@@ -141,6 +153,88 @@ def load_statuses() -> dict:
     return load_json(STATUS_FILE)
 
 
+def load_status_history() -> dict:
+    if not STATUS_HISTORY_FILE.is_file():
+        return {}
+    return load_json(STATUS_HISTORY_FILE)
+
+
+def listed_attachments(report: dict) -> list[str]:
+    value = report.get("attachments", [])
+    if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+        fail("todo attachments are invalid")
+    if len(set(value)) != len(value):
+        fail("todo attachments contain duplicate names")
+    return value
+
+
+def resolve_attachment_path(report_id: str, report: dict, name: str) -> Path:
+    if (
+        not ATTACHMENT_RE.fullmatch(name)
+        or name in {".", ".."}
+        or ".." in name
+    ):
+        raise AttachmentError("invalid attachment name")
+    if name not in listed_attachments(report):
+        raise AttachmentError("attachment is not listed on this todo")
+
+    item_dir = ATTACHMENTS_DIR / report_id
+    path = item_dir / name
+    if item_dir.is_symlink() or path.is_symlink() or not path.is_file():
+        raise AttachmentError(f"attachment not found: {name}")
+    try:
+        resolved_dir = item_dir.resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+    except OSError as exc:
+        raise AttachmentError(f"cannot resolve attachment {name}: {exc}") from exc
+    if resolved_path.parent != resolved_dir:
+        raise AttachmentError("attachment escapes its todo directory")
+    return path
+
+
+def attachment_path(report_id: str, report: dict, name: str) -> Path:
+    try:
+        return resolve_attachment_path(report_id, report, name)
+    except AttachmentError as exc:
+        fail(str(exc))
+
+
+def attachment_metadata(report_id: str, report: dict, name: str) -> dict:
+    try:
+        path = resolve_attachment_path(report_id, report, name)
+    except AttachmentError as exc:
+        return {"name": name, "available": False, "error": str(exc)}
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        size = path.stat().st_size
+    except OSError as exc:
+        fail(f"cannot read attachment {name}: {exc}")
+    content_type, _ = mimetypes.guess_type(name)
+    return {
+        "name": name,
+        "available": True,
+        "bytes": size,
+        "sha256": digest.hexdigest(),
+        "content_type": content_type or "application/octet-stream",
+    }
+
+
+def copy_attachment(source: Path, output: Path) -> None:
+    try:
+        output = output.expanduser()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as src, output.open("xb") as dst:
+            os.chmod(output, 0o600)
+            shutil.copyfileobj(src, dst)
+    except FileExistsError:
+        fail(f"output already exists: {output}")
+    except OSError as exc:
+        fail(f"cannot copy attachment to {output}: {exc}")
+
+
 def cmd_list(args: argparse.Namespace) -> None:
     statuses = load_statuses()
     rows: list[tuple[str, str, str, str]] = []
@@ -177,6 +271,57 @@ def cmd_exists(args: argparse.Namespace) -> None:
         f"{args.report_id}: exists status={status} "
         f"category={report.get('category', '')} description_chars={len(report['description'])}"
     )
+
+
+def cmd_show(args: argparse.Namespace) -> None:
+    _, report = load_todo(args.report_id)
+    statuses = load_statuses()
+    status_entry = statuses.get(args.report_id, {})
+    if not isinstance(status_entry, dict):
+        status_entry = {}
+    history = load_status_history().get(args.report_id, [])
+    if not isinstance(history, list):
+        history = []
+
+    result = dict(report)
+    result["id"] = args.report_id
+    result["status"] = status_entry.get("status", "new")
+    if status_entry.get("updated_at"):
+        result["status_updated_at"] = status_entry["updated_at"]
+    if status_entry.get("updated_by"):
+        result["status_updated_by"] = status_entry["updated_by"]
+    if history:
+        result["status_history"] = history
+
+    metadata = [
+        attachment_metadata(args.report_id, report, name)
+        for name in listed_attachments(report)
+    ]
+    if args.attachments_dir is not None:
+        unavailable = [item["name"] for item in metadata if not item["available"]]
+        if unavailable:
+            fail(f"cannot copy unavailable attachments: {', '.join(unavailable)}")
+        output_dir = args.attachments_dir.expanduser()
+        try:
+            output_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+        except FileExistsError:
+            fail(f"attachments directory already exists: {output_dir}")
+        except OSError as exc:
+            fail(f"cannot create attachments directory {output_dir}: {exc}")
+        for item in metadata:
+            source = attachment_path(args.report_id, report, item["name"])
+            destination = output_dir / item["name"]
+            copy_attachment(source, destination)
+            item["saved_to"] = str(destination.resolve())
+    result["attachment_metadata"] = metadata
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_attachment(args: argparse.Namespace) -> None:
+    _, report = load_todo(args.report_id)
+    source = attachment_path(args.report_id, report, args.name)
+    copy_attachment(source, args.output)
+    print(f"COPIED: {args.report_id} attachment={args.name} output={args.output.expanduser()}")
 
 
 def cmd_create(args: argparse.Namespace) -> None:
@@ -271,6 +416,17 @@ def build_parser() -> argparse.ArgumentParser:
     exists_parser = sub.add_parser("exists")
     exists_parser.add_argument("report_id")
     exists_parser.set_defaults(func=cmd_exists)
+
+    show_parser = sub.add_parser("show")
+    show_parser.add_argument("report_id")
+    show_parser.add_argument("--attachments-dir", type=Path)
+    show_parser.set_defaults(func=cmd_show)
+
+    attachment_parser = sub.add_parser("attachment")
+    attachment_parser.add_argument("report_id")
+    attachment_parser.add_argument("name")
+    attachment_parser.add_argument("--output", type=Path, required=True)
+    attachment_parser.set_defaults(func=cmd_attachment)
 
     create_parser = sub.add_parser("create")
     create_parser.add_argument("--category", default="", choices=sorted(ALLOWED_CATEGORIES))
