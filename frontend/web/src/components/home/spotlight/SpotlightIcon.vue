@@ -26,6 +26,38 @@
   </svg>
 
   <svg
+    v-else-if="name === 'code'"
+    :class="forwardedClass"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    :aria-hidden="ariaHidden"
+    :aria-label="forwardedAriaLabel"
+    :role="role"
+  >
+    <path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14" />
+  </svg>
+
+  <svg
+    v-else-if="name === 'book'"
+    :class="forwardedClass"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    :aria-hidden="ariaHidden"
+    :aria-label="forwardedAriaLabel"
+    :role="role"
+  >
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5zM20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5z" />
+  </svg>
+
+  <svg
     v-else-if="name === 'sparkles'"
     :class="forwardedClass"
     viewBox="0 0 24 24"

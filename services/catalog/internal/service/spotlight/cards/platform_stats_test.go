@@ -91,6 +91,11 @@ func TestPlatformStats_HappyPath(t *testing.T) {
 	if len(data.Tiles) != 4 {
 		t.Fatalf("want 4 tiles, got %d", len(data.Tiles))
 	}
+	for i, tile := range data.Tiles {
+		if tile.ID == "" {
+			t.Fatalf("tile %d has no localization id: %+v", i, tile)
+		}
+	}
 }
 
 func TestPlatformStats_DailyStability(t *testing.T) {

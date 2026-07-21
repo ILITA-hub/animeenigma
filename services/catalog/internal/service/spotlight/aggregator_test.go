@@ -303,9 +303,9 @@ func TestAggregator_OverallTimeout_HitsOverallBudget(t *testing.T) {
 func TestAggregator_EligibilityFilter_DropsNilCardSilently(t *testing.T) {
 	ineligible := &fakeResolver{typ: "ineligible", card: nil, err: nil, sleep: 10 * time.Millisecond}
 	resolvers := []Resolver{
-		&fakeResolver{typ: "featured", card: &Card{Type: "featured"}, sleep: 10 * time.Millisecond},
+		&fakeResolver{typ: "latest_news", card: &Card{Type: "latest_news"}, sleep: 10 * time.Millisecond},
 		ineligible,
-		&fakeResolver{typ: "random_tail", card: &Card{Type: "random_tail"}, sleep: 10 * time.Millisecond},
+		&fakeResolver{typ: "platform_stats", card: &Card{Type: "platform_stats"}, sleep: 10 * time.Millisecond},
 	}
 	c := newFakeCache()
 	agg := NewAggregator(c, testLogger(t), resolvers)
@@ -321,11 +321,11 @@ func TestAggregator_EligibilityFilter_DropsNilCardSilently(t *testing.T) {
 	for _, c := range resp.Cards {
 		gotTypes[c.Type] = true
 	}
-	if !gotTypes["featured"] {
-		t.Fatalf("expected featured card present, got types %v", gotTypes)
+	if !gotTypes["latest_news"] {
+		t.Fatalf("expected latest_news card present, got types %v", gotTypes)
 	}
-	if !gotTypes["random_tail"] {
-		t.Fatalf("expected random_tail card present, got types %v", gotTypes)
+	if !gotTypes["platform_stats"] {
+		t.Fatalf("expected platform_stats card present, got types %v", gotTypes)
 	}
 	if gotTypes["ineligible"] {
 		t.Fatalf("ineligible card must NOT appear in payload")
@@ -543,7 +543,7 @@ func TestAggregator_NineCards_PassesUserIDAndJWT(t *testing.T) {
 		{typ: "latest_news", card: &Card{Type: "latest_news"}},
 		{typ: "platform_stats", card: &Card{Type: "platform_stats"}},
 		{typ: "personal_pick", card: &Card{Type: "personal_pick"}},
-		{typ: "telegram_news", card: &Card{Type: "telegram_news"}},
+		{typ: "telegram_news", card: &Card{Type: "telegram_news", Data: TelegramNewsData{Posts: []TelegramPost{{Date: time.Now().UTC().Format(time.RFC3339)}}}}},
 		{typ: "now_watching", card: &Card{Type: "now_watching"}},
 		{typ: "not_time_yet", card: &Card{Type: "not_time_yet"}},
 		{typ: "continue_watching_new", card: &Card{Type: "continue_watching_new"}},
@@ -563,8 +563,8 @@ func TestAggregator_NineCards_PassesUserIDAndJWT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(resp.Cards) != 9 {
-		t.Fatalf("expected 9 cards, got %d (cards=%+v)", len(resp.Cards), resp.Cards)
+	if len(resp.Cards) != 8 {
+		t.Fatalf("expected 8 cards after collapsing featured/random_tail, got %d (cards=%+v)", len(resp.Cards), resp.Cards)
 	}
 
 	for _, cr := range caps {

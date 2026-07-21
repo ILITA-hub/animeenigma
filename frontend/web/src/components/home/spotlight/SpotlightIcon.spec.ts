@@ -12,6 +12,8 @@ import type { SpotlightIconName } from './tokens'
 
 const ICONS: readonly SpotlightIconName[] = [
   'telegram',
+  'code',
+  'book',
   'sparkles',
   'chart',
   'pulse',

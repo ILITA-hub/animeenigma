@@ -88,6 +88,7 @@ type StatsHero struct {
 // StatsTile is one micro-grid cell — a single aggregated Prometheus metric
 // over one window. Value is non-zero (the resolver filters out <= 0).
 type StatsTile struct {
+	ID     string  `json:"id,omitempty"`
 	Label  string  `json:"label"`
 	Value  float64 `json:"value"`
 	Window string  `json:"window"` // "day" | "week" | "all"

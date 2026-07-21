@@ -135,6 +135,7 @@ func (r *PlatformStatsResolver) Resolve(ctx context.Context, _ *string) (*spotli
 					continue
 				}
 				results[i] = &spotlight.StatsTile{
+					ID:     t.ID,
 					Label:  t.Label,
 					Value:  val,
 					Window: window,

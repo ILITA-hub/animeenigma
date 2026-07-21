@@ -43,8 +43,8 @@ const base: PlatformStatsData = {
     tagline: 'Лучшая платформа. Поверьте.',
   },
   tiles: [
-    { label: 'Запросов обработано', value: 48201, window: 'day', format: 'int' },
-    { label: 'Данных отдано', value: 1610612736, window: 'week', format: 'bytes' },
+    { id: 'requests', label: 'Запросов обработано', value: 48201, window: 'day', format: 'int' },
+    { id: 'bytes', label: 'Данных отдано', value: 1610612736, window: 'week', format: 'bytes' },
   ],
 }
 
@@ -54,45 +54,45 @@ const clone = (over: Partial<PlatformStatsData['hero']> = {}): PlatformStatsData
 })
 
 describe('PlatformStatsCard (joke)', () => {
-  it('renders ДА when working_ok is true', () => {
+  it('renders the localized healthy label when working_ok is true', () => {
     const w = mount(PlatformStatsCard, { props: { data: clone() } })
-    expect(w.text()).toContain('ДА')
-    expect(w.text()).not.toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingYes')
+    expect(w.text()).not.toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
-  it('renders ТЕХНИЧЕСКИ ДА when working_ok is false', () => {
+  it('renders the localized degraded label when working_ok is false', () => {
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
-    expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
   it('overrides a stale cached working_ok=false when live status is operational', async () => {
     getStatusMock.mockResolvedValue(statusResponse('operational'))
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
     await flushPromises()
-    expect(w.text()).toContain('ДА')
-    expect(w.text()).not.toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingYes')
+    expect(w.text()).not.toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
   it('overrides a stale cached working_ok=true when live status is degraded', async () => {
     getStatusMock.mockResolvedValue(statusResponse('degraded'))
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: true }) } })
     await flushPromises()
-    expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
   it('keeps the cached working_ok when the status endpoint fails', async () => {
     getStatusMock.mockRejectedValue(new Error('boom'))
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: false }) } })
     await flushPromises()
-    expect(w.text()).toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
   it('keeps the cached working_ok when the status payload has no overall', async () => {
     getStatusMock.mockResolvedValue({ data: { success: true, data: {} } })
     const w = mount(PlatformStatsCard, { props: { data: clone({ working_ok: true }) } })
     await flushPromises()
-    expect(w.text()).toContain('ДА')
-    expect(w.text()).not.toContain('ТЕХНИЧЕСКИ ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingYes')
+    expect(w.text()).not.toContain('spotlight.platformStats.workingTechnicallyYes')
   })
 
   it('renders the uptime quip + percent, and omits percent when null', () => {
@@ -118,16 +118,18 @@ describe('PlatformStatsCard (joke)', () => {
     expect(txt).toContain('Лучшая платформа. Поверьте.')
   })
 
-  it('renders one tile per entry with Russian window badges', () => {
+  it('renders localized metric labels and window badges', () => {
     const w = mount(PlatformStatsCard, { props: { data: clone() } })
     expect(w.findAll('li')).toHaveLength(2)
-    expect(w.text()).toContain('ЗА ДЕНЬ')
-    expect(w.text()).toContain('ЗА НЕДЕЛЮ')
+    expect(w.text()).toContain('spotlight.platformStats.windowDay')
+    expect(w.text()).toContain('spotlight.platformStats.windowWeek')
+    expect(w.text()).toContain('spotlight.platformStats.metrics.requests')
+    expect(w.text()).toContain('spotlight.platformStats.metrics.bytes')
   })
 
   it('renders hero only when there are no tiles', () => {
     const w = mount(PlatformStatsCard, { props: { data: { hero: base.hero, tiles: [] } } })
     expect(w.findAll('li')).toHaveLength(0)
-    expect(w.text()).toContain('ДА')
+    expect(w.text()).toContain('spotlight.platformStats.workingYes')
   })
 })

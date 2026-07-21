@@ -2022,7 +2022,29 @@
       "typePerf": "パフォーマンス"
     },
     "platformStats": {
-      "title": "Как дела у платформы"
+      "title": "プラットフォームの調子は？",
+      "working": "稼働状況：",
+      "workingYes": "良好",
+      "workingTechnicallyYes": "一応稼働中",
+      "uptime": "稼働時間：",
+      "windowDay": "今日",
+      "windowWeek": "今週",
+      "windowAll": "全期間",
+      "metrics": {
+        "requests": "処理したリクエスト",
+        "responses": "返したレスポンス",
+        "bytes": "配信したデータ",
+        "go_routines": "稼働中のGoroutine",
+        "memory": "サーバーメモリ"
+      },
+      "units": {
+        "byte": "B",
+        "kilobyte": "KB",
+        "megabyte": "MB",
+        "gigabyte": "GB",
+        "terabyte": "TB",
+        "second": "秒"
+      }
     },
     "personalPick": {
       "title": "あなたへのおすすめ",

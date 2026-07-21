@@ -27,6 +27,8 @@ export type SpotlightAccent = 'cyan' | 'pink' | 'violet'
 
 export type SpotlightIconName =
   | 'telegram'
+  | 'code'
+  | 'book'
   | 'sparkles'
   | 'chart'
   | 'pulse'
@@ -106,7 +108,7 @@ export const cardTokens: CardTokenMap = {
   latest_news: {
     accent: 'violet',
     kickerKey: 'spotlight.latestNews.title',
-    icon: 'sparkles',
+    icon: 'code',
     // Conventional-commit keys (feat/fix/perf/docs) + the long-form
     // synonyms that ship in the live changelog.json today. Without the
     // synonyms the type pill would silently disappear in production.
@@ -133,7 +135,7 @@ export const cardTokens: CardTokenMap = {
   not_time_yet:          { accent: 'violet', kickerKey: 'spotlight.notTimeYet.title',          icon: 'clock'    },
   continue_watching_new: { accent: 'pink',   kickerKey: 'spotlight.continueWatchingNew.title', icon: 'play'     },
   curated:               { accent: 'cyan',   kickerKey: 'spotlight.curated.title',             icon: 'star'     },
-  daily_fanfic:          { accent: 'pink',   kickerKey: 'spotlight.dailyFanfic.title',         icon: 'sparkles' },
+  daily_fanfic:          { accent: 'pink',   kickerKey: 'spotlight.dailyFanfic.title',         icon: 'book'     },
   daily_review:          { accent: 'pink',   kickerKey: 'spotlight.dailyReview.title',         icon: 'quote'    },
   upcoming_for_you:      { accent: 'cyan',   kickerKey: 'spotlight.upcomingForYou.title',      icon: 'clock'    },
 }

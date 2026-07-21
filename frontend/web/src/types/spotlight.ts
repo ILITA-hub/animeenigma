@@ -134,6 +134,7 @@ export interface StatsHero {
 }
 
 export interface StatsTile {
+  id?: 'requests' | 'responses' | 'bytes' | 'go_routines' | 'memory'
   label: string
   value: number
   window: 'day' | 'week' | 'all'

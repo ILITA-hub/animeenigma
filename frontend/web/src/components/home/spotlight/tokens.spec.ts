@@ -47,6 +47,8 @@ const VALID_ACCENTS: readonly SpotlightAccent[] = [
 
 const VALID_ICONS: readonly SpotlightIconName[] = [
   'telegram',
+  'code',
+  'book',
   'sparkles',
   'chart',
   'pulse',
@@ -128,6 +130,10 @@ describe('cardTokens — A-1 brand-triad mapping (DS alignment 2026-06-10)', () 
 // lookup tables. Tests below assert both shape AND specific entries
 // required by LatestNewsCard's per-type accent rendering.
 describe('cardTokens.latest_news extensions', () => {
+  it('uses the developer-style code icon for the card', () => {
+    expect(cardTokens.latest_news.icon).toBe('code')
+  })
+
   it('exposes an iconByType lookup with the expected keys', () => {
     const t = cardTokens.latest_news
     expect(t.iconByType).toBeTypeOf('object')
@@ -178,5 +184,11 @@ describe('cardTokens.latest_news extensions', () => {
     expect(t.iconByType.feature).toBeDefined()
     expect(t.iconByType.improvement).toBeDefined()
     expect(t.labelByType.feature).toBeDefined()
+  })
+})
+
+describe('cardTokens.daily_fanfic', () => {
+  it('uses the book icon', () => {
+    expect(cardTokens.daily_fanfic.icon).toBe('book')
   })
 })

@@ -11,7 +11,7 @@
     layout rebuilt on SpotlightCardShell + Tailwind utilities: kicker row
     added (was the only card without one), font weights clamped to the DS
     medium/semibold scale, scoped CSS reduced to the bespoke gradient
-    backdrop + decorative tile highlight. All data bindings unchanged.
+    backdrop + decorative tile highlight.
   -->
     <template #background>
       <div class="stats-bg" aria-hidden="true" />
@@ -21,14 +21,18 @@
       <!-- LEFT column: status headline + uptime + vibe row + tagline -->
       <div class="flex flex-col justify-center gap-3 md:gap-4">
         <h2 class="font-display font-semibold text-3xl md:text-[44px] leading-[1.05] tracking-[-0.025em]">
-          Работает:
+          {{ t('spotlight.platformStats.working') }}
           <span :class="workingOk ? 'text-success' : 'text-warning'">
-            {{ workingOk ? 'ДА' : 'ТЕХНИЧЕСКИ ДА' }}
+            {{
+              workingOk
+                ? t('spotlight.platformStats.workingYes')
+                : t('spotlight.platformStats.workingTechnicallyYes')
+            }}
           </span>
         </h2>
 
         <p class="font-mono text-[13px] text-cyan-400 tracking-[0.04em]">
-          Аптайм: {{ hero.uptime_quip
+          {{ t('spotlight.platformStats.uptime') }} {{ hero.uptime_quip
           }}<template v-if="hero.uptime_percent != null"> — {{ hero.uptime_percent }}%</template>
         </p>
 
@@ -54,7 +58,7 @@
           <p class="font-display font-semibold text-2xl md:text-[32px] leading-[1.05] tracking-[-0.02em]">
             {{ formatValue(tile) }}
           </p>
-          <p class="text-xs text-muted-foreground mt-1.5">{{ tile.label }}</p>
+          <p class="text-xs text-muted-foreground mt-1.5">{{ tileLabel(tile) }}</p>
         </li>
       </ul>
     </div>
@@ -62,8 +66,7 @@
 </template>
 
 <script setup lang="ts">
-// Workstream hero-spotlight — PlatformStatsCard. All data bindings,
-// computed fields, and type imports unchanged by the DS alignment.
+// Workstream hero-spotlight — PlatformStatsCard.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statusApi } from '@/api/client'
@@ -71,7 +74,12 @@ import type { PlatformStatsData, StatsTile } from '@/types/spotlight'
 import SpotlightCardShell from '../SpotlightCardShell.vue'
 
 const props = defineProps<{ data: PlatformStatsData }>()
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
+
+const localeStr = computed<string>(() => {
+  const value = (i18nLocale as { value?: unknown }).value
+  return typeof value === 'string' ? value : 'ru'
+})
 
 const hero = computed(() => props.data.hero)
 const tiles = computed(() => props.data.tiles ?? [])
@@ -97,12 +105,16 @@ const workingOk = computed(() => liveWorkingOk.value ?? hero.value.working_ok)
 function windowLabel(w: StatsTile['window']): string {
   switch (w) {
     case 'day':
-      return 'ЗА ДЕНЬ'
+      return t('spotlight.platformStats.windowDay')
     case 'week':
-      return 'ЗА НЕДЕЛЮ'
+      return t('spotlight.platformStats.windowWeek')
     default:
-      return 'ЗА ВСЁ ВРЕМЯ'
+      return t('spotlight.platformStats.windowAll')
   }
+}
+
+function tileLabel(tile: StatsTile): string {
+  return tile.id ? t(`spotlight.platformStats.metrics.${tile.id}`) : tile.label
 }
 
 function formatValue(tile: StatsTile): string {
@@ -110,19 +122,22 @@ function formatValue(tile: StatsTile): string {
   // sentinel) should never render as "NaN Б" / "-1 КБ".
   if (!Number.isFinite(tile.value) || tile.value < 0) return '—'
   if (tile.format === 'bytes') return formatBytes(tile.value)
-  if (tile.format === 'seconds') return `${tile.value.toFixed(2)} с`
-  return Math.round(tile.value).toLocaleString('ru')
+  if (tile.format === 'seconds') {
+    return `${tile.value.toFixed(2)} ${t('spotlight.platformStats.units.second')}`
+  }
+  return Math.round(tile.value).toLocaleString(localeStr.value)
 }
 
 function formatBytes(n: number): string {
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
+  const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const
   let v = n
   let i = 0
   while (v >= 1024 && i < units.length - 1) {
     v /= 1024
     i++
   }
-  return `${i === 0 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`
+  const unit = units[i] ?? 'byte'
+  return `${i === 0 ? v.toFixed(0) : v.toFixed(1)} ${t(`spotlight.platformStats.units.${unit}`)}`
 }
 </script>
 

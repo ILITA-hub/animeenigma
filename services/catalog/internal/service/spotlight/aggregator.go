@@ -184,6 +184,7 @@ func (a *Aggregator) Resolve(ctx context.Context, userID *string) (*Response, er
 		}
 		cards = append(cards, c)
 	}
+	cards = prepareCardsRandomly(cards, time.Now())
 
 	// Zero-card outcome — try snapshot fallback (HSB-BE-04). When every
 	// resolver was either ineligible or failed, return the last-known-good
@@ -240,6 +241,7 @@ func (a *Aggregator) loadSnapshot(ctx context.Context, userID *string) *Response
 	var snap Response
 	err := a.cache.Get(ctx, SnapshotKey(userID), &snap)
 	if err == nil {
+		snap.Cards = prepareCardsRandomly(snap.Cards, time.Now())
 		return &snap
 	}
 	if !errors.Is(err, cache.ErrNotFound) {

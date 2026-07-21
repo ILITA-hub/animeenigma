@@ -2068,7 +2068,29 @@
       "typePerf": "Performance"
     },
     "platformStats": {
-      "title": "Как дела у платформы"
+      "title": "How's the platform doing?",
+      "working": "Working:",
+      "workingYes": "YES",
+      "workingTechnicallyYes": "TECHNICALLY YES",
+      "uptime": "Uptime:",
+      "windowDay": "TODAY",
+      "windowWeek": "THIS WEEK",
+      "windowAll": "ALL TIME",
+      "metrics": {
+        "requests": "Requests handled",
+        "responses": "Responses served",
+        "bytes": "Data served",
+        "go_routines": "Goroutines running",
+        "memory": "Server memory"
+      },
+      "units": {
+        "byte": "B",
+        "kilobyte": "KB",
+        "megabyte": "MB",
+        "gigabyte": "GB",
+        "terabyte": "TB",
+        "second": "s"
+      }
     },
     "personalPick": {
       "title": "Picked for you",

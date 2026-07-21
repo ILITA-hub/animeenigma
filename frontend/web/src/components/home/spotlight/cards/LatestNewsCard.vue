@@ -1,7 +1,7 @@
 <template>
   <SpotlightCardShell
     accent="violet"
-    icon="sparkles"
+    icon="code"
     :kicker="t('spotlight.latestNews.title')"
   >
   <!--

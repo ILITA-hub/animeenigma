@@ -24,6 +24,7 @@ function get(obj: unknown, path: string): unknown {
 describe('spotlight i18n parity', () => {
   const enSpotlight = (en as Record<string, unknown>).spotlight
   const ruSpotlight = (ru as Record<string, unknown>).spotlight
+  const jaSpotlight = (ja as Record<string, unknown>).spotlight
 
   it('en.json has a top-level spotlight object', () => {
     expect(enSpotlight).toBeTypeOf('object')
@@ -129,13 +130,20 @@ describe('spotlight i18n parity', () => {
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).randomTail?.[k]).toBe('string')
   })
 
-  // platformStats is otherwise an i18n-free joke card; the ONLY surviving key
-  // is `title`, used by the shared carousel kicker (tokens.ts kickerKey →
-  // CarouselControls `t(...)`) and HeroSpotlightBlock cardTitle().
-  const platformStatsKeys = ['title'] as const
-  it.each(platformStatsKeys)('spotlight.platformStats.%s present in both locales', (k) => {
-    expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
-    expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
+  const platformStatsKeys = [
+    'title',
+    'working',
+    'workingYes',
+    'workingTechnicallyYes',
+    'uptime',
+    'windowDay',
+    'windowWeek',
+    'windowAll',
+  ] as const
+  it.each(platformStatsKeys)('spotlight.platformStats.%s present in all locales', (k) => {
+    for (const locale of [enSpotlight, ruSpotlight, jaSpotlight]) {
+      expect(typeof (locale as Record<string, Record<string, unknown>>).platformStats?.[k]).toBe('string')
+    }
   })
 
   // ── Phase 03 (Plan 03) RandomTailCard refactor ──────────────────────────
@@ -144,7 +152,6 @@ describe('spotlight i18n parity', () => {
   // The component picks one at mount with Math.random(); if any locale's
   // array length drifted from another, a session could render a tagline
   // index that doesn't exist in the user's locale.
-  const jaSpotlight = (ja as Record<string, unknown>).spotlight
   const locales = { en: enSpotlight, ru: ruSpotlight, ja: jaSpotlight } as const
 
   it.each(Object.entries(locales))(

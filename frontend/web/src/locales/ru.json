@@ -2068,7 +2068,29 @@
       "typePerf": "Улучшение"
     },
     "platformStats": {
-      "title": "Как дела у платформы"
+      "title": "Как дела у платформы",
+      "working": "Работает:",
+      "workingYes": "ДА",
+      "workingTechnicallyYes": "ТЕХНИЧЕСКИ ДА",
+      "uptime": "Аптайм:",
+      "windowDay": "ЗА ДЕНЬ",
+      "windowWeek": "ЗА НЕДЕЛЮ",
+      "windowAll": "ЗА ВСЁ ВРЕМЯ",
+      "metrics": {
+        "requests": "Запросов обработано",
+        "responses": "Ответов отдано",
+        "bytes": "Данных отдано",
+        "go_routines": "Горутин крутится",
+        "memory": "Память серверов"
+      },
+      "units": {
+        "byte": "Б",
+        "kilobyte": "КБ",
+        "megabyte": "МБ",
+        "gigabyte": "ГБ",
+        "terabyte": "ТБ",
+        "second": "с"
+      }
     },
     "personalPick": {
       "title": "Выбрано для вас",

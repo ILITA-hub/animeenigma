@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/telegram"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/service/spotlight"
@@ -30,7 +31,7 @@ func tgItems(n int) []telegram.NewsItem {
 		out[i] = telegram.NewsItem{
 			ID:    id,
 			Text:  "post text " + id,
-			Date:  "2026-05-21T12:00:0" + id + "Z",
+			Date:  time.Now().UTC().Add(-time.Duration(i) * time.Hour).Format(time.RFC3339),
 			Link:  "https://t.me/x/" + id,
 			Views: "10",
 		}
@@ -93,6 +94,22 @@ func TestTelegramNews_Empty_ReturnsNilNil(t *testing.T) {
 	}
 }
 
+func TestTelegramNews_StaleOnly_ReturnsNilNil(t *testing.T) {
+	tg := &fakeTelegram{items: []telegram.NewsItem{{
+		ID:   "old",
+		Text: "old post",
+		Date: time.Now().UTC().Add(-8 * 24 * time.Hour).Format(time.RFC3339),
+	}}}
+	r := NewTelegramNewsResolver(tg, newFakeCache(), seededRng(1), testLogger())
+	card, err := r.Resolve(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("expected nil err, got %v", err)
+	}
+	if card != nil {
+		t.Fatalf("expected stale-only Telegram feed to be ineligible, got %+v", card)
+	}
+}
+
 func TestTelegramNews_CacheHit_ReusesExistingNewsKey(t *testing.T) {
 	tg := &fakeTelegram{items: tgItems(3)}
 	c := newFakeCache()
@@ -147,7 +164,7 @@ func TestTelegramNews_ImageURL_FlowsThrough(t *testing.T) {
 		{
 			ID:       "100",
 			Text:     "post with image",
-			Date:     "2026-05-23T17:03:13+00:00",
+			Date:     time.Now().UTC().Add(-time.Hour).Format(time.RFC3339),
 			Link:     "https://t.me/animeenigma/100",
 			Views:    "42",
 			ImageURL: "https://cdn4.telesco.pe/file/abcdef.jpg",
@@ -155,14 +172,14 @@ func TestTelegramNews_ImageURL_FlowsThrough(t *testing.T) {
 		{
 			ID:    "101",
 			Text:  "text-only post",
-			Date:  "2026-05-23T17:04:00+00:00",
+			Date:  time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
 			Link:  "https://t.me/animeenigma/101",
 			Views: "10",
 		},
 		{
 			ID:       "102",
 			Text:     "another image post",
-			Date:     "2026-05-23T17:05:00+00:00",
+			Date:     time.Now().UTC().Add(-3 * time.Hour).Format(time.RFC3339),
 			Link:     "https://t.me/animeenigma/102",
 			Views:    "5",
 			ImageURL: "https://cdn4.telesco.pe/file/zzz.jpg",
@@ -215,7 +232,7 @@ func TestTelegramNews_ImageURL_CacheRoundTrip(t *testing.T) {
 		{
 			ID:       "200",
 			Text:     "cached image post",
-			Date:     "2026-05-23T18:00:00+00:00",
+			Date:     time.Now().UTC().Add(-time.Hour).Format(time.RFC3339),
 			Link:     "https://t.me/animeenigma/200",
 			Views:    "99",
 			ImageURL: "https://cdn4.telesco.pe/file/cached.jpg",
@@ -255,5 +272,29 @@ func TestTelegramNews_UsesExistingKey(t *testing.T) {
 	keys := c.keys()
 	if len(keys) != 1 || keys[0] != "news:telegram" {
 		t.Errorf("expected single cache key news:telegram, got %v", keys)
+	}
+}
+
+func TestTelegramNews_StaleOrInvalidPostsReturnNil(t *testing.T) {
+	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	items := []telegram.NewsItem{
+		{ID: "old", Text: "old", Date: now.Add(-8 * 24 * time.Hour).Format(time.RFC3339)},
+		{ID: "invalid", Text: "invalid", Date: "yesterday-ish"},
+	}
+	if got := recentTelegramItems(items, now); len(got) != 0 {
+		t.Fatalf("expected stale/invalid posts to be excluded, got %+v", got)
+	}
+}
+
+func TestTelegramNews_RecentFilterRunsBeforeAdaptiveSlice(t *testing.T) {
+	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	items := []telegram.NewsItem{
+		{ID: "recent", Text: "recent", Date: now.Add(-time.Hour).Format(time.RFC3339)},
+		{ID: "old-1", Text: "old", Date: now.Add(-8 * 24 * time.Hour).Format(time.RFC3339)},
+		{ID: "old-2", Text: "old", Date: now.Add(-9 * 24 * time.Hour).Format(time.RFC3339)},
+	}
+	recent := recentTelegramItems(items, now)
+	if len(recent) != 1 || recent[0].ID != "recent" {
+		t.Fatalf("expected only the recent post before slicing, got %+v", recent)
 	}
 }

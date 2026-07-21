@@ -104,6 +104,7 @@ func (r *TelegramNewsResolver) Resolve(ctx context.Context, _ *string) (*spotlig
 // buildCardFromItems converts raw telegram items to a TelegramNewsData card,
 // applying AdaptiveSlice. Returns nil for an empty input slice.
 func (r *TelegramNewsResolver) buildCardFromItems(items []telegram.NewsItem) *spotlight.Card {
+	items = recentTelegramItems(items, time.Now())
 	if len(items) == 0 {
 		return nil
 	}
@@ -130,4 +131,18 @@ func (r *TelegramNewsResolver) buildCardFromItems(items []telegram.NewsItem) *sp
 		Posts: append([]spotlight.TelegramPost(nil), picked...),
 	}
 	return &spotlight.Card{Type: r.Type(), Data: data}
+}
+
+const telegramNewsMaxAge = 7 * 24 * time.Hour
+
+func recentTelegramItems(items []telegram.NewsItem, now time.Time) []telegram.NewsItem {
+	cutoff := now.Add(-telegramNewsMaxAge)
+	recent := make([]telegram.NewsItem, 0, len(items))
+	for _, item := range items {
+		published, err := time.Parse(time.RFC3339, item.Date)
+		if err == nil && !published.Before(cutoff) {
+			recent = append(recent, item)
+		}
+	}
+	return recent
 }
