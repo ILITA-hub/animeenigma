@@ -195,19 +195,34 @@ func egressScore(frac, elev, crit float64) float64 {
 
 func clamp01(x float64) float64 { return math.Max(0, math.Min(1, x)) }
 
-func (c *Client) queryVector(ctx context.Context) (*queryResponse, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/query?query=%s", c.baseURL, url.QueryEscape(AllSignalsQuery))
-	resp, err := c.get(ctx, endpoint)
+// doQuery runs one instant query and decodes the response body into out (a
+// *queryResponse or *scalarResponse). Owns the shared skeleton: endpoint build,
+// GET, status-code check, decode. The per-shape "status" == success check and
+// value extraction stay with the callers.
+func (c *Client) doQuery(ctx context.Context, expr string, out any) error {
+	endpoint := fmt.Sprintf("%s/api/v1/query?query=%s", c.baseURL, url.QueryEscape(expr))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("prometheus: status %d", resp.StatusCode)
+		return fmt.Errorf("prometheus: status %d", resp.StatusCode)
 	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("prometheus: decode: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) queryVector(ctx context.Context) (*queryResponse, error) {
 	var qr queryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&qr); err != nil {
-		return nil, fmt.Errorf("prometheus: decode: %w", err)
+	if err := c.doQuery(ctx, AllSignalsQuery, &qr); err != nil {
+		return nil, err
 	}
 	if qr.Status != "success" {
 		return nil, fmt.Errorf("prometheus: query status %q", qr.Status)
@@ -218,18 +233,9 @@ func (c *Client) queryVector(ctx context.Context) (*queryResponse, error) {
 // queryScalar runs an instant query returning a Prometheus scalar and extracts
 // its float value.
 func (c *Client) queryScalar(ctx context.Context, expr string) (float64, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/query?query=%s", c.baseURL, url.QueryEscape(expr))
-	resp, err := c.get(ctx, endpoint)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("prometheus: status %d", resp.StatusCode)
-	}
 	var sr scalarResponse
-	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
-		return 0, fmt.Errorf("prometheus: decode scalar: %w", err)
+	if err := c.doQuery(ctx, expr, &sr); err != nil {
+		return 0, err
 	}
 	if sr.Status != "success" {
 		return 0, fmt.Errorf("prometheus: scalar status %q", sr.Status)
@@ -239,14 +245,6 @@ func (c *Client) queryScalar(ctx context.Context, expr string) (float64, error) 
 		return 0, fmt.Errorf("prometheus: bad scalar result")
 	}
 	return f, nil
-}
-
-func (c *Client) get(ctx context.Context, endpoint string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	return c.httpClient.Do(req)
 }
 
 // sampleValue extracts the float from the [ts, "value"] instant pair (shared by

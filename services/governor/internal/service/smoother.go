@@ -2,11 +2,13 @@ package service
 
 import "math"
 
-// Smoother is the asymmetric EWMA over the raw pressure score: rise fast so a
-// genuine ramp is tracked in ~4 ticks (~60s at the 15s tick, mirroring the
-// level machine's enterTicks), decay slow (~5min, mirroring exitTicks) so the
-// probes→pressure→fewer-probes feedback loop steps down and STAYS down
-// instead of oscillating. Pure — no clock, no IO.
+// Smoother is the asymmetric EWMA over the raw pressure score and the single
+// smoothed state of the governor: rise fast so a genuine ramp is tracked in
+// ~4 ticks (~60s at the 15s tick), decay slow (~5min) so the
+// probes→pressure→fewer-probes feedback loop steps down and STAYS down instead
+// of oscillating. The Quantizer turns this value into the discrete level, so
+// the enter-fast/exit-slow alphas here and its enter/exit thresholds together
+// shape the level's timing. Pure — no clock, no IO.
 type Smoother struct {
 	alphaUp, alphaDown float64
 	value              float64

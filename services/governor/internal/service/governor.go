@@ -194,9 +194,7 @@ func (g *Governor) RunTick(ctx context.Context) {
 	if override != nil {
 		published = *override
 		reasons = append([]domain.Reason{{Signal: domain.ReasonManualOverride, Severity: domain.SeverityInfo}}, reasons...)
-		score = map[domain.Level]float64{
-			domain.LevelNormal: 0, domain.LevelElevated: 0.5, domain.LevelCritical: 1.0,
-		}[*override]
+		score = overrideScore(*override)
 	}
 
 	g.publish(ctx, published, score, reasons)
@@ -239,6 +237,19 @@ func (g *Governor) currentPublished() domain.Level {
 	return g.published
 }
 
+// overrideScore pins the published score to the override level's canonical
+// value (mirrors the score bands the quantizer thresholds sit within).
+func overrideScore(l domain.Level) float64 {
+	switch l {
+	case domain.LevelCritical:
+		return 1.0
+	case domain.LevelElevated:
+		return 0.5
+	default:
+		return 0
+	}
+}
+
 // publish refreshes the Redis keys and the Prometheus gauges.
 func (g *Governor) publish(ctx context.Context, level domain.Level, score float64, reasons []domain.Reason) {
 	if err := g.store.PublishLevel(ctx, level, score, reasons, g.levelTTL); err != nil {
@@ -254,7 +265,7 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, score float6
 	// Fixed label universe: absent reasons are explicitly zeroed so a stale
 	// "active" can never linger after the condition clears.
 	for _, sig := range domain.BreachSignals {
-		for _, sev := range []string{domain.SeverityElevated, domain.SeverityCritical} {
+		for _, sev := range breachSeverities {
 			v := 0.0
 			if active[sig+"\x00"+sev] {
 				v = 1
@@ -262,10 +273,7 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, score float6
 			govmetrics.DegradationReasonActive.WithLabelValues(sig, sev).Set(v)
 		}
 	}
-	for _, syn := range []string{
-		domain.ReasonManualOverride, domain.ReasonPrometheusUnreachable,
-		domain.ReasonHeldByHysteresis, domain.ReasonSignalStale,
-	} {
+	for _, syn := range domain.InfoReasons {
 		v := 0.0
 		if active[syn+"\x00"+domain.SeverityInfo] {
 			v = 1
@@ -273,6 +281,10 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, score float6
 		govmetrics.DegradationReasonActive.WithLabelValues(syn, domain.SeverityInfo).Set(v)
 	}
 }
+
+// breachSeverities is the fixed severity universe for breach-signal reasons
+// (hoisted so publish() doesn't re-allocate it per signal, per tick).
+var breachSeverities = []string{domain.SeverityElevated, domain.SeverityCritical}
 
 func flattenReasons(reasons []domain.Reason) []string {
 	out := make([]string, 0, len(reasons))

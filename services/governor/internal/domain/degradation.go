@@ -77,6 +77,13 @@ const EgressUplinkSignal = "egress_uplink"
 // bounded label set (absent = 0, never a stale 1).
 var BreachSignals = []string{"psi_cpu_some", "psi_io_full", "psi_mem_full", "mem_available", EgressUplinkSignal}
 
+// InfoReasons is the fixed universe of synthetic (info-severity) reasons the
+// governor can publish. Kept here beside BreachSignals so the reason gauge's
+// zeroing loop covers EVERY possible reason — a new info reason added without
+// updating this list would otherwise leave a stale =1 gauge, the exact hazard
+// the fixed-universe design exists to prevent.
+var InfoReasons = []string{ReasonManualOverride, ReasonPrometheusUnreachable, ReasonHeldByHysteresis, ReasonSignalStale}
+
 // Reason is one active cause of the current level.
 type Reason struct {
 	Signal   string `json:"signal"`
