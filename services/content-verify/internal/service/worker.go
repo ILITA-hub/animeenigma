@@ -257,11 +257,25 @@ func (w *Worker) persist(ctx context.Context, unit queue.Unit, v domain.UnitVerd
 		return
 	}
 	cvmetrics.ProbesTotal.WithLabelValues(unit.Provider, result, unit.Band.Label()).Inc()
-	if v.Audio != nil {
-		cvmetrics.VerdictsTotal.WithLabelValues(orUnknown(v.Audio.Lang)).Inc()
-	}
-	if v.Hardsub != nil && v.Hardsub.Present {
-		cvmetrics.HardsubTotal.WithLabelValues(orUnknown(v.Hardsub.Lang)).Inc()
+	// Per-provider lane accounting (dashboard "probe result distribution" table:
+	// requested vs identified). Only verified|inconclusive probes reached the
+	// analyzers — unreachable/error never ran LID or hardsub, so they are not
+	// "requests". Every analyzed probe emits one audio-lane outcome (unknown =
+	// no language identified); hardsub emits one only when its analyzer actually
+	// ran (v.Hardsub != nil — frames extracted, no analyzer error).
+	if result == domain.StatusVerified || result == domain.StatusInconclusive {
+		audioLang := "unknown"
+		if v.Audio != nil {
+			audioLang = orUnknown(v.Audio.Lang)
+		}
+		cvmetrics.VerdictsTotal.WithLabelValues(unit.Provider, audioLang).Inc()
+		if v.Hardsub != nil {
+			subLang := "unknown"
+			if v.Hardsub.Present {
+				subLang = orUnknown(v.Hardsub.Lang)
+			}
+			cvmetrics.HardsubTotal.WithLabelValues(unit.Provider, subLang).Inc()
+		}
 	}
 	cvmetrics.LastProbeTS.Set(float64(time.Now().Unix()))
 	if w.log != nil {

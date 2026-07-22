@@ -14,13 +14,13 @@ func TestBandDepthGauge(t *testing.T) {
 }
 
 func TestVerdictAndHardsubCounters(t *testing.T) {
-	VerdictsTotal.WithLabelValues("ja").Inc()
-	if testutil.ToFloat64(VerdictsTotal.WithLabelValues("ja")) != 1 {
-		t.Error("verdicts_total{ja} not incremented")
+	VerdictsTotal.WithLabelValues("animepahe", "ja").Inc()
+	if testutil.ToFloat64(VerdictsTotal.WithLabelValues("animepahe", "ja")) != 1 {
+		t.Error("verdicts_total{animepahe,ja} not incremented")
 	}
-	HardsubTotal.WithLabelValues("unknown").Inc()
-	if testutil.ToFloat64(HardsubTotal.WithLabelValues("unknown")) != 1 {
-		t.Error("hardsub_total{unknown} not incremented")
+	HardsubTotal.WithLabelValues("animepahe", "unknown").Inc()
+	if testutil.ToFloat64(HardsubTotal.WithLabelValues("animepahe", "unknown")) != 1 {
+		t.Error("hardsub_total{animepahe,unknown} not incremented")
 	}
 	// probes_total now takes three labels
 	ProbesTotal.WithLabelValues("kodik", "verified", "ongoing").Inc()

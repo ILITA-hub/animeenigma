@@ -475,13 +475,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (audio_lang)(rate(content_verify_verdicts_total[15m])) * 60",
+          "expr": "sum by (audio_lang)(rate(content_verify_verdicts_total{audio_lang!~\"unknown\"}[15m])) * 60",
           "legendFormat": "audio {{audio_lang}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (lang)(rate(content_verify_hardsub_total[15m])) * 60",
+          "expr": "sum by (lang)(rate(content_verify_hardsub_total{lang!~\"unknown\"}[15m])) * 60",
           "legendFormat": "hardsub {{lang}}",
           "refId": "B"
         }
@@ -687,6 +687,136 @@
       ],
       "title": "content-verify worker cap",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Per-provider probe result distribution over a fixed trailing 24h window (independent of the time picker). Each lane shows requested (probes attempted) vs identified (a result was determined). OP/ED = skip-lane probes (identified = detected|aniskip). audio_lang / sub_lang = unit probes that reached the analyzers (identified = a language was determined). Note: the audio_lang and sub_lang per-provider series begin at the deploy that added the provider label, so those columns fill in over the first 24h; OP/ED has full history. Counts use increase() and are approximate across counter resets (redeploys).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "filterable": true,
+            "inspect": false
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Provider" },
+            "properties": [
+              { "id": "custom.width", "value": 200 },
+              { "id": "custom.filterable", "value": true }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
+      "id": 15,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": false,
+          "fields": ["Value #A", "Value #B", "Value #C", "Value #D", "Value #E", "Value #F"],
+          "reducer": ["sum"],
+          "show": true
+        },
+        "showHeader": true,
+        "sortBy": [
+          { "desc": true, "displayName": "OP/ED req" }
+        ]
+      },
+      "pluginVersion": "10.3.3",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_skip_probes_total[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_skip_probes_total{result=~\"detected|aniskip\"}[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_verdicts_total[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_verdicts_total{audio_lang!~\"unknown\"}[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_hardsub_total[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (provider)(increase(content_verify_hardsub_total{lang!~\"unknown\"}[24h]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "F"
+        }
+      ],
+      "title": "Per-provider probe result distribution (24h)",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "includeByName": {},
+            "indexByName": {
+              "provider": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6
+            },
+            "renameByName": {
+              "provider": "Provider",
+              "Value #A": "OP/ED req",
+              "Value #B": "OP/ED id",
+              "Value #C": "audio req",
+              "Value #D": "audio id",
+              "Value #E": "sub req",
+              "Value #F": "sub id"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "refresh": "30s",
