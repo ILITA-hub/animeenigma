@@ -1462,15 +1462,13 @@ class CamoufoxEngine:
         raise ProviderWedged so the Go breaker can trip the provider — but ONLY
         if this caller is the session's sole holder (session.in_use <= 1). The
         warm session is SHARED across concurrent fetches (keyed by provider+
-        origin, see _warm_fetch_session): closing the page while a sibling
-        fetch still has it in flight hands that sibling the exact same "Target
-        closed" error, cascading one transient strike into a batch-wide outage
-        (live on animepahe 2026-07-22 — 5 concurrent /fetch calls sharing one
-        warm session, one crash-triggered aclose_session took two others down
-        with it). While contended, surface the strike for this caller only and
-        leave the page for its siblings; a later, uncontended strike (or the
-        liveness probe on the next warm-session reuse) finalizes the teardown
-        if the session is genuinely dead."""
+        origin, see _warm_fetch_session), so closing it out from under a
+        sibling still mid-fetch would hand that sibling this exact same error
+        (see TestPoisonFence.test_poison_max_defers_teardown_while_session_contended
+        for the reproduction). While contended, surface the strike for this
+        caller only and leave the page for its siblings; a later, uncontended
+        strike (or the liveness probe on the next warm-session reuse) finalizes
+        the teardown if the session is genuinely dead."""
         page = session.page
         if page is None:
             raise SessionGone(session.id)
