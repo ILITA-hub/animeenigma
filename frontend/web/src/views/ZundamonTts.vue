@@ -45,13 +45,61 @@
         </div>
 
         <Alert
-          v-if="!supported"
-          variant="warning"
-          :title="$t('zundamon.unsupportedTitle')"
+          v-if="status === 'connecting'"
+          variant="info"
+          :title="$t('zundamon.connectingTitle')"
           class="mt-6"
         >
-          {{ $t('zundamon.unsupportedBody') }}
+          {{ $t('zundamon.connectingBody') }}
         </Alert>
+
+        <Alert
+          v-else-if="!engineReady"
+          variant="warning"
+          :title="error === 'speakerMissing' ? $t('zundamon.speakerMissingTitle') : $t('zundamon.engineUnavailableTitle')"
+          class="mt-6"
+        >
+          <p>
+            {{ error === 'speakerMissing' ? $t('zundamon.speakerMissingBody') : $t('zundamon.engineUnavailableBody') }}
+          </p>
+          <p class="mt-2">{{ $t('zundamon.corsHint') }}</p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <Button
+              href="https://voicevox.hiroshiba.jp/product/zundamon/"
+              target="_blank"
+              rel="noopener noreferrer"
+              size="sm"
+              variant="outline"
+            >
+              <ExternalLink class="size-4" aria-hidden="true" />
+              {{ $t('zundamon.downloadVoicevox') }}
+            </Button>
+            <Button
+              :href="`${engineOrigin}/setting`"
+              target="_blank"
+              rel="noopener noreferrer"
+              size="sm"
+              variant="ghost"
+            >
+              <Settings2 class="size-4" aria-hidden="true" />
+              {{ $t('zundamon.openEngineSettings') }}
+            </Button>
+            <Button size="sm" variant="ghost" @click="connect">
+              <RefreshCw class="size-4" aria-hidden="true" />
+              {{ $t('zundamon.retry') }}
+            </Button>
+          </div>
+        </Alert>
+
+        <div v-else class="mt-6 flex items-center gap-3 rounded-xl border border-success/20 bg-success-soft p-4">
+          <CircleCheck class="size-5 shrink-0 text-success" aria-hidden="true" />
+          <div>
+            <p class="text-sm font-semibold text-foreground">{{ $t('zundamon.engineReady') }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              {{ $t('zundamon.engineVersion', { version: engineVersion }) }}
+            </p>
+          </div>
+        </div>
 
         <div class="mt-6">
           <div class="mb-2 flex items-center justify-between gap-3">
@@ -68,26 +116,26 @@
             :maxlength="MAX_TEXT_LENGTH"
             :placeholder="$t('zundamon.placeholder')"
             class="min-h-44 w-full resize-y rounded-xl border border-border bg-background/60 p-4 text-base leading-relaxed text-foreground outline-none transition focus:border-brand-cyan/60 focus:ring-2 focus:ring-brand-cyan/20 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="!supported"
+            :disabled="!engineReady"
           />
         </div>
 
         <div class="mt-5 grid gap-5 md:grid-cols-2">
           <Select
-            v-model="selectedVoiceUri"
-            :options="voiceOptions"
-            :label="$t('zundamon.voiceLabel')"
-            :placeholder="$t('zundamon.browserDefault')"
-            :disabled="!supported || voices.length === 0"
+            v-model="selectedStyleId"
+            :options="styleOptions"
+            :label="$t('zundamon.styleLabel')"
+            :placeholder="$t('zundamon.stylePlaceholder')"
+            :disabled="!engineReady || busy"
           />
 
           <div class="grid grid-cols-2 gap-4">
             <div>
               <p class="mb-2 text-sm font-medium text-foreground">{{ $t('zundamon.rate') }}</p>
               <Stepper
-                v-model="rate"
+                v-model="speedScale"
                 :min="0.5"
-                :max="1.5"
+                :max="2"
                 :step="0.1"
                 suffix="×"
                 :label="$t('zundamon.rate')"
@@ -96,12 +144,12 @@
             <div>
               <p class="mb-2 text-sm font-medium text-foreground">{{ $t('zundamon.pitch') }}</p>
               <Stepper
-                v-model="pitch"
-                :min="0.5"
-                :max="2"
-                :step="0.1"
-                suffix="×"
+                v-model="pitchScale"
+                :min="-0.15"
+                :max="0.15"
+                :step="0.01"
                 :label="$t('zundamon.pitch')"
+                input-width="54px"
               />
             </div>
           </div>
@@ -110,13 +158,14 @@
         <div class="mt-6 flex flex-wrap items-center gap-3">
           <Button
             size="lg"
-            :disabled="!supported || !text.trim()"
-            @click="speak(text, rate, pitch)"
+            :loading="status === 'synthesizing'"
+            :disabled="!engineReady || !text.trim() || status === 'synthesizing'"
+            @click="speak(text, speedScale, pitchScale)"
           >
             <Play class="size-4" aria-hidden="true" />
-            {{ isSpeaking ? $t('zundamon.restart') : $t('zundamon.speak') }}
+            {{ status === 'playing' ? $t('zundamon.restart') : $t('zundamon.speak') }}
           </Button>
-          <Button size="lg" variant="ghost" :disabled="!isSpeaking" @click="stop">
+          <Button size="lg" variant="ghost" :disabled="status !== 'playing' && status !== 'synthesizing'" @click="stop">
             <Square class="size-4" aria-hidden="true" />
             {{ $t('zundamon.stop') }}
           </Button>
@@ -132,6 +181,15 @@
             <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
               {{ $t('zundamon.localBody') }}
             </p>
+            <a
+              href="https://voicevox.hiroshiba.jp/product/zundamon/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-cyan hover:underline"
+            >
+              VOICEVOX:ずんだもん
+              <ExternalLink class="size-3.5" aria-hidden="true" />
+            </a>
           </div>
         </div>
       </Card>
@@ -140,39 +198,53 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AudioLines, Play, ShieldCheck, Sparkles, Square } from 'lucide-vue-next'
+import {
+  AudioLines,
+  CircleCheck,
+  ExternalLink,
+  Play,
+  RefreshCw,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Square,
+} from 'lucide-vue-next'
 import { Alert, Badge, Button, Card, Select, Stepper } from '@/components/ui'
 import { useZundamonTts } from '@/composables/useZundamonTts'
 
 const MAX_TEXT_LENGTH = 500
 const { t } = useI18n()
 const text = ref(t('zundamon.sample'))
-const rate = ref(1.1)
-const pitch = ref(1.25)
+const speedScale = ref(1.1)
+const pitchScale = ref(0)
 
 const {
-  supported,
-  voices,
-  selectedVoiceUri,
-  isSpeaking,
+  engineOrigin,
+  engineReady,
+  engineVersion,
+  styles,
+  selectedStyleId,
+  busy,
   status,
+  error,
+  connect,
   speak,
   stop,
 } = useZundamonTts()
 
-const voiceOptions = computed(() =>
-  voices.value.map((voice) => ({
-    value: voice.voiceURI,
-    label: `${voice.name} · ${voice.lang}`,
-  })),
+const styleOptions = computed(() =>
+  styles.value.map((style) => ({ value: style.id, label: style.name })),
 )
 
 const statusMessage = computed(() => {
-  if (status.value === 'speaking') return t('zundamon.statusSpeaking')
+  if (status.value === 'synthesizing') return t('zundamon.statusSynthesizing')
+  if (status.value === 'playing') return t('zundamon.statusPlaying')
   if (status.value === 'done') return t('zundamon.statusDone')
-  if (status.value === 'error') return t('zundamon.statusError')
+  if (status.value === 'error' && engineReady.value) return t('zundamon.statusError')
   return ''
 })
+
+onMounted(() => void connect())
 </script>

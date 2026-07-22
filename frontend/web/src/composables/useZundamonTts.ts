@@ -1,117 +1,212 @@
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 
-export type ZundamonTtsStatus = 'idle' | 'speaking' | 'done' | 'error'
+const VOICEVOX_ORIGIN = 'http://127.0.0.1:50021'
+const ZUNDAMON_NAME = 'ずんだもん'
 
-function speechAvailable(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    'speechSynthesis' in window &&
-    'SpeechSynthesisUtterance' in window
-  )
+export interface VoicevoxStyle {
+  id: number
+  name: string
+  type?: string
+}
+
+interface VoicevoxSpeaker {
+  name: string
+  styles: VoicevoxStyle[]
+}
+
+export type ZundamonTtsStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'ready'
+  | 'synthesizing'
+  | 'playing'
+  | 'done'
+  | 'error'
+
+export type ZundamonTtsError = 'unavailable' | 'speakerMissing' | 'synthesis' | 'playback'
+
+function ensureOk(response: Response): Response {
+  if (!response.ok) throw new Error(`VOICEVOX HTTP ${response.status}`)
+  return response
 }
 
 /**
- * Browser-only speech synthesis for the hidden Zundamon voice lab.
- *
- * No text or audio is sent to AnimeEnigma: the browser/OS owns voice discovery
- * and rendering through the Web Speech API.
+ * Talks directly to the visitor's own VOICEVOX engine on loopback.
+ * AnimeEnigma never receives the text or generated audio.
  */
 export function useZundamonTts() {
-  const supported = ref(speechAvailable())
-  // Browser voice objects are host objects. Keep them raw so the Web Speech
-  // implementation receives the original identity, never a Vue proxy.
-  const voices = shallowRef<SpeechSynthesisVoice[]>([])
-  const selectedVoiceUri = ref('')
-  const isSpeaking = ref(false)
-  const status = ref<ZundamonTtsStatus>('idle')
-  let activeUtterance: SpeechSynthesisUtterance | null = null
+  const connected = ref(false)
+  const status = ref<ZundamonTtsStatus>('disconnected')
+  const error = ref<ZundamonTtsError | null>(null)
+  const engineVersion = ref('')
+  const styles = shallowRef<VoicevoxStyle[]>([])
+  const selectedStyleId = ref(-1)
+  let activeController: AbortController | null = null
+  let activeAudio: HTMLAudioElement | null = null
+  let activeAudioUrl = ''
 
-  const selectedVoice = computed(
-    () => voices.value.find((voice) => voice.voiceURI === selectedVoiceUri.value) ?? null,
+  const engineReady = computed(() => connected.value && selectedStyleId.value >= 0)
+  const busy = computed(
+    () => status.value === 'connecting' || status.value === 'synthesizing' || status.value === 'playing',
   )
 
-  function loadVoices(): void {
-    if (!supported.value) return
-
-    voices.value = window.speechSynthesis
-      .getVoices()
-      .slice()
-      .sort((a, b) => {
-        const aJapanese = a.lang.toLowerCase().startsWith('ja')
-        const bJapanese = b.lang.toLowerCase().startsWith('ja')
-        if (aJapanese !== bJapanese) return aJapanese ? -1 : 1
-        if (a.default !== b.default) return a.default ? -1 : 1
-        return a.name.localeCompare(b.name)
-      })
-
-    if (!voices.value.some((voice) => voice.voiceURI === selectedVoiceUri.value)) {
-      selectedVoiceUri.value = voices.value[0]?.voiceURI ?? ''
+  function disposeAudio(): void {
+    if (activeAudio) {
+      activeAudio.pause()
+      activeAudio.src = ''
+      activeAudio = null
+    }
+    if (activeAudioUrl) {
+      URL.revokeObjectURL(activeAudioUrl)
+      activeAudioUrl = ''
     }
   }
 
   function stop(): void {
-    if (!supported.value) return
-    window.speechSynthesis.cancel()
-    activeUtterance = null
-    isSpeaking.value = false
-    status.value = 'idle'
+    activeController?.abort()
+    activeController = null
+    disposeAudio()
+    status.value = connected.value ? 'ready' : 'disconnected'
   }
 
-  function speak(text: string, rate: number, pitch: number): boolean {
+  async function connect(): Promise<boolean> {
+    stop()
+    connected.value = false
+    engineVersion.value = ''
+    styles.value = []
+    selectedStyleId.value = -1
+    error.value = null
+    status.value = 'connecting'
+
+    const controller = new AbortController()
+    activeController = controller
+    const timeout = window.setTimeout(() => controller.abort(), 5000)
+
+    try {
+      const [versionResponse, speakersResponse] = await Promise.all([
+        fetch(`${VOICEVOX_ORIGIN}/version`, { cache: 'no-store', signal: controller.signal }),
+        fetch(`${VOICEVOX_ORIGIN}/speakers`, { cache: 'no-store', signal: controller.signal }),
+      ])
+      ensureOk(versionResponse)
+      ensureOk(speakersResponse)
+
+      const [version, speakers] = await Promise.all([
+        versionResponse.json() as Promise<string>,
+        speakersResponse.json() as Promise<VoicevoxSpeaker[]>,
+      ])
+      const zundamon = speakers.find((speaker) => speaker.name === ZUNDAMON_NAME)
+      if (!zundamon || zundamon.styles.length === 0) {
+        error.value = 'speakerMissing'
+        status.value = 'error'
+        return false
+      }
+
+      engineVersion.value = version
+      styles.value = zundamon.styles
+      selectedStyleId.value =
+        zundamon.styles.find((style) => style.name === 'ノーマル')?.id ?? zundamon.styles[0].id
+      connected.value = true
+      status.value = 'ready'
+      return true
+    } catch (caught) {
+      if (controller.signal.aborted && activeController !== controller) return false
+      error.value = 'unavailable'
+      status.value = 'error'
+      return false
+    } finally {
+      window.clearTimeout(timeout)
+      if (activeController === controller) activeController = null
+    }
+  }
+
+  async function speak(text: string, speedScale: number, pitchScale: number): Promise<boolean> {
     const phrase = text.trim()
-    if (!supported.value || !phrase) return false
+    if (!engineReady.value || !phrase) return false
 
-    window.speechSynthesis.cancel()
-    const utterance = new window.SpeechSynthesisUtterance(phrase)
-    const voice = selectedVoice.value
-    utterance.voice = voice
-    utterance.lang = voice?.lang || 'ja-JP'
-    utterance.rate = rate
-    utterance.pitch = pitch
-    utterance.onstart = () => {
-      isSpeaking.value = true
-      status.value = 'speaking'
-    }
-    utterance.onend = () => {
-      if (activeUtterance !== utterance) return
-      activeUtterance = null
-      isSpeaking.value = false
-      status.value = 'done'
-    }
-    utterance.onerror = (event) => {
-      if (activeUtterance !== utterance) return
-      activeUtterance = null
-      isSpeaking.value = false
-      status.value = event.error === 'canceled' || event.error === 'interrupted' ? 'idle' : 'error'
-    }
+    activeController?.abort()
+    disposeAudio()
+    error.value = null
+    status.value = 'synthesizing'
 
-    activeUtterance = utterance
-    status.value = 'idle'
-    window.speechSynthesis.speak(utterance)
-    return true
+    const controller = new AbortController()
+    activeController = controller
+
+    try {
+      const params = new URLSearchParams({
+        text: phrase,
+        speaker: String(selectedStyleId.value),
+      })
+      const queryResponse = ensureOk(
+        await fetch(`${VOICEVOX_ORIGIN}/audio_query?${params}`, {
+          method: 'POST',
+          signal: controller.signal,
+        }),
+      )
+      const query = (await queryResponse.json()) as Record<string, unknown>
+      query.speedScale = speedScale
+      query.pitchScale = pitchScale
+
+      const synthesisResponse = ensureOk(
+        await fetch(`${VOICEVOX_ORIGIN}/synthesis?speaker=${selectedStyleId.value}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(query),
+          signal: controller.signal,
+        }),
+      )
+      const audioBlob = await synthesisResponse.blob()
+      activeAudioUrl = URL.createObjectURL(audioBlob)
+      const player = new Audio(activeAudioUrl)
+      activeAudio = player
+      player.addEventListener(
+        'ended',
+        () => {
+          if (activeAudio !== player) return
+          disposeAudio()
+          status.value = 'done'
+        },
+        { once: true },
+      )
+      player.addEventListener(
+        'error',
+        () => {
+          if (activeAudio !== player) return
+          disposeAudio()
+          error.value = 'playback'
+          status.value = 'error'
+        },
+        { once: true },
+      )
+
+      await player.play()
+      status.value = 'playing'
+      return true
+    } catch (caught) {
+      if (controller.signal.aborted) return false
+      disposeAudio()
+      error.value = caught instanceof DOMException && caught.name === 'NotAllowedError'
+        ? 'playback'
+        : 'synthesis'
+      status.value = 'error'
+      return false
+    } finally {
+      if (activeController === controller) activeController = null
+    }
   }
 
-  onMounted(() => {
-    supported.value = speechAvailable()
-    if (!supported.value) return
-    loadVoices()
-    window.speechSynthesis.addEventListener('voiceschanged', loadVoices)
-  })
-
-  onBeforeUnmount(() => {
-    if (!supported.value) return
-    window.speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-    window.speechSynthesis.cancel()
-  })
+  onBeforeUnmount(stop)
 
   return {
-    supported,
-    voices,
-    selectedVoiceUri,
-    selectedVoice,
-    isSpeaking,
+    engineOrigin: VOICEVOX_ORIGIN,
+    connected,
+    engineReady,
+    engineVersion,
+    styles,
+    selectedStyleId,
+    busy,
     status,
-    loadVoices,
+    error,
+    connect,
     speak,
     stop,
   }
