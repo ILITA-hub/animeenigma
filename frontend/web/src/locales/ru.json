@@ -2085,7 +2085,9 @@
     },
     "dailyReview": {
       "title": "Отзыв дня",
-      "openCta": "Читать все отзывы"
+      "goToAnime": "Перейти к аниме",
+      "readFull": "Читать полностью",
+      "allReviews": "Все отзывы"
     },
     "randomTail": {
       "title": "Случайная находка",

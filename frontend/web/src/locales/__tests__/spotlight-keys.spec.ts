@@ -101,7 +101,7 @@ describe('spotlight i18n parity', () => {
     expect((ruSpotlight as Record<string, unknown>)[ns]).toBeTypeOf('object')
   })
 
-  const dailyReviewKeys = ['title', 'openCta'] as const
+  const dailyReviewKeys = ['title', 'goToAnime', 'readFull', 'allReviews'] as const
   it.each(dailyReviewKeys)('spotlight.dailyReview.%s present in all 3 locales', (k) => {
     expect(typeof (enSpotlight as Record<string, Record<string, unknown>>).dailyReview?.[k]).toBe('string')
     expect(typeof (ruSpotlight as Record<string, Record<string, unknown>>).dailyReview?.[k]).toBe('string')

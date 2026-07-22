@@ -2039,7 +2039,9 @@
     },
     "dailyReview": {
       "title": "今日のレビュー",
-      "openCta": "すべてのレビューを読む"
+      "goToAnime": "アニメへ",
+      "readFull": "全文を読む",
+      "allReviews": "すべてのレビュー"
     },
     "randomTail": {
       "title": "ランダムピック",

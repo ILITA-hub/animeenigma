@@ -2085,7 +2085,9 @@
     },
     "dailyReview": {
       "title": "Review of the day",
-      "openCta": "Read all reviews"
+      "goToAnime": "Go to anime",
+      "readFull": "Read full",
+      "allReviews": "All reviews"
     },
     "randomTail": {
       "title": "Random pick",
