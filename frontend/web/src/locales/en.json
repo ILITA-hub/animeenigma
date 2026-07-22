@@ -58,7 +58,14 @@
   "recs": {
     "trending": "Trending now",
     "upNext": "Up Next for you",
+    "pageEyebrow": "Your hidden shelf",
+    "pageTitle": "Picked for you",
+    "pageSubtitle": "A full list shaped by what you watch, rate, and finish.",
     "empty": "No recommendations yet",
+    "emptyDescription": "Watch or rate a few titles and your personal picks will appear here.",
+    "browseCta": "Browse anime",
+    "loadErrorTitle": "Recommendations are unavailable",
+    "loadErrorDescription": "We couldn't load your picks. Try again in a moment.",
     "pinBadge": "PINNED",
     "pinReason": {
       "becauseYouFinished": "Because you finished {name}"
@@ -1537,7 +1544,8 @@
         "myFeedback": "My feedback",
         "fanfic": "Fanfic engine",
         "tips": "Tips & hotkeys",
-        "following": "Following"
+        "following": "Following",
+        "recommendations": "My recommendations"
       }
     },
     "collections": {

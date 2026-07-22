@@ -13,9 +13,7 @@
     secondary picks gained rank numbers + ★ scores and live in a
     SCROLLABLE column (desktop, up to 6 items — fade mask + thin cyan
     scrollbar) or a horizontal poster swipe-row (mobile). «Все
-    рекомендации» links to /browse?sort=recommended (the old /recs route
-    never existed — it 404'd; recs-service support for the sort is a
-    recorded TODO).
+    рекомендации» opens the hidden /recs page for personalized results.
   -->
     <template v-if="featured">
       <div class="flex-1 min-h-0 grid md:grid-cols-[3fr_2fr] gap-4 md:gap-7">
@@ -196,12 +194,8 @@ const title = computed(() => {
   return t('spotlight.personalPick.title')
 })
 
-// /recs never existed (only /admin/recs/:user_id) — the old mobile
-// "+N more" link 404'd. Until a real recs page ships, browse with the
-// recommended sort is the landing surface (recs-service TODO recorded
-// in the v4 spec).
 const allRecsTo = computed(() =>
-  props.data.source === 'trending' ? '/browse?sort=trending' : '/browse?sort=recommended',
+  props.data.source === 'trending' ? '/browse?sort=trending' : '/recs',
 )
 </script>
 

@@ -154,7 +154,7 @@ export interface PlatformStatsData {
  * PersonalPickCard — 1..3 picks. When the viewer is anonymous, the backend
  * downgrades to `source: 'trending'`; logged-in users get a personalized list
  * (`source: 'personal'`). The UI uses `source` to swap the title key and the
- * mobile-footer "+ N more →" router target (/browse?sort=trending vs /recs).
+ * footer router target (/browse?sort=trending vs the hidden /recs page).
  */
 export interface PersonalPickItem {
   anime: SpotlightAnime

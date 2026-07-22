@@ -185,5 +185,6 @@ func SeedFlags() []FeatureFlag {
 		{Key: "showcase-editor", Roles: StringList{RoleAdmin}, Roulette: true, FailSafe: "admin", Label: "Showcase editor"},
 		{Key: "my-feedback", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "My feedback"},
 		{Key: "following", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "Following"},
+		{Key: "recommendations", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "My recommendations"},
 	}
 }

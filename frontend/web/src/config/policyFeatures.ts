@@ -21,6 +21,7 @@ export const POLICY_FEATURE_ROUTES: Record<string, string> = {
   downloads: '/downloads',
   'my-feedback': '/my-feedback',
   following: '/following',
+  recommendations: '/recs',
 }
 
 /** Returns the relative route for a feature key, or undefined when the key

@@ -224,14 +224,14 @@ describe('PersonalPickCard (v1.1-polish two-zone layout)', () => {
     expect(footer!.props('to')).toBe('/browse?sort=trending')
   })
 
-  it('«Все рекомендации» routes to /browse?sort=recommended for source=personal (v4 C-2 — /recs never existed)', () => {
+  it('«Все рекомендации» routes to the hidden recommendations page for source=personal', () => {
     const data = {
       source: 'personal',
       items: [{ anime: animeFixture(1) }, { anime: animeFixture(2) }],
     }
     const wrapper = mountCard({ data })
     const links = wrapper.findAllComponents(RouterLinkStub)
-    const footer = links.find((l) => l.props('to') === '/browse?sort=recommended')
+    const footer = links.find((l) => l.props('to') === '/recs')
     expect(footer).toBeDefined()
   })
 

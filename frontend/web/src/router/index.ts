@@ -186,6 +186,15 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'following.title', requiresAuth: true }
   },
   {
+    // Hidden from normal navigation; reached from the personalized spotlight
+    // card or the secret-feature roulette. Requiring auth prevents the public
+    // recommendations endpoint from silently downgrading this page to trends.
+    path: '/recs',
+    name: 'recommendations',
+    component: () => import('@/views/Recommendations.vue'),
+    meta: { titleKey: 'recs.pageTitle', requiresAuth: true }
+  },
+  {
     path: '/status',
     name: 'status',
     component: () => import('@/views/StatusPage.vue'),

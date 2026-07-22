@@ -38,6 +38,7 @@ func TestSeedDefaults_isIdempotent_andMasterOn(t *testing.T) {
 	require.True(t, rs.Roulette["showcase-editor"])
 	require.True(t, rs.Roulette["my-feedback"])
 	require.True(t, rs.Roulette["following"])
+	require.True(t, rs.Roulette["recommendations"])
 }
 
 func TestResolveForUser_visibleAndRoulette(t *testing.T) {
@@ -54,6 +55,8 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	require.Contains(t, mine.Visible, "my-feedback") // any-authenticated, not admin-only
 	require.Contains(t, mine.Visible, "following")
 	require.Contains(t, mine.Roulette, "following")
+	require.Contains(t, mine.Visible, "recommendations")
+	require.Contains(t, mine.Roulette, "recommendations")
 	require.Contains(t, mine.Roulette, "anidle")
 	require.NotContains(t, mine.Roulette, "gacha") // roulette-OFF
 	require.True(t, mine.RouletteEnabled)
@@ -73,6 +76,7 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, anonMine.Visible, "my-feedback")
 	require.NotContains(t, anonMine.Visible, "following")
+	require.NotContains(t, anonMine.Visible, "recommendations")
 	require.NotContains(t, anonMine.Visible, "showcase-editor")
 	require.NotContains(t, anonMine.Visible, "fanfic")
 	require.Contains(t, anonMine.Visible, "anidle")

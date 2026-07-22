@@ -58,7 +58,14 @@
   "recs": {
     "trending": "Trending now",
     "upNext": "Up Next for you",
+    "pageEyebrow": "あなたの秘密の棚",
+    "pageTitle": "あなたへのおすすめ",
+    "pageSubtitle": "視聴、評価、完走履歴をもとに選ばれたリストです。",
     "empty": "No recommendations yet",
+    "emptyDescription": "作品をいくつか視聴または評価すると、ここにおすすめが表示されます。",
+    "browseCta": "アニメを探す",
+    "loadErrorTitle": "おすすめを利用できません",
+    "loadErrorDescription": "おすすめを読み込めませんでした。少し待ってから再試行してください。",
     "pinBadge": "PINNED",
     "pinReason": {
       "becauseYouFinished": "{name}を観終わったので"
@@ -1537,7 +1544,8 @@
         "myFeedback": "マイフィードバック",
         "fanfic": "ファンフィックエンジン",
         "tips": "ヒント＆ショートカット",
-        "following": "フォロー中"
+        "following": "フォロー中",
+        "recommendations": "マイおすすめ"
       }
     },
     "collections": {

@@ -34,7 +34,7 @@ import { pickSecretFeature, roulettePoolAvailable, _resetSecretFeatureForTests }
  * outcome regardless of the current auth identity.
  */
 
-const ALL_TEN_KEYS = [
+const ALL_TWELVE_KEYS = [
   'fanfic',
   'profile-wall',
   'gacha',
@@ -45,6 +45,8 @@ const ALL_TEN_KEYS = [
   'downloads',
   'showcase-editor',
   'my-feedback',
+  'following',
+  'recommendations',
 ]
 
 function seed(
@@ -76,7 +78,7 @@ describe('feature-visibility day-one parity (D2)', () => {
     store = useFeatureVisibilityStore()
   })
 
-  it('admin — sees all 10 keys; roulette pool is exactly the 8 roulette-enabled keys (gacha + profile-wall excluded)', () => {
+  it('admin — sees all 12 keys; roulette pool is exactly the 10 roulette-enabled keys (gacha + profile-wall excluded)', () => {
     const roulette = [
       'anidle',
       'status',
@@ -86,8 +88,10 @@ describe('feature-visibility day-one parity (D2)', () => {
       'fanfic',
       'showcase-editor',
       'my-feedback',
+      'following',
+      'recommendations',
     ]
-    seed(store, ALL_TEN_KEYS, roulette)
+    seed(store, ALL_TWELVE_KEYS, roulette)
 
     expect(useFeatureVisible('fanfic').value).toBe(true)
     expect(useFeatureVisible('gacha').value).toBe(true)
@@ -103,8 +107,8 @@ describe('feature-visibility day-one parity (D2)', () => {
     expect(keys.has('profile-wall')).toBe(false)
   })
 
-  it('user — sees the 6 everyone+my-feedback keys; fanfic/gacha/profile-wall stay hidden; pool = those 6 only', () => {
-    const visible = ['anidle', 'status', 'themes', 'game', 'downloads', 'my-feedback']
+  it('user — sees the 8 public/authenticated keys; fanfic/gacha/profile-wall stay hidden; pool = those 8 only', () => {
+    const visible = ['anidle', 'status', 'themes', 'game', 'downloads', 'my-feedback', 'following', 'recommendations']
     seed(store, visible, visible)
 
     expect(useFeatureVisible('fanfic').value).toBe(false)

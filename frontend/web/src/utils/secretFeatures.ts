@@ -29,6 +29,7 @@ export interface SecretFeature {
     | 'my-feedback'
     | 'tips'
     | 'following'
+    | 'recommendations'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -92,6 +93,11 @@ export const SECRET_FEATURES: SecretFeature[] = [
     key: 'following',
     to: '/following',
     labelKey: 'admin.secretFeatures.feature.following',
+  },
+  {
+    key: 'recommendations',
+    to: '/recs',
+    labelKey: 'admin.secretFeatures.feature.recommendations',
   },
 ]
 
