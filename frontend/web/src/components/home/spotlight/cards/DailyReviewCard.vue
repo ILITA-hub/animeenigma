@@ -35,7 +35,7 @@
       hairline so the title spans the full column.
     -->
     <div class="flex items-center gap-4 md:gap-5 min-w-0">
-      <template v-if="data.score > 0">
+      <template v-if="hasScore">
         <p class="review-score flex items-end gap-1.5 flex-none" data-testid="daily-review-score">
           <ScoreDiamond class="review-score-glyph size-3.5 text-cyan-400" />
           <span class="review-score-num font-display font-semibold text-white">{{ data.score }}</span>
@@ -107,7 +107,7 @@
     -->
     <Modal v-model="modalOpen" size="xl" :title="animeTitle">
       <div class="flex items-center gap-4 pb-4 mb-4 border-b border-border">
-        <template v-if="data.score > 0">
+        <template v-if="hasScore">
           <p class="review-score flex items-end gap-1.5 flex-none">
             <ScoreDiamond class="review-score-glyph size-3 text-cyan-400" />
             <span class="review-score-num review-score-num--modal font-display font-semibold text-white">
@@ -166,6 +166,9 @@ const animeTitle = computed(() =>
     props.data.anime.name_jp,
   ),
 )
+// Written reviews may carry no rating at all — the verdict block is gated on
+// this in both the card and the modal.
+const hasScore = computed(() => props.data.score > 0)
 const animePath = computed(() => `/anime/${props.data.anime.id}`)
 const reviewPath = computed(
   () => `${animePath.value}?ugc=reviews#section-comments`,
