@@ -44,7 +44,7 @@ func buildContentVerifyOnlyRouter(h *handler.ContentVerifyHandler, jwtCfg authz.
 // scraperUserKey.
 func TestContentVerifyRoute_AnonResolvesIPHashVisitor(t *testing.T) {
 	src := &fakeVerifySrc{}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	r := buildContentVerifyOnlyRouter(h, testJWTConfig())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/anime-1/content-verify", nil)
@@ -80,7 +80,7 @@ func TestContentVerifyRoute_AuthedResolvesUIDVisitor(t *testing.T) {
 	}
 
 	src := &fakeVerifySrc{}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	r := buildContentVerifyOnlyRouter(h, cfg)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/anime-1/content-verify", nil)
@@ -101,7 +101,7 @@ func TestContentVerifyRoute_AuthedResolvesUIDVisitor(t *testing.T) {
 // token doesn't reject the request, it just falls through to the anon key.
 func TestContentVerifyRoute_MalformedJWT_StillResolvesAnon(t *testing.T) {
 	src := &fakeVerifySrc{}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	r := buildContentVerifyOnlyRouter(h, testJWTConfig())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/anime-1/content-verify", nil)

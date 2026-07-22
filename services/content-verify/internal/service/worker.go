@@ -141,7 +141,7 @@ func (w *Worker) runLoop(ctx context.Context, i int) {
 }
 
 // tick runs one claim+probe cycle for loop i and reports whether it did any
-// work (probed, persisted a synth verdict, or ran a skip task — a probe that
+// work (probed or ran a skip task — a probe that
 // ended in a provider deferral still counts: real time was spent and the
 // engine has already parked that provider). false means the loop should back
 // off for an interval: it is parked by pressure/demand, the queue is idle,
@@ -204,15 +204,6 @@ func (w *Worker) tick(ctx context.Context, i int) bool {
 	}
 	if unit == nil {
 		w.tickSkip(ctx, *task)
-		return true
-	}
-
-	// Synth units (ae library truth, kodik translation roster): persist the
-	// pre-built verdict as-is, no probe.
-	if unit.Synth != nil {
-		v := *unit.Synth
-		v.ProbedAt = time.Now().UTC()
-		w.persist(ctx, *unit, v, "synth")
 		return true
 	}
 

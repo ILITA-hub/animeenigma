@@ -772,7 +772,15 @@ func main() {
 		verifyURL = "http://content-verify:8101"
 	}
 	verifyClient := capability.NewVerifyClient(verifyURL, verifyEnabled)
-	contentVerifyHandler := handler.NewContentVerifyHandler(verifyClient, redisCache, log)
+
+	// capSvc is constructed BEFORE the content-verify feed handler: that handler
+	// now reads the capability report to synthesize the ae/kodik verdicts at read
+	// time (content-verify no longer stores them — only their skip lane). All of
+	// capSvc's own deps (catalog/health/library/playability/verify) are built above.
+	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient, verifyClient)
+	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
+
+	contentVerifyHandler := handler.NewContentVerifyHandler(verifyClient, capSvc, redisCache, log)
 
 	// Phase 18 (UX-34) — skip-intro/skip-outro proxy of aniskip.com.
 	// Stateless handler with embedded http.Client + shared redis cache.
@@ -780,9 +788,6 @@ func main() {
 	// detected-skip-window blend source; its own `enabled` flag (above) is
 	// the single kill switch for both the capability blend and this one.
 	skipTimesHandler := handler.NewSkipTimesHandler(redisCache, log, verifyClient)
-
-	capSvc := capability.NewService(db.DB, capability.NewScraperHealth(catalogService), catalogService, redisCache, log, aeLibraryAdapter{r: libraryResolver}, playabilityClient, verifyClient)
-	capabilitiesHandler := handler.NewCapabilitiesHandler(capSvc, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("catalog")

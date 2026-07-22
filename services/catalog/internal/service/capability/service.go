@@ -204,21 +204,33 @@ func (s *Service) buildFamilies(ctx context.Context, animeID string) ([]domain.S
 	// GET /{animeId}/content-verify passthrough (handler/content_verify.go) is
 	// the live channel that keeps the FE fresh between capability rebuilds
 	// (spec §4-5).
+	//
+	// The ae/kodik verdicts are KNOWN TRUTH synthesized from this very report
+	// (content-verify no longer stores them); every OTHER provider's rollup
+	// comes from the content-verify store. Synth is independent of content-verify
+	// availability, so ae/kodik surface verified even when the store is down/off.
+	// Synth OVERRIDES the store for ae/kodik (drops any stale store entry during
+	// migration); the store keeps every other provider.
+	sums := map[string]domain.VerifySummary{}
 	if s.verify != nil {
-		if sums := s.verify.Summaries(ctx, animeID); len(sums) > 0 {
-			for fi := range families {
-				for pi := range families[fi].Providers {
-					if sum, ok := sums[families[fi].Providers[pi].Provider]; ok {
-						v := sum
-						families[fi].Providers[pi].Verify = &v
-						// Episodes-ready backfill: native feed-time counts (kodik/
-						// hanime/ae live lists) win; the probe-time count fills the
-						// providers the feed can't enumerate in-band (EN scrapers,
-						// animejoy legs — browser resolves take 45-90s).
-						if families[fi].Providers[pi].Episodes == 0 {
-							families[fi].Providers[pi].Episodes = v.Episodes
-						}
-					}
+		if stored := s.verify.Summaries(ctx, animeID); stored != nil {
+			sums = stored
+		}
+	}
+	for p, syn := range SynthSummaries(domain.CapabilityReport{AnimeID: animeID, Families: families}) {
+		sums[p] = syn
+	}
+	for fi := range families {
+		for pi := range families[fi].Providers {
+			if sum, ok := sums[families[fi].Providers[pi].Provider]; ok {
+				v := sum
+				families[fi].Providers[pi].Verify = &v
+				// Episodes-ready backfill: native feed-time counts (kodik/
+				// hanime/ae live lists) win; the probe-time count fills the
+				// providers the feed can't enumerate in-band (EN scrapers,
+				// animejoy legs — browser resolves take 45-90s).
+				if families[fi].Providers[pi].Episodes == 0 {
+					families[fi].Providers[pi].Episodes = v.Episodes
 				}
 			}
 		}

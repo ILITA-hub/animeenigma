@@ -110,12 +110,12 @@ func (e *Engine) unavailable(ctx context.Context, animeID, provider string) bool
 }
 
 // filterAvailableUnits drops verify units whose provider is currently
-// unavailable. Synth units pass through — they persist provider-native
-// metadata without probing anything.
+// unavailable. Every remaining unit is a real probe (ae/kodik known-truth
+// verdicts are synthesized at read time in catalog, never enumerated here).
 func (e *Engine) filterAvailableUnits(ctx context.Context, units []Unit) []Unit {
 	out := units[:0:0]
 	for _, u := range units {
-		if u.Synth == nil && e.unavailable(ctx, u.AnimeID, u.Provider) {
+		if e.unavailable(ctx, u.AnimeID, u.Provider) {
 			continue
 		}
 		out = append(out, u)

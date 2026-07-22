@@ -5,7 +5,6 @@ package queue
 import (
 	"context"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -28,12 +27,6 @@ type Unit struct {
 	Episode   int    // sample episode (latest available on the provider)
 	Episodes  int    // episodes ready on the provider for this unit; 0 = unknown
 	EpisodeID string // scraper episode id; "" for kodik/animejoy
-	// Synth: non-nil → persist this verdict as-is, no probe. Used where
-	// provider-native metadata already answers with high confidence: ae
-	// (library-ingest audio lang) and kodik (its own translation roster —
-	// voice = RU dub, subtitles = original audio + burned RU subs), so the
-	// throttled probe budget is spent only where the answer is unknown.
-	Synth     *domain.UnitVerdict
 	StateRank int  // active=0 recovering=1 degraded=2 — probe order
 	Band      Band // priority band this unit was claimed from (for metric labelling)
 }
@@ -135,24 +128,20 @@ func EnumerateAllWith(ctx context.Context, c *catalogclient.Client, animeID stri
 		rank := stateRank(pc.State)
 		switch {
 		case pc.Group == "firstparty":
-			// ae has no episode list in the capabilities pass (only a single
-			// synth unit above) — v1 skips skip-unit enumeration here and
-			// relies on the AniSkip fallback instead.
-			lang := pc.Lang
-			if lang == "" {
-				lang = "ja"
-			}
-			key := domain.UnitKey{Track: "default"}
-			units = append(units, Unit{AnimeID: animeID, Provider: pc.Provider,
-				Key: key, StateRank: rank,
-				Synth: &domain.UnitVerdict{Key: key, Status: domain.StatusVerified,
-					Audio: &domain.AudioVerdict{Lang: lang, Confidence: 1.0, Verified: true}}})
+			// ae (self-hosted library) audio lang is known truth, not a probe —
+			// content-verify no longer enumerates or stores it. The catalog
+			// verify-merge layer synthesizes the ae verdict at read time from the
+			// capability feed's lang, so no queue slot or compute is spent here.
+			continue
 
 		case pc.Provider == "kodik":
 			// Kodik is never probed (owner decision 2026-07-17): its own
-			// translation roster is the high-confidence truth. voice = RU dub;
-			// subtitles = original audio + burned-in RU subs (RawAudio, not a
-			// language guess — stays correct for non-JA originals).
+			// translation roster is the high-confidence truth (voice = RU dub;
+			// subtitles = original audio + burned-in RU subs). Those verdicts are
+			// synthesized at read time by the catalog verify-merge layer from the
+			// capability feed — content-verify no longer stores them. We still
+			// walk the roster here to seed the OP/ED skip lane, which IS probed
+			// (skip offsets are not known truth).
 			translations, err := c.KodikTranslations(ctx, animeID)
 			if err != nil {
 				logSkip(log, animeID, pc.Provider, "kodik translations fetch failed", err)
@@ -160,20 +149,6 @@ func EnumerateAllWith(ctx context.Context, c *catalogclient.Client, animeID stri
 			}
 			for _, tr := range translations {
 				ep := maxInt(tr.EpisodesCount, 1)
-				if tr.Type == "subtitles" {
-					key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "sub"}
-					units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-						Key: key, Episode: ep, Episodes: ep, StateRank: rank,
-						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
-							RawAudio: true,
-							Hardsub:  &domain.HardsubVerdict{Present: true, Verified: true, Lang: "ru", Confidence: 1.0}}})
-				} else {
-					key := domain.UnitKey{Team: strconv.Itoa(tr.ID), Category: "dub"}
-					units = append(units, Unit{AnimeID: animeID, Provider: "kodik",
-						Key: key, Episode: ep, Episodes: ep, StateRank: rank,
-						Synth: &domain.UnitVerdict{Key: key, Episode: ep, Status: domain.StatusVerified,
-							Audio: &domain.AudioVerdict{Lang: "ru", Confidence: 1.0, Verified: true}}})
-				}
 				for episode := 1; episode <= ep; episode++ {
 					skips = append(skips, SkipUnit{AnimeID: animeID, Provider: "kodik",
 						Team: tr.Title, TeamID: tr.ID, Episode: episode, StateRank: rank})

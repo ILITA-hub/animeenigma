@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -74,8 +73,10 @@ func TestEnumerateUnits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// gogoanime: 2 servers → 2 units (episode = max number 28, EpisodeID ep-28);
-	// kodik: 2 translations → 2 units; ae: 1 synth unit; hanime (adult): skipped.
+	// Verify units are real probes ONLY. gogoanime: 2 servers → 2 units
+	// (episode = max number 28, EpisodeID ep-28). kodik + ae are known-truth:
+	// they are synthesized at read time in catalog, never enumerated here, so
+	// they must contribute ZERO verify units. hanime (adult): skipped.
 	var gogo, kodik, ae, adult int
 	for _, u := range units {
 		switch u.Provider {
@@ -89,37 +90,14 @@ func TestEnumerateUnits(t *testing.T) {
 			}
 		case "kodik":
 			kodik++
-			if u.Key.Team == "" {
-				t.Fatalf("kodik unit needs team key: %+v", u)
-			}
-			if u.Episodes != 28 { // per-team episodes_count from the roster
-				t.Fatalf("kodik unit episodes-ready = %d, want 28: %+v", u.Episodes, u)
-			}
-			// Kodik is synth-only (owner decision 2026-07-17): roster truth.
-			if u.Synth == nil || u.Synth.Status != domain.StatusVerified {
-				t.Fatalf("kodik unit must carry a verified synth verdict: %+v", u)
-			}
-			switch u.Key.Category {
-			case "dub":
-				if u.Synth.Audio == nil || u.Synth.Audio.Lang != "ru" || !u.Synth.Audio.Verified {
-					t.Fatalf("kodik voice synth must claim verified ru dub: %+v", u.Synth)
-				}
-			case "sub":
-				if !u.Synth.RawAudio || u.Synth.Hardsub == nil || u.Synth.Hardsub.Lang != "ru" || !u.Synth.Hardsub.Verified {
-					t.Fatalf("kodik subtitles synth must claim raw audio + burned ru: %+v", u.Synth)
-				}
-			}
 		case "ae":
 			ae++
-			if u.Synth == nil || u.Synth.Audio == nil || u.Synth.Audio.Lang != "en" {
-				t.Fatalf("ae synth lang: %+v", u)
-			}
 		case "hanime":
 			adult++
 		}
 	}
-	if gogo != 2 || kodik != 2 || ae != 1 || adult != 0 {
-		t.Fatalf("unit counts gogo=%d kodik=%d ae=%d adult=%d", gogo, kodik, ae, adult)
+	if gogo != 2 || kodik != 0 || ae != 0 || adult != 0 {
+		t.Fatalf("verify unit counts gogo=%d kodik=%d ae=%d adult=%d (kodik/ae must be 0 — synthesized at read time)", gogo, kodik, ae, adult)
 	}
 }
 

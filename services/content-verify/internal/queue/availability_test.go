@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/catalogclient"
-	"github.com/ILITA-hub/animeenigma/services/content-verify/internal/domain"
 )
 
 // availabilityFixture serves capabilities with TWO scraper providers where
@@ -159,21 +158,5 @@ func TestRosterFetchFailureFailsOpen(t *testing.T) {
 
 	if e.providerDown(context.Background(), "miruro") {
 		t.Fatal("roster outage must fail open (no provider gated)")
-	}
-}
-
-// Synth units bypass the gate — they persist provider-native metadata
-// without probing anything.
-func TestSynthUnitsBypassGate(t *testing.T) {
-	t.Parallel()
-	f := newAvailabilityFixture(t)
-	e := f.engine
-	e.Defer("o1", "kodik", time.Hour)
-
-	units := []Unit{{AnimeID: "o1", Provider: "kodik",
-		Synth: &domain.UnitVerdict{Status: domain.StatusVerified}}}
-	got := e.filterAvailableUnits(context.Background(), units)
-	if len(got) != 1 {
-		t.Fatalf("synth unit must bypass the availability gate; got %+v", got)
 	}
 }

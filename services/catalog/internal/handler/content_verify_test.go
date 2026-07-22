@@ -11,9 +11,22 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/handler"
 	"github.com/go-chi/chi/v5"
 )
+
+// fakeReportSrc stubs the ContentVerifyHandler's verifyReportSource dependency:
+// it returns a fixed capability report the handler synthesizes ae/kodik verdicts
+// from at read time.
+type fakeReportSrc struct {
+	report domain.CapabilityReport
+	err    error
+}
+
+func (f fakeReportSrc) Report(_ context.Context, _ string) (domain.CapabilityReport, error) {
+	return f.report, f.err
+}
 
 // fakeVerifySrc is a stub for the ContentVerifyHandler's verifyProxySource
 // dependency. It records every Hint call and returns whatever raw/err are
@@ -102,7 +115,7 @@ func newContentVerifyRouter(h *handler.ContentVerifyHandler) *chi.Mux {
 // carries a default RemoteAddr).
 func TestContentVerifyHandler_OK(t *testing.T) {
 	src := &fakeVerifySrc{raw: json.RawMessage(`{"anime_id":"abc","providers":[{"provider":"gogoanime","summary":{"status":"verified","raw":true,"dub_langs":[],"hardsub_langs":[]},"units":[]}]}`)}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	r := newContentVerifyRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/abc/content-verify", nil)
@@ -145,7 +158,7 @@ func TestContentVerifyHandler_OK(t *testing.T) {
 // error — the FE must treat this identically to "nothing verified yet".
 func TestContentVerifyHandler_SrcError_DegradesToEmpty(t *testing.T) {
 	src := &fakeVerifySrc{err: errors.New("content-verify unreachable")}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	r := newContentVerifyRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/xyz/content-verify", nil)
@@ -174,11 +187,104 @@ func TestContentVerifyHandler_SrcError_DegradesToEmpty(t *testing.T) {
 	}
 }
 
+// TestContentVerifyHandler_MergesSynthAndDropsStale asserts the feed handler
+// merges the ae/kodik verdicts synthesized from the capability report into the
+// content-verify passthrough: a real gogoanime entry survives verbatim, a stale
+// kodik entry from the store is dropped, and the read-time ae + kodik synth are
+// appended.
+func TestContentVerifyHandler_MergesSynthAndDropsStale(t *testing.T) {
+	src := &fakeVerifySrc{raw: json.RawMessage(`{"anime_id":"m1","providers":[` +
+		`{"provider":"gogoanime","summary":{"status":"verified","raw":true,"dub_langs":[],"hardsub_langs":[]},"units":[]},` +
+		`{"provider":"kodik","summary":{"status":"unverified","raw":false,"dub_langs":[],"hardsub_langs":[]},"units":[]}` +
+		`]}`)}
+	reports := fakeReportSrc{report: domain.CapabilityReport{AnimeID: "m1", Families: []domain.SourceFamily{
+		{Family: "aeProvider", Providers: []domain.ProviderCap{{Provider: "ae", Group: "firstparty", State: "active", Lang: "en"}}},
+		{Family: "others", Providers: []domain.ProviderCap{{Provider: "kodik", Group: "ru", State: "active",
+			Variants: []domain.Variant{{Category: "dub", Team: &domain.Team{ID: "5", Name: "AniDub"}}}}}},
+	}}}
+	h := handler.NewContentVerifyHandler(src, reports, nil, nil)
+	r := newContentVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/anime/m1/content-verify", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			AnimeID   string `json:"anime_id"`
+			Providers []struct {
+				Provider string `json:"provider"`
+				Units    []struct {
+					Audio *struct {
+						Lang string `json:"lang"`
+					} `json:"audio"`
+				} `json:"units"`
+			} `json:"providers"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (body=%s)", err, rec.Body.String())
+	}
+	counts := map[string]int{}
+	var aeLang string
+	for _, p := range body.Data.Providers {
+		counts[p.Provider]++
+		if p.Provider == "ae" && len(p.Units) == 1 && p.Units[0].Audio != nil {
+			aeLang = p.Units[0].Audio.Lang
+		}
+	}
+	if counts["gogoanime"] != 1 {
+		t.Fatalf("expected gogoanime preserved, counts=%+v", counts)
+	}
+	if counts["kodik"] != 1 {
+		t.Fatalf("expected exactly one kodik (stale dropped, synth appended), counts=%+v", counts)
+	}
+	if counts["ae"] != 1 || aeLang != "en" {
+		t.Fatalf("expected ae synth with en audio, counts=%+v aeLang=%q", counts, aeLang)
+	}
+}
+
+// TestContentVerifyHandler_SrcError_StillSynthsAeKodik asserts that when
+// content-verify is unreachable, the ae/kodik synth STILL surfaces (it is known
+// truth from the capability report, independent of content-verify availability).
+func TestContentVerifyHandler_SrcError_StillSynthsAeKodik(t *testing.T) {
+	src := &fakeVerifySrc{err: errors.New("content-verify unreachable")}
+	reports := fakeReportSrc{report: domain.CapabilityReport{AnimeID: "d1", Families: []domain.SourceFamily{
+		{Family: "aeProvider", Providers: []domain.ProviderCap{{Provider: "ae", Group: "firstparty", State: "active", Lang: "ru"}}},
+	}}}
+	h := handler.NewContentVerifyHandler(src, reports, nil, nil)
+	r := newContentVerifyRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/anime/d1/content-verify", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Providers []struct {
+				Provider string `json:"provider"`
+			} `json:"providers"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Data.Providers) != 1 || body.Data.Providers[0].Provider != "ae" {
+		t.Fatalf("expected ae synth even on content-verify failure, got %+v", body.Data.Providers)
+	}
+}
+
 // TestContentVerifyHandler_MissingAnimeID_400 asserts the animeId path param
 // is required.
 func TestContentVerifyHandler_MissingAnimeID_400(t *testing.T) {
 	src := &fakeVerifySrc{}
-	h := handler.NewContentVerifyHandler(src, nil, nil)
+	h := handler.NewContentVerifyHandler(src, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/anime//content-verify", nil)
 	// Drive Get directly with an empty chi URL param (no router match needed).
@@ -203,7 +309,7 @@ func TestContentVerifyHandler_CacheHit_SkipsFetchButStillHints(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := &fakeVerifySrc{err: errors.New("must not be called on a cache hit")}
-	h := handler.NewContentVerifyHandler(src, c, nil)
+	h := handler.NewContentVerifyHandler(src, nil, c, nil)
 	r := newContentVerifyRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/anime/cached-anime/content-verify", nil)
