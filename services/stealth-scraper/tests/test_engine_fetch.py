@@ -236,6 +236,35 @@ class TestPoisonFence(unittest.TestCase):
         self.assertNotIn(sess.id, eng._sessions, "wedged session must be closed")
         self.assertEqual(sess.profile.status, "crashed", "slot marked crashed for the reaper")
 
+    def test_poison_max_defers_teardown_while_session_contended(self):
+        """Reproduces the live 2026-07-22 animepahe incident: the warm session is
+        SHARED (keyed by provider+origin), so several concurrent /fetch calls hold
+        it at once (in_use > 1). If one of them hits poison_max and force-closes
+        the page, every OTHER concurrent fetch still awaiting page.evaluate() on
+        that same page blows up with the exact same 'Target closed' error this
+        fence exists to detect — turning one transient strike into a cascading
+        failure across the whole in-flight batch. While contended, the strike
+        must surface for THIS caller only; the page must survive for siblings."""
+        from app.engine import ProviderWedged
+        eng, sess, page = _engine_poison_session(poison_max=2)
+        sess.in_use = 2  # this call + one concurrent sibling still fetching
+        with self.assertRaises(Exception):
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))   # crash_count=1
+        with self.assertRaises(Exception) as ctx:
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))   # crash_count=2, contended
+        self.assertNotIsInstance(
+            ctx.exception, ProviderWedged,
+            "must not wedge/teardown while a concurrent sibling still holds the page",
+        )
+        self.assertIn(sess.id, eng._sessions, "contended session must survive for the sibling")
+        self.assertNotEqual(sess.profile.status, "crashed", "profile must not be torn down mid-use")
+        # Once the sibling releases (in_use back to 1, i.e. only this caller),
+        # the NEXT strike is free to finalize the teardown as before.
+        sess.in_use = 1
+        with self.assertRaises(ProviderWedged):
+            run(eng._in_page_fetch(sess, "https://9anime.me.uk/x"))   # crash_count=3 -> wedge
+        self.assertNotIn(sess.id, eng._sessions, "uncontended wedge must still close the session")
+
 
 class _DeadProbePage:
     """Liveness probe `()=>1` raises (page is dead); used to assert the warm-

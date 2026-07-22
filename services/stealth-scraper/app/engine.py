@@ -1459,7 +1459,18 @@ class CamoufoxEngine:
         burns a pool slot). Instead we count the crash on the session; below
         cfg.poison_max we surface the error so the caller fails over once; AT
         poison_max we tear the profile down (mark it crashed for the reaper) and
-        raise ProviderWedged so the Go breaker can trip the provider."""
+        raise ProviderWedged so the Go breaker can trip the provider — but ONLY
+        if this caller is the session's sole holder (session.in_use <= 1). The
+        warm session is SHARED across concurrent fetches (keyed by provider+
+        origin, see _warm_fetch_session): closing the page while a sibling
+        fetch still has it in flight hands that sibling the exact same "Target
+        closed" error, cascading one transient strike into a batch-wide outage
+        (live on animepahe 2026-07-22 — 5 concurrent /fetch calls sharing one
+        warm session, one crash-triggered aclose_session took two others down
+        with it). While contended, surface the strike for this caller only and
+        leave the page for its siblings; a later, uncontended strike (or the
+        liveness probe on the next warm-session reuse) finalizes the teardown
+        if the session is genuinely dead."""
         page = session.page
         if page is None:
             raise SessionGone(session.id)
@@ -1476,7 +1487,7 @@ class CamoufoxEngine:
             ):
                 session.crash_count += 1
                 session.last_error = msg
-                if session.crash_count >= self.cfg.poison_max:
+                if session.crash_count >= self.cfg.poison_max and session.in_use <= 1:
                     profile = session.profile
                     # _teardown(reason='crash') marks the slot crashed with
                     # error=profile.last_error, but the real crash message lives
@@ -1489,8 +1500,9 @@ class CamoufoxEngine:
                         f"warm session poisoned ({session.crash_count} strikes): {msg}",
                         provider=session.provider,
                     ) from exc
-                # Below the limit: surface the crash so the caller fails over
-                # ONCE; the session stays for one more strike (no nav-retry).
+                # Below the limit, or contended by a concurrent sibling:
+                # surface the crash so the caller fails over ONCE; the session
+                # stays (no nav-retry, no forced close).
                 raise
             raise
         status_s, ctype, final_url, hdrs_enc, b64 = raw.split("|", 4)
