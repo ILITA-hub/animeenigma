@@ -24,12 +24,12 @@ describe('projectOccurrences', () => {
     expect(occ[0].date.toISOString()).toBe('2026-06-08T17:00:00.000Z')
   })
 
-  it('projects future weeks with incrementing episode numbers', () => {
+  it('does not invent weekly dates after the confirmed next airing', () => {
     const occ = projectOccurrences(anime(), d('2026-06-08T00:00:00Z'), d('2026-06-23T00:00:00Z'))
-    expect(occ.map(o => o.episode)).toEqual([10, 11, 12])
+    expect(occ.map(o => o.episode)).toEqual([10])
   })
 
-  it('caps projection at episodes_count (no episodes past the finale)', () => {
+  it('does not show a confirmed episode past episodes_count', () => {
     const occ = projectOccurrences(anime({ episodes_aired: 11, episodes_count: 12 }), d('2026-06-08T00:00:00Z'), d('2026-07-06T00:00:00Z'))
     expect(occ.map(o => o.episode)).toEqual([12])
   })
@@ -48,18 +48,18 @@ describe('projectOccurrences', () => {
     expect(occ).toEqual([])
   })
 
-  it('projects forward from a recently stale anchor', () => {
+  it('does not project a stale anchor into a later week', () => {
     const occ = projectOccurrences(
       anime({ next_episode_at: '2026-07-13T17:00:00Z', episodes_aired: 9 }),
       d('2026-07-20T00:00:00Z'),
       d('2026-07-27T00:00:00Z'),
     )
-    expect(occ.map(o => o.episode)).toEqual([11])
+    expect(occ).toEqual([])
   })
 
-  it('treats episodes_count <= 0 as unknown (no upper cap)', () => {
+  it('allows the confirmed next episode when episodes_count is unknown', () => {
     const occ = projectOccurrences(anime({ episodes_count: 0 }), d('2026-06-08T00:00:00Z'), d('2026-06-23T00:00:00Z'))
-    expect(occ.map(o => o.episode)).toEqual([10, 11, 12])
+    expect(occ.map(o => o.episode)).toEqual([10])
   })
 
   it('returns [] when next_episode_at is missing or invalid', () => {

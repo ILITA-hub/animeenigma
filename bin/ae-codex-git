@@ -36,11 +36,17 @@ require_animeenigma_repo() {
 }
 
 require_codex_worktree() {
-  local root branch
+  local root branch rebase_head
   require_animeenigma_repo
   root="$(current_root)"
   [ "$root" != "$SHARED" ] || die "refusing to mutate the shared main mirror"
   branch="$(git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  if [ -z "$branch" ]; then
+    rebase_head="$(git -C "$root" rev-parse --git-path rebase-merge/head-name)"
+    if [ -f "$rebase_head" ]; then
+      branch="$(sed 's#^refs/heads/##' "$rebase_head")"
+    fi
+  fi
   [[ "$branch" == codex/* ]] || die "branch must be namespaced under codex/"
 }
 
