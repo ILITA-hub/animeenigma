@@ -28,7 +28,13 @@ const AllSignalsQuery = `{__name__=~"ae:.+"}`
 // sample's own scrape/eval time, so the difference is the true staleness even
 // when rule evaluation has lagged (a recording rule that pre-computed the age
 // would itself go stale under that same lag, masking it).
-const sampleAgeQuery = `time() - timestamp(ae:pressure_score:preview)`
+//
+// The scalar() wrapper is REQUIRED: timestamp() returns an instant VECTOR, so
+// `time() - timestamp(...)` is a scalar-minus-vector that evaluates to a vector
+// — which queryScalar cannot parse (it would leave the age unknown and the
+// staleness guard silently disabled). scalar() collapses the single-element
+// vector to a true Prometheus scalar.
+const sampleAgeQuery = `scalar(time() - timestamp(ae:pressure_score:preview))`
 
 const (
 	breachElevatedName = "ae:pressure_breach:elevated"

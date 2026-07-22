@@ -42,7 +42,11 @@ func serve(t *testing.T, ageVal string) *httptest.Server {
 			_, _ = w.Write([]byte(vectorResponse()))
 			return
 		}
-		assert.True(t, strings.Contains(q, "timestamp("), "non-vector query is the age sub-query")
+		// The age sub-query MUST be scalar()-wrapped — timestamp() is a vector,
+		// so a bare `time() - timestamp(...)` returns a vector queryScalar can't
+		// parse (regression guard: staleness would silently go permanently unknown).
+		assert.True(t, strings.HasPrefix(q, "scalar(") && strings.Contains(q, "timestamp("),
+			"age sub-query must be scalar()-wrapped, got %q", q)
 		_, _ = w.Write([]byte(scalarResp(ageVal)))
 	}))
 }
