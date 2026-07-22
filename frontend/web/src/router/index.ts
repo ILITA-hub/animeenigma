@@ -216,6 +216,14 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'tips.title' }
   },
   {
+    // Browser-only Zundamon TTS studio — deliberately hidden from normal
+    // navigation and discovered through the secret-feature roulette.
+    path: '/zundamon',
+    name: 'zundamon-tts',
+    component: () => import('@/views/ZundamonTts.vue'),
+    meta: { titleKey: 'zundamon.title' }
+  },
+  {
     // Admin dashboard landing — Vue replacement for the old hardcoded gateway
     // HTML page. Lists every admin tool as a styled card. Non-strict matching
     // covers both `/admin` and `/admin/`. Auth enforced by the guard below

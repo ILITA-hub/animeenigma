@@ -93,6 +93,11 @@ describe('pickSecretFeature — pool is store.roulette (server-resolved), not cl
     store.roulette = ['recommendations']
     expect(pickSecretFeature('/')?.to).toBe('/recs')
   })
+
+  it('routes the Zundamon voice lab to its hidden browser-only page', () => {
+    store.roulette = ['zundamon-tts']
+    expect(pickSecretFeature('/')?.to).toBe('/zundamon')
+  })
 })
 
 describe('roulettePoolAvailable — footer button dead-affordance guard (P4 Task 3 review fix)', () => {

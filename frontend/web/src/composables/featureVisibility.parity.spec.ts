@@ -34,7 +34,7 @@ import { pickSecretFeature, roulettePoolAvailable, _resetSecretFeatureForTests }
  * outcome regardless of the current auth identity.
  */
 
-const ALL_TWELVE_KEYS = [
+const ALL_THIRTEEN_KEYS = [
   'fanfic',
   'profile-wall',
   'gacha',
@@ -47,6 +47,7 @@ const ALL_TWELVE_KEYS = [
   'my-feedback',
   'following',
   'recommendations',
+  'zundamon-tts',
 ]
 
 function seed(
@@ -78,7 +79,7 @@ describe('feature-visibility day-one parity (D2)', () => {
     store = useFeatureVisibilityStore()
   })
 
-  it('admin — sees all 12 keys; roulette pool is exactly the 10 roulette-enabled keys (gacha + profile-wall excluded)', () => {
+  it('admin — sees all 13 keys; roulette pool is exactly the 11 roulette-enabled keys (gacha + profile-wall excluded)', () => {
     const roulette = [
       'anidle',
       'status',
@@ -90,8 +91,9 @@ describe('feature-visibility day-one parity (D2)', () => {
       'my-feedback',
       'following',
       'recommendations',
+      'zundamon-tts',
     ]
-    seed(store, ALL_TWELVE_KEYS, roulette)
+    seed(store, ALL_THIRTEEN_KEYS, roulette)
 
     expect(useFeatureVisible('fanfic').value).toBe(true)
     expect(useFeatureVisible('gacha').value).toBe(true)
@@ -107,8 +109,8 @@ describe('feature-visibility day-one parity (D2)', () => {
     expect(keys.has('profile-wall')).toBe(false)
   })
 
-  it('user — sees the 8 public/authenticated keys; fanfic/gacha/profile-wall stay hidden; pool = those 8 only', () => {
-    const visible = ['anidle', 'status', 'themes', 'game', 'downloads', 'my-feedback', 'following', 'recommendations']
+  it('user — sees the 9 public/authenticated keys; fanfic/gacha/profile-wall stay hidden; pool = those 9 only', () => {
+    const visible = ['anidle', 'status', 'themes', 'game', 'downloads', 'my-feedback', 'following', 'recommendations', 'zundamon-tts']
     seed(store, visible, visible)
 
     expect(useFeatureVisible('fanfic').value).toBe(false)
@@ -123,8 +125,8 @@ describe('feature-visibility day-one parity (D2)', () => {
     expect(keys.has('showcase-editor')).toBe(false)
   })
 
-  it('anon — sees only the 5 everyone keys; fanfic/gacha/profile-wall stay hidden; pool = those 5 only (no my-feedback, no showcase-editor — the parity fix)', () => {
-    const visible = ['anidle', 'status', 'themes', 'game', 'downloads']
+  it('anon — sees only the 6 everyone keys; fanfic/gacha/profile-wall stay hidden; pool = those 6 only (no my-feedback, no showcase-editor — the parity fix)', () => {
+    const visible = ['anidle', 'status', 'themes', 'game', 'downloads', 'zundamon-tts']
     seed(store, visible, visible)
 
     expect(useFeatureVisible('fanfic').value).toBe(false)

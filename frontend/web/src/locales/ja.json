@@ -1545,7 +1545,8 @@
         "fanfic": "ファンフィックエンジン",
         "tips": "ヒント＆ショートカット",
         "following": "フォロー中",
-        "recommendations": "マイおすすめ"
+        "recommendations": "マイおすすめ",
+        "zundamonTts": "ずんだもん音声ラボ"
       }
     },
     "collections": {
@@ -1824,6 +1825,34 @@
         "body": "デスクトップのシアターモードはページを残したままプレイヤーを広げます。全画面はどこでも使え、PiPは他のウィンドウの上に動画を表示します。"
       }
     }
+  },
+  "zundamon": {
+    "eyebrow": "秘密の音声ラボ",
+    "title": "ずんだもん音声ラボ",
+    "subtitle": "セリフと話し方を設定して、ブラウザの音声エンジンですぐに再生できます。",
+    "imageAlt": "スタジオマイクの前で笑顔を見せるずんだもん",
+    "portraitTitle": "ずんだもん、マイクオン",
+    "portraitCaption": "もう一言いつでもどうぞなのだ！",
+    "studioTitle": "ずんだもんに何を話してもらう？",
+    "studioHint": "端末に日本語音声がある場合は先頭に表示します。利用できる音声はブラウザとOSによって異なります。",
+    "unsupportedTitle": "音声合成を利用できません",
+    "unsupportedBody": "このブラウザはWeb Speech APIに対応していません。最新版のChrome、Edge、Safariをお試しください。",
+    "textLabel": "読み上げるセリフ",
+    "counter": "{count}/{max}",
+    "placeholder": "ずんだもんに話してほしいことを入力…",
+    "sample": "こんにちはなのだ！今日はどんなアニメを見るのだ？",
+    "voiceLabel": "ブラウザ音声",
+    "browserDefault": "ブラウザのデフォルト音声",
+    "rate": "速さ",
+    "pitch": "高さ",
+    "speak": "読み上げる",
+    "restart": "もう一度",
+    "stop": "停止",
+    "statusSpeaking": "ずんだもんが話しています…",
+    "statusDone": "できたのだ！",
+    "statusError": "ブラウザ音声でこのセリフを再生できませんでした。",
+    "localTitle": "クライアント側だけで処理",
+    "localBody": "AnimeEnigmaへテキストや生成音声は送信されません。音声はブラウザまたはOS内蔵の音声エンジンが生成します。"
   },
   "tips": {
     "title": "秘密のヒント＆ショートカット",

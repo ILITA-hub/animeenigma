@@ -182,6 +182,7 @@ func SeedFlags() []FeatureFlag {
 		everyone("game", "Game rooms"),
 		everyone("downloads", "Downloads"),
 		everyone("tips", "Tips & hotkeys"),
+		everyone("zundamon-tts", "Zundamon voice lab"),
 		{Key: "showcase-editor", Roles: StringList{RoleAdmin}, Roulette: true, FailSafe: "admin", Label: "Showcase editor"},
 		{Key: "my-feedback", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "My feedback"},
 		{Key: "following", Roles: StringList{RoleUser, RoleAdmin}, Roulette: true, FailSafe: "everyone", Label: "Following"},

@@ -39,6 +39,7 @@ func TestSeedDefaults_isIdempotent_andMasterOn(t *testing.T) {
 	require.True(t, rs.Roulette["my-feedback"])
 	require.True(t, rs.Roulette["following"])
 	require.True(t, rs.Roulette["recommendations"])
+	require.True(t, rs.Roulette["zundamon-tts"])
 }
 
 func TestResolveForUser_visibleAndRoulette(t *testing.T) {
@@ -58,6 +59,7 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	require.Contains(t, mine.Visible, "recommendations")
 	require.Contains(t, mine.Roulette, "recommendations")
 	require.Contains(t, mine.Roulette, "anidle")
+	require.Contains(t, mine.Roulette, "zundamon-tts")
 	require.NotContains(t, mine.Roulette, "gacha") // roulette-OFF
 	require.True(t, mine.RouletteEnabled)
 
@@ -80,6 +82,7 @@ func TestResolveForUser_visibleAndRoulette(t *testing.T) {
 	require.NotContains(t, anonMine.Visible, "showcase-editor")
 	require.NotContains(t, anonMine.Visible, "fanfic")
 	require.Contains(t, anonMine.Visible, "anidle")
+	require.Contains(t, anonMine.Visible, "zundamon-tts")
 }
 
 func TestSetFlag_thenAllowUserGetsAccess(t *testing.T) {

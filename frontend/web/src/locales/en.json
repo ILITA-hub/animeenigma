@@ -1545,7 +1545,8 @@
         "fanfic": "Fanfic engine",
         "tips": "Tips & hotkeys",
         "following": "Following",
-        "recommendations": "My recommendations"
+        "recommendations": "My recommendations",
+        "zundamonTts": "Zundamon voice lab"
       }
     },
     "collections": {
@@ -1824,6 +1825,34 @@
         "body": "On desktop, theater mode widens the player without hiding the page. Fullscreen works everywhere, while PiP keeps video above other windows."
       }
     }
+  },
+  "zundamon": {
+    "eyebrow": "Secret voice lab",
+    "title": "Zundamon Voice Lab",
+    "subtitle": "Give Zundamon a line, tune the delivery, and hear it instantly through your browser's own speech engine.",
+    "imageAlt": "Zundamon smiling beside a studio microphone",
+    "portraitTitle": "Zundamon is on the mic",
+    "portraitCaption": "Ready for one more lineなのだ!",
+    "studioTitle": "What should Zundamon say?",
+    "studioHint": "Japanese voices are listed first when your device provides them. Voice availability depends on your browser and operating system.",
+    "unsupportedTitle": "Speech synthesis is unavailable",
+    "unsupportedBody": "This browser does not expose the Web Speech API. Try a current version of Chrome, Edge, or Safari.",
+    "textLabel": "Line to speak",
+    "counter": "{count}/{max}",
+    "placeholder": "Type something for Zundamon…",
+    "sample": "こんにちはなのだ！今日はどんなアニメを見るのだ？",
+    "voiceLabel": "Browser voice",
+    "browserDefault": "Browser default",
+    "rate": "Speed",
+    "pitch": "Pitch",
+    "speak": "Speak",
+    "restart": "Say it again",
+    "stop": "Stop",
+    "statusSpeaking": "Zundamon is speaking…",
+    "statusDone": "Finishedなのだ!",
+    "statusError": "The browser voice could not play this line.",
+    "localTitle": "Client-side only",
+    "localBody": "AnimeEnigma never receives the text or generated audio. Speech is produced by the voice engine built into your browser or operating system."
   },
   "tips": {
     "title": "Secret tips & hotkeys",

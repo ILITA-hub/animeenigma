@@ -22,6 +22,7 @@ export const POLICY_FEATURE_ROUTES: Record<string, string> = {
   'my-feedback': '/my-feedback',
   following: '/following',
   recommendations: '/recs',
+  'zundamon-tts': '/zundamon',
 }
 
 /** Returns the relative route for a feature key, or undefined when the key

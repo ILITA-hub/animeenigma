@@ -30,6 +30,7 @@ export interface SecretFeature {
     | 'tips'
     | 'following'
     | 'recommendations'
+    | 'zundamon-tts'
   /** Navigation target for router.push (also the admin "direct link"). */
   to: RouteLocationRaw
   /** i18n key for the human label shown on the admin management page. */
@@ -98,6 +99,11 @@ export const SECRET_FEATURES: SecretFeature[] = [
     key: 'recommendations',
     to: '/recs',
     labelKey: 'admin.secretFeatures.feature.recommendations',
+  },
+  {
+    key: 'zundamon-tts',
+    to: '/zundamon',
+    labelKey: 'admin.secretFeatures.feature.zundamonTts',
   },
 ]
 
