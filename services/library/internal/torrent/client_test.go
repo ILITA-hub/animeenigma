@@ -5,8 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 // TestNewClient_CreatesDownloadDir verifies that NewClient mkdirs the
@@ -185,4 +189,113 @@ func TestHandle_ProgressBeforeMetadata(t *testing.T) {
 	if id := h.ID(); id == "" {
 		t.Fatal("ID() returned empty string after Add")
 	}
+}
+
+// --- degradation-aware seeding shed ---
+
+// fakeShedChecker is a settable ShedChecker for driving the seed gate's
+// transition logic without a live governor / DegradationWatcher.
+type fakeShedChecker struct{ level atomic.Int32 }
+
+func (f *fakeShedChecker) set(n int)  { f.level.Store(int32(n)) }
+func (f *fakeShedChecker) Level() int { return int(f.level.Load()) }
+
+// TestShouldPauseSeed pins the pure pause decision: pause at Elevated+ (level>=1),
+// seed at Normal (0) and fail open on a negative/nonsense level.
+func TestShouldPauseSeed(t *testing.T) {
+	cases := []struct {
+		level int
+		want  bool
+	}{
+		{-1, false}, // nonsense level fails open (no pause)
+		{0, false},  // Normal: seed
+		{1, true},   // Elevated: pause
+		{2, true},   // Critical: pause
+	}
+	for _, tc := range cases {
+		if got := shouldPauseSeed(tc.level); got != tc.want {
+			t.Errorf("shouldPauseSeed(%d) = %v, want %v", tc.level, got, tc.want)
+		}
+	}
+}
+
+// TestReconcileSeedGate_TransitionsOnly asserts the gate applies Disallow(true)
+// when the level rises to Elevated+ and Allow(false) when it returns to Normal,
+// flips the ae_degradation_shed{subsystem="library_seed"} gauge accordingly, and
+// acts EXACTLY once per transition (never on a steady-state repeat tick). The
+// apply step is injected so the decision + one-shot behavior is asserted without
+// a live anacrolix client.
+func TestReconcileSeedGate_TransitionsOnly(t *testing.T) {
+	shed := &fakeShedChecker{}
+	var applied []bool // records the pause arg of each apply invocation, in order
+	c := &Client{
+		shed:          shed,
+		applySeedGate: func(pause bool) { applied = append(applied, pause) },
+	}
+
+	gauge := func() float64 {
+		return testutil.ToFloat64(gometrics.DegradationShed.WithLabelValues("library_seed"))
+	}
+
+	// Boot at Normal: seedPaused zero-value already means "not paused", so there
+	// is no transition and no apply.
+	c.reconcileSeedGate()
+	c.reconcileSeedGate()
+	if len(applied) != 0 {
+		t.Fatalf("level 0 boot: applied=%v, want no calls", applied)
+	}
+
+	// Escalate to Elevated: exactly one Disallow(true); a repeat tick at the same
+	// level must NOT re-apply.
+	shed.set(1)
+	c.reconcileSeedGate()
+	c.reconcileSeedGate()
+	if want := []bool{true}; !equalBools(applied, want) {
+		t.Fatalf("after escalate: applied=%v, want %v", applied, want)
+	}
+	if g := gauge(); g != 1 {
+		t.Fatalf("shed gauge = %v, want 1 (paused)", g)
+	}
+
+	// Critical (2) is still "pause" -- no new transition, no new apply.
+	shed.set(2)
+	c.reconcileSeedGate()
+	if want := []bool{true}; !equalBools(applied, want) {
+		t.Fatalf("level 1->2 (still paused): applied=%v, want %v", applied, want)
+	}
+
+	// Recover to Normal: exactly one Allow(false); gauge back to 0.
+	shed.set(0)
+	c.reconcileSeedGate()
+	c.reconcileSeedGate()
+	if want := []bool{true, false}; !equalBools(applied, want) {
+		t.Fatalf("after recover: applied=%v, want %v", applied, want)
+	}
+	if g := gauge(); g != 0 {
+		t.Fatalf("shed gauge = %v, want 0 (normal)", g)
+	}
+}
+
+// TestReconcileSeedGate_NilCheckerFailsOpen — a Client with no ShedChecker
+// (governor down/undeployed) must never pause seeding.
+func TestReconcileSeedGate_NilCheckerFailsOpen(t *testing.T) {
+	var applied []bool
+	c := &Client{applySeedGate: func(pause bool) { applied = append(applied, pause) }}
+	c.reconcileSeedGate()
+	c.reconcileSeedGate()
+	if len(applied) != 0 {
+		t.Fatalf("nil checker: applied=%v, want no calls (fail-open)", applied)
+	}
+}
+
+func equalBools(a, b []bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

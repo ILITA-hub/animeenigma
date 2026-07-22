@@ -1,0 +1,14 @@
+{
+  "_comment": "Shared parity vectors for the piecewise-linear floor(+1e-9 epsilon) score->cap algorithm that is duplicated in Go (services/content-verify/internal/service/curve.go Curve.Cap) and Python (services/stealth-scraper/app/scaling.py pool_target_for). The two implementations cannot share code across the Go/Python boundary, so this fixture pins their shared INTERPOLATION+FLOOR+EPSILON core against one canonical vector set — a future edit to either that diverges is caught by both test suites. Cases stay within [1, max_pool] on purpose: the service-specific CLAMPS differ (Go allows 0; Python floors at 1) and are each tested separately. The 0.55 -> 3 case is the float-repr boundary the epsilon exists for (6 - 4*0.75 evaluates to 2.9999999999999987, not 3.0).",
+  "curve": [[0.40, 6], [0.60, 2], [0.80, 0]],
+  "max_pool": 6,
+  "cases": [
+    {"score": 0.30, "cap": 6},
+    {"score": 0.40, "cap": 6},
+    {"score": 0.45, "cap": 5},
+    {"score": 0.50, "cap": 4},
+    {"score": 0.55, "cap": 3},
+    {"score": 0.60, "cap": 2},
+    {"score": 0.65, "cap": 1}
+  ]
+}

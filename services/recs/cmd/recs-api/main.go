@@ -20,11 +20,11 @@
 //     ADD CONSTRAINT IF NOT EXISTS for FKs).
 //  8. cache.New(cfg.Redis) — fatal on failure; recs caching is the service's core.
 //  9. Activity-register effect producer (AR-EFFECT-01).
-// 10. Wire repos → signals → orchestrators → handlers.
-// 11. Population cron (60min), user-precompute cron (6h), co-occurrence cron (24h).
-// 12. transport.NewRouter
-// 13. http.Server + graceful shutdown on SIGINT/SIGTERM.
-// 14. On shutdown: cronCancel() BEFORE srv.Shutdown so in-flight cron
+//  10. Wire repos → signals → orchestrators → handlers.
+//  11. Population cron (60min), user-precompute cron (6h), co-occurrence cron (24h).
+//  12. transport.NewRouter
+//  13. http.Server + graceful shutdown on SIGINT/SIGTERM.
+//  14. On shutdown: cronCancel() BEFORE srv.Shutdown so in-flight cron
 //     callbacks finish before the HTTP listener closes.
 package main
 
@@ -233,6 +233,18 @@ func main() {
 		s5 := signals.NewS5Attribute(db.DB, recsRepoLocal)
 		userPrecompute = recs.NewOrchestrator([]recs.SignalModule{s1, s2, s5})
 		userOrch = recs.NewUserOrchestrator(userPrecompute, db.DB, redisCache, log)
+
+		// Graceful-degradation gate for the hint-driven per-user recompute
+		// (Phase 3, docs/superpowers/specs/2026-07-10-graceful-degradation-design.md).
+		// The watcher polls the governor-published level every 5s; under Critical
+		// pressure (level >= 2) TriggerForUser defers without burning its debounce
+		// token. FAIL-OPEN: a down/undeployed governor (missing key) reads as
+		// level 0, so normal behavior is preserved. Only the hint path is guarded
+		// — the 6h cron below and admin force-recompute keep working.
+		degWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+		degWatcher.Start(cronCtx)
+		userOrch.SetShedChecker(degWatcher)
+
 		// 6-hour cadence per CONTEXT.md decisions §User-Signal Cron.
 		// Boot tick runs immediately so logged-in users get fresh signals
 		// within seconds of redeploy.

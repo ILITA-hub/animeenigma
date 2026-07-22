@@ -52,6 +52,15 @@ func main() {
 	}
 	defer redisCache.Close()
 
+	// Degradation-aware image-resize lever (graceful-degradation Phase 3
+	// consumer): under Critical platform degradation (level >= 2) the image
+	// proxy sheds the CPU-heavy on-the-fly poster downscale and serves the
+	// original bytes it already has in hand. Fail-open — a down/undeployed
+	// governor (missing Redis key) reads level 0, i.e. normal resize. The poll
+	// loop runs for the process lifetime off the background ctx.
+	imgDegWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
+	imgDegWatcher.Start(ctx)
+
 	// Initialize MinIO storage
 	storage, err := videoutils.NewStorage(cfg.Storage)
 	if err != nil {
@@ -109,7 +118,7 @@ func main() {
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
 	// Initialize image proxy
-	imageProxyService := service.NewImageProxyService(storage, log)
+	imageProxyService := service.NewImageProxyService(storage, imgDegWatcher, log)
 	imageProxyHandler := handler.NewImageProxyHandler(imageProxyService, log)
 
 	// Initialize metrics collector
@@ -121,7 +130,7 @@ func main() {
 	srv := &http.Server{
 		Addr:         cfg.Server.Address(),
 		Handler:      tracing.HTTPMiddleware("streaming")(router),
-		ReadTimeout:  5 * time.Minute,  // Long timeout for video uploads
+		ReadTimeout:  5 * time.Minute, // Long timeout for video uploads
 		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}

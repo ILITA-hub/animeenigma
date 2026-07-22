@@ -68,15 +68,28 @@ type ImageResult struct {
 	Source      ImageSource
 }
 
-type ImageProxyService struct {
-	storage    *videoutils.Storage
-	httpClient *http.Client
-	sfGroup    singleflight.Group
-	semaphore  chan struct{}
-	log        *logger.Logger
+// degradationLevelReader is the minimal slice of *cache.DegradationWatcher the
+// image proxy needs: the current platform degradation level. It is declared as
+// an interface (rather than the concrete *cache.DegradationWatcher) so the
+// resize-shed decision is unit-testable with a trivial fake — no Redis required
+// — while the real watcher satisfies it. Fail-open: a nil reader reads as
+// level 0 and never sheds. NOTE: unlike a concrete *DegradationWatcher (whose
+// Level() is nil-receiver-safe), a nil INTERFACE is not method-callable, so
+// callers must nil-check the field before calling Level().
+type degradationLevelReader interface {
+	Level() int
 }
 
-func NewImageProxyService(storage *videoutils.Storage, log *logger.Logger) *ImageProxyService {
+type ImageProxyService struct {
+	storage     *videoutils.Storage
+	httpClient  *http.Client
+	sfGroup     singleflight.Group
+	semaphore   chan struct{}
+	degradation degradationLevelReader
+	log         *logger.Logger
+}
+
+func NewImageProxyService(storage *videoutils.Storage, degradation degradationLevelReader, log *logger.Logger) *ImageProxyService {
 	return &ImageProxyService{
 		storage: storage,
 		httpClient: &http.Client{
@@ -110,8 +123,9 @@ func NewImageProxyService(storage *videoutils.Storage, log *logger.Logger) *Imag
 				return nil
 			},
 		},
-		semaphore: make(chan struct{}, maxConcurrent),
-		log:       log,
+		semaphore:   make(chan struct{}, maxConcurrent),
+		degradation: degradation,
+		log:         log,
 	}
 }
 
@@ -186,16 +200,43 @@ func (s *ImageProxyService) resolveResized(ctx context.Context, rawURL, cacheKey
 		return full, nil
 	}
 
+	result, cacheable := s.resizeOrShed(full, width)
+	if cacheable {
+		// Only the genuinely-downscaled bytes are worth caching; the shed
+		// (Critical degradation) and resize-failure paths return the original
+		// unchanged, so normal sizes regenerate once healthy.
+		s.storeInCache(ctx, resizedKey, result.Data, result.ContentType)
+	}
+	return result, nil
+}
+
+// resizeOrShed downscales full to width, or serves the un-resized original when
+// the platform is under Critical degradation (level >= 2). The bool reports
+// whether the returned variant should be cached — false on both the shed path
+// and the resize-failure path (each returns full unchanged).
+//
+// Fail-open by design: a nil reader, or a *cache.DegradationWatcher whose
+// governor is down/undeployed, both read level 0 → normal resize. The explicit
+// nil check is required because s.degradation is an interface (a nil interface
+// is not method-callable).
+func (s *ImageProxyService) resizeOrShed(full *ImageResult, width int) (*ImageResult, bool) {
+	if s.degradation != nil && s.degradation.Level() >= 2 {
+		// Critical platform degradation: skip the CPU-heavy decode+scale+encode
+		// and serve the un-resized original (already resolved above). Mirrors
+		// the proven resize-failure fallback below. The resized variant is
+		// intentionally NOT cached on this path, so normal sizes regenerate once
+		// pressure clears.
+		return full, false
+	}
+
 	data, contentType, err := downscaleImage(full.Data, width)
 	if err != nil {
 		// Unsupported/corrupt format — serve the full-size original instead
-		s.log.Warnw("image resize failed, serving original", "url", rawURL, "width", width, "error", err)
-		return full, nil
+		s.log.Warnw("image resize failed, serving original", "width", width, "error", err)
+		return full, false
 	}
 
-	result := &ImageResult{Data: data, ContentType: contentType, Source: full.Source}
-	s.storeInCache(ctx, resizedKey, data, contentType)
-	return result, nil
+	return &ImageResult{Data: data, ContentType: contentType, Source: full.Source}, true
 }
 
 // downscaleImage scales src down to targetWidth (never upscales) and

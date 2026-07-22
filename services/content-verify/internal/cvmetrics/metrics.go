@@ -63,4 +63,13 @@ var (
 		Name: "content_verify_worker_cap",
 		Help: "Graduated worker cap by kind (pressure = curve(score), demand = ceil(pending/per), effective = min).",
 	}, []string{"kind"}) // kind: pressure|demand|effective
+	// ReplicasDetected surfaces the single-replica invariant: the worker's leases
+	// are in-process only, so >1 replica double-probes units. Each instance
+	// heartbeats a TTL'd Redis key; this gauge is the count of live siblings.
+	// Expected 1; >1 must page (k8s MUST stay replicas:1 — CV_WORKERS scales
+	// concurrency, not replicas).
+	ReplicasDetected = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "content_verify_replicas_detected",
+		Help: "Live content-verify replicas heartbeating Redis (MUST be 1; >1 => units double-probed).",
+	})
 )

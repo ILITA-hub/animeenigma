@@ -7,7 +7,16 @@ import (
 	"image/jpeg"
 	"image/png"
 	"testing"
+
+	"github.com/ILITA-hub/animeenigma/libs/cache"
+	"github.com/ILITA-hub/animeenigma/libs/logger"
 )
+
+// fakeDegradation is a minimal degradationLevelReader for tests: it reports a
+// fixed level without any Redis/governor dependency.
+type fakeDegradation struct{ level int }
+
+func (f fakeDegradation) Level() int { return f.level }
 
 func TestSnapWidth(t *testing.T) {
 	cases := []struct {
@@ -115,5 +124,86 @@ func TestDownscaleImagePNGInput(t *testing.T) {
 func TestDownscaleImageRejectsGarbage(t *testing.T) {
 	if _, _, err := downscaleImage([]byte("not an image"), 128); err == nil {
 		t.Error("expected error for non-image input")
+	}
+}
+
+// TestResizeOrShedUnderCriticalDegradation proves the request-path lever: at
+// degradation level >= 2 the CPU-heavy resize is skipped and the un-resized
+// original ImageResult is served verbatim (and not cached), while level < 2
+// downscales normally.
+func TestResizeOrShedUnderCriticalDegradation(t *testing.T) {
+	// 700x1050 mimics a Shikimori 2:3 original.
+	src := encodeTestImage(t, 700, 1050, false)
+	newFull := func() *ImageResult {
+		return &ImageResult{Data: src, ContentType: "image/jpeg", Source: SourceShikimori}
+	}
+
+	t.Run("level>=2 sheds resize and serves original", func(t *testing.T) {
+		for _, level := range []int{2, 3} {
+			s := &ImageProxyService{degradation: fakeDegradation{level: level}, log: logger.Default()}
+			full := newFull()
+			got, cacheable := s.resizeOrShed(full, 128)
+			if got != full {
+				t.Fatalf("level %d: expected the original ImageResult served unchanged", level)
+			}
+			if !bytes.Equal(got.Data, src) {
+				t.Errorf("level %d: original bytes not served under Critical degradation", level)
+			}
+			if got.ContentType != "image/jpeg" {
+				t.Errorf("level %d: content type = %q, want image/jpeg (unchanged)", level, got.ContentType)
+			}
+			if cacheable {
+				t.Errorf("level %d: shed path must not be cached", level)
+			}
+		}
+	})
+
+	t.Run("level<2 resizes normally", func(t *testing.T) {
+		for _, level := range []int{0, 1} {
+			s := &ImageProxyService{degradation: fakeDegradation{level: level}, log: logger.Default()}
+			full := newFull()
+			got, cacheable := s.resizeOrShed(full, 128)
+			if got == full {
+				t.Fatalf("level %d: expected a resized result, got the original unchanged", level)
+			}
+			if !cacheable {
+				t.Errorf("level %d: a genuine resize must be cacheable", level)
+			}
+			if got.ContentType != "image/jpeg" {
+				t.Errorf("level %d: content type = %q, want image/jpeg", level, got.ContentType)
+			}
+			img, _, err := image.Decode(bytes.NewReader(got.Data))
+			if err != nil {
+				t.Fatalf("level %d: decode resized output: %v", level, err)
+			}
+			if w := img.Bounds().Dx(); w != 128 {
+				t.Errorf("level %d: resized width = %d, want 128", level, w)
+			}
+		}
+	})
+
+	t.Run("nil reader fails open and resizes", func(t *testing.T) {
+		s := &ImageProxyService{degradation: nil, log: logger.Default()}
+		got, cacheable := s.resizeOrShed(newFull(), 128)
+		if got.Source == SourcePlaceholder || !cacheable {
+			t.Fatalf("nil degradation reader must fail open and resize normally")
+		}
+		if img, _, err := image.Decode(bytes.NewReader(got.Data)); err != nil || img.Bounds().Dx() != 128 {
+			t.Fatalf("nil reader: expected 128px resize, err=%v", err)
+		}
+	})
+}
+
+// TestNewImageProxyServiceNilWatcherFailOpen proves the wiring is nil-safe: a
+// typed-nil *cache.DegradationWatcher (governor undeployed) reads level 0 via
+// its nil-receiver-safe Level(), so the proxy resizes normally.
+func TestNewImageProxyServiceNilWatcherFailOpen(t *testing.T) {
+	svc := NewImageProxyService(nil, (*cache.DegradationWatcher)(nil), logger.Default())
+	src := encodeTestImage(t, 700, 1050, false)
+	full := &ImageResult{Data: src, ContentType: "image/jpeg", Source: SourceShikimori}
+
+	got, cacheable := svc.resizeOrShed(full, 128)
+	if got == full || !cacheable {
+		t.Fatalf("typed-nil *DegradationWatcher must fail open and resize normally")
 	}
 }

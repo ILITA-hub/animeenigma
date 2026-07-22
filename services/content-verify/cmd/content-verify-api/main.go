@@ -78,6 +78,10 @@ func main() {
 		if err := os.MkdirAll(cfg.WorkDir, 0o755); err != nil {
 			log.Fatalw("workdir create failed", "error", err)
 		}
+		// Surface the single-replica invariant: the worker's leases are
+		// in-process only, so a second replica double-probes units. Heartbeat a
+		// TTL'd Redis key and alert (content_verify_replicas_detected) if >1.
+		service.NewReplicaGuard(redisCache.Client(), log).Start(ctx)
 		shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
 		shedWatcher.Start(ctx)
 		runner := prober.NewExecRunner(cfg.PythonPath, cfg.AnalyzersDir)

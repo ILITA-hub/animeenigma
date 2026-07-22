@@ -327,6 +327,14 @@ func main() {
 	shedWatcher := cache.NewDegradationWatcher(redisCache, 5*time.Second)
 	shedWatcher.Start(rootCtx)
 
+	// Torrent seeding is pure background egress, so it yields uplink to live
+	// playback FIRST: while the platform is Elevated+ the seed gate pauses upload
+	// on every torrent (reversibly -- no drop, no data loss) and resumes at
+	// level 0. Reuses the SAME shedWatcher as the download/encode/storyboard
+	// pools; StartSeedGate observes rootCtx for SIGTERM.
+	tc.SetShedChecker(shedWatcher)
+	tc.StartSeedGate(rootCtx, log, libMetrics.SetSeedCount)
+
 	// Worker pool. workers race for queued jobs via FOR UPDATE SKIP
 	// LOCKED; each drives queued → downloading and stops at
 	// status='encoding' (Phase 4 owns the encoder).

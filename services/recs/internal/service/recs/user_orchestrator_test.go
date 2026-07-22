@@ -386,6 +386,97 @@ func (s *slowSignalRecorder) Score(_ context.Context, _ UserID, _ []AnimeID) (ma
 	return nil, nil
 }
 
+// fakeShed is a tiny shedChecker (Level() int) for the degradation-guard tests.
+type fakeShed struct{ level int }
+
+func (f fakeShed) Level() int { return f.level }
+
+// Under Critical platform pressure (Level() >= 2) the hint-driven trigger must
+// be a complete no-op: it returns nil, does NOT call SetNX (so the debounce
+// token is NOT burned — the hint is honored again once pressure clears), and
+// does NOT launch the precompute goroutine.
+func TestUserOrchestrator_TriggerForUser_DefersUnderCritical(t *testing.T) {
+	db := setupUserOrchTestDB(t)
+	tracker := &userPrecomputeTracker{id: "s1"}
+	pre := NewOrchestrator([]SignalModule{tracker})
+	cache := newUserOrchFakeCache()
+
+	// Count SetNX invocations: the guard must return before any SetNX runs.
+	var setnxCalls int64
+	cache.setnxFn = func(key string) (bool, error) {
+		atomic.AddInt64(&setnxCalls, 1)
+		return true, nil
+	}
+
+	o := NewUserOrchestrator(pre, db, cache, logger.Default())
+	o.SetShedChecker(fakeShed{level: 2}) // Critical
+
+	require.NoError(t, o.TriggerForUser(context.Background(), "user-A"),
+		"trigger stays best-effort: always returns nil")
+
+	// Give any (erroneously) spawned goroutine time to fire.
+	time.Sleep(120 * time.Millisecond)
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&setnxCalls),
+		"Critical must return BEFORE SetNX so the debounce token is not consumed")
+	assert.Equal(t, 0, tracker.callCount(),
+		"Critical must NOT launch the per-user precompute")
+
+	// The debounce key must not have been written (token not burned).
+	var v string
+	assert.Error(t, cache.Get(context.Background(), debounceKey("user-A"), &v),
+		"no debounce token should exist after a Critical skip")
+}
+
+// When the platform is NOT Critical (Level() < 2) — including a nil checker
+// (never wired / governor down) — TriggerForUser behaves normally: it acquires
+// the debounce token via SetNX and spawns the precompute.
+func TestUserOrchestrator_TriggerForUser_RunsWhenNotCritical(t *testing.T) {
+	cases := []struct {
+		name string
+		shed shedChecker // nil => setter not called
+	}{
+		{name: "nil checker (unwired / governor down)", shed: nil},
+		{name: "Normal (level 0)", shed: fakeShed{level: 0}},
+		{name: "Elevated (level 1)", shed: fakeShed{level: 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupUserOrchTestDB(t)
+			tracker := &userPrecomputeTracker{id: "s1"}
+			pre := NewOrchestrator([]SignalModule{tracker})
+			cache := newUserOrchFakeCache()
+
+			var setnxCalls int64
+			cache.setnxFn = func(key string) (bool, error) {
+				atomic.AddInt64(&setnxCalls, 1)
+				return true, nil // first acquire
+			}
+
+			o := NewUserOrchestrator(pre, db, cache, logger.Default())
+			if tc.shed != nil {
+				o.SetShedChecker(tc.shed)
+			}
+
+			require.NoError(t, o.TriggerForUser(context.Background(), "user-A"))
+
+			// The precompute runs in a goroutine — wait for it.
+			deadline := time.Now().Add(1 * time.Second)
+			for time.Now().Before(deadline) {
+				if tracker.callCount() >= 1 {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+
+			assert.Equal(t, int64(1), atomic.LoadInt64(&setnxCalls),
+				"non-Critical must acquire the debounce token via SetNX")
+			assert.Equal(t, 1, tracker.callCount(),
+				"non-Critical must launch the per-user precompute")
+		})
+	}
+}
+
 // blockingUserSignal blocks on ctx.Done() for a configurable subset of users
 // (or all). Records whether the per-call ctx carried a deadline. Used to prove
 // (a) the per-tick timeout (audit L641) and (b) the per-user timeout (L648).

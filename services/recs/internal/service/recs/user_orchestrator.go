@@ -22,6 +22,16 @@ type userOrchestratorCache interface {
 	SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
 }
 
+// shedChecker is the narrow graceful-degradation surface the orchestrator
+// depends on (Go interface-from-the-consumer, mirroring scheduler's
+// services/scheduler/internal/service/job.go). *libs/cache.DegradationWatcher
+// satisfies this in production. Kept local so the recs package doesn't import
+// libs/cache at build time (same rationale as userOrchestratorCache above).
+// Nil-safe by contract: a nil checker never sheds.
+type shedChecker interface {
+	Level() int
+}
+
 // Cache key prefixes for the user-scope rec engine. Exported so handler
 // and main.go can construct the same keys without re-defining magic strings.
 //
@@ -77,6 +87,10 @@ type UserOrchestrator struct {
 	cache      userOrchestratorCache
 	log        *logger.Logger
 
+	// shed is the graceful-degradation gate for the hint-driven trigger only.
+	// Nil (not wired) => never sheds. Set via SetShedChecker from main.go.
+	shed shedChecker
+
 	// tickTimeout bounds each Start-driven RunOnce sweep; perUserTimeout
 	// bounds a single user's precompute inside RunOnce. Default to the
 	// userTickTimeout / userPerUserTimeout consts; tests override with tiny
@@ -97,6 +111,14 @@ func NewUserOrchestrator(precompute *Orchestrator, db *gorm.DB, cache userOrches
 		tickTimeout:    userTickTimeout,
 		perUserTimeout: userPerUserTimeout,
 	}
+}
+
+// SetShedChecker wires the graceful-degradation watcher (Phase 3). Only the
+// hint-driven TriggerForUser defers under Critical pressure; the 6h cron
+// (RunOnce) and admin force-recompute are unaffected. Nil-safe by contract: a
+// nil checker (not wired) never sheds, so behavior is unchanged.
+func (o *UserOrchestrator) SetShedChecker(c shedChecker) {
+	o.shed = c
 }
 
 // RunOnce iterates every distinct user_id in watch_history and calls the
@@ -218,6 +240,17 @@ func (o *UserOrchestrator) Start(ctx context.Context, interval time.Duration) {
 // error here: this trigger is best-effort, the cron picks up the same user
 // within 6 hours regardless. We log and move on.
 func (o *UserOrchestrator) TriggerForUser(ctx context.Context, userID UserID) error {
+	// Graceful degradation: under Critical platform pressure (level >= 2) defer
+	// this expensive per-user recompute. We return BEFORE the SetNX below so the
+	// debounce token is NOT consumed — the hint is honored again as soon as
+	// pressure clears, and the 6h cron (RunOnce) is the backstop regardless.
+	// Fail-open: nil checker or level 0/1 (Normal/Elevated, or governor
+	// down/undeployed) falls through to normal behavior.
+	if o.shed != nil && o.shed.Level() >= 2 {
+		o.log.Infow("recs recompute deferred: platform Critical", "user_id", userID)
+		return nil
+	}
+
 	key := debounceKey(userID)
 	acquired, err := o.cache.SetNX(ctx, key, "1", debounceTTL)
 	if err != nil {
