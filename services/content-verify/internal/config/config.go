@@ -61,6 +61,7 @@ type Config struct {
 
 	Curve           string // CV_CURVE breakpoints "score:cap,..." for the graduated worker curve
 	DemandPerWorker int    // pending queue units that justify one active loop
+	ProviderLimit   int    // max concurrent probes against one upstream provider
 }
 
 func Load() (*Config, error) {
@@ -106,6 +107,7 @@ func Load() (*Config, error) {
 
 		Curve:           getEnv("CV_CURVE", "0.40:6,0.60:2,0.80:0"),
 		DemandPerWorker: getEnvInt("CV_DEMAND_PER_WORKER", 5),
+		ProviderLimit:   getEnvInt("CV_PROVIDER_LIMIT", 3),
 	}
 	if cfg.Interval < 10*time.Second {
 		return nil, fmt.Errorf("CV_INTERVAL too small: %s", cfg.Interval)

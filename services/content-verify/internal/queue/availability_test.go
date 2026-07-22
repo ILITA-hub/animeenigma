@@ -57,7 +57,7 @@ func newAvailabilityFixture(t *testing.T) *availabilityFixture {
 	t.Cleanup(srv.Close)
 
 	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
-	e := NewEngine(cat, nil, nil, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, nil, nil, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	return &availabilityFixture{engine: e, miruroHits: miruroHits, rosterState: rosterState}
 }
 
@@ -155,7 +155,7 @@ func TestRosterFetchFailureFailsOpen(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cat := catalogclient.New(srv.URL, srv.URL, srv.Client())
-	e := NewEngine(cat, nil, nil, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, nil, nil, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 
 	if e.providerDown(context.Background(), "miruro") {
 		t.Fatal("roster outage must fail open (no provider gated)")

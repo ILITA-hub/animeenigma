@@ -422,3 +422,43 @@ func TestTickReleaseRunsAfterPersist(t *testing.T) {
 		t.Fatalf("expected [persist release] order, got %v", order)
 	}
 }
+
+// TestTickWorkedReturn covers the back-to-back loop contract: tick returns
+// true only when it did real work (probed a unit), and false when the loop
+// should back off — parked by pressure, idle queue, or claim error. runLoop
+// keeps claiming while tick returns true, so a wrong true here would hot-spin
+// a loop and a wrong false would reintroduce the old 1-probe-per-interval
+// pacing.
+func TestTickWorkedReturn(t *testing.T) {
+	prober := &fakeProber{}
+	store := &fakeStore{}
+
+	// Parked: score 1.0 => pressure cap 0, every loop sits out => false.
+	parked := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 1.0}, &fakeClaimer{}, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
+	if parked.tick(context.Background(), 0) {
+		t.Fatal("a pressure-parked tick must return false (back off)")
+	}
+
+	// Idle: claim returns nothing => false.
+	idle := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0}, &fakeClaimer{}, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
+	if idle.tick(context.Background(), 0) {
+		t.Fatal("an idle tick must return false (back off)")
+	}
+
+	// Claim error => false.
+	errw := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0}, &fakeClaimer{err: context.DeadlineExceeded}, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
+	if errw.tick(context.Background(), 0) {
+		t.Fatal("a claim-error tick must return false (back off)")
+	}
+
+	// Probed a unit => true (loop should claim again immediately).
+	claimer := &fakeClaimer{unit: &queue.Unit{AnimeID: "a1", Provider: "gogoanime"}}
+	busy := NewWorker(time.Minute, 6, 10*time.Second, fakeScore{v: 0}, claimer, prober, store,
+		nil, nil, 0, nil, defaultCurve, 5, fakeDemand{pending: 100})
+	if !busy.tick(context.Background(), 0) {
+		t.Fatal("a tick that probed a unit must return true (keep going)")
+	}
+}

@@ -1,4 +1,4 @@
-// Package service runs the throttled probe worker: one unit per tick,
+// Package service runs the probe worker: N loops claiming back-to-back,
 // governor-gated, results upserted into the verdict store.
 package service
 
@@ -59,10 +59,11 @@ type SkipStore interface {
 	SkipByAnime(ctx context.Context, animeID string) ([]domain.SkipTiming, error)
 }
 
-// Worker throttles content-verify probing via N in-process goroutines (see
-// workers/NewWorker), each running its own staggered timer loop and claiming
-// independently. The throttle — one probe per (unit, provider) at a time —
-// is enforced entirely by the Engine's in-flight leases (see
+// Worker runs content-verify probing via N in-process goroutines (see
+// workers/NewWorker), each claiming independently and probing back-to-back
+// while work is available. The throttle — one probe per unit and a bounded
+// number per provider at a time — is enforced entirely by the Engine's
+// in-flight leases (see
 // queue.Engine.Claim), which are in-process-only state: there is no
 // distributed lease/lock, so a second REPLICA ticking concurrently would
 // happily Claim and Probe its own unit at the same time as this one. The
@@ -108,16 +109,19 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
-// runLoop is one probe loop. i (0-based, < w.workers) sets the initial-tick
+// runLoop is one probe loop. i (0-based, < w.workers) sets the initial
 // stagger, so w.workers loops don't all fire in lockstep, and is passed to
 // tick unchanged as the loop's identity — the admission decision (whether i
 // participates this tick) is made fresh in tick from the current score and
 // demand, not fixed at loop-start.
+//
+// Probes run back-to-back: as long as tick reports it did work, the loop
+// claims again immediately. Upstream politeness is enforced by the engine's
+// per-provider lease limit and load by the pressure curve — not by pacing.
+// The interval is only the park/idle backoff: how long a loop sleeps when it
+// is pressure/demand-parked, the queue has nothing claimable, or claiming
+// errored.
 func (w *Worker) runLoop(ctx context.Context, i int) {
-	// Timer (not ticker): the interval pause runs AFTER each probe
-	// completes — spec: "перерыв между пробами - 1 минута". This lets
-	// the unit budget exceed the interval (browser-engine resolves alone
-	// take 45-90s) without ticks stacking up behind a slow probe.
 	initial := w.interval * time.Duration(i+1) / time.Duration(w.workers)
 	timer := time.NewTimer(initial)
 	defer timer.Stop()
@@ -126,17 +130,26 @@ func (w *Worker) runLoop(ctx context.Context, i int) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			w.tick(ctx, i)
-			timer.Reset(w.interval)
 		}
+		for w.tick(ctx, i) {
+			if ctx.Err() != nil {
+				return
+			}
+		}
+		timer.Reset(w.interval)
 	}
 }
 
-// tick runs one claim+probe cycle for loop i. The loop participates only
-// while i < min(curve(score), demandCap) — pressure removes loops from the
-// top one at a time; a shallow queue keeps most loops parked (demand cap
-// floors at 1 so a cold start can still build the first queue snapshot).
-func (w *Worker) tick(ctx context.Context, i int) {
+// tick runs one claim+probe cycle for loop i and reports whether it did any
+// work (probed, persisted a synth verdict, or ran a skip task — a probe that
+// ended in a provider deferral still counts: real time was spent and the
+// engine has already parked that provider). false means the loop should back
+// off for an interval: it is parked by pressure/demand, the queue is idle,
+// or the claim errored. The loop participates only while
+// i < min(curve(score), demandCap) — pressure removes loops from the top one
+// at a time; a shallow queue keeps most loops parked (demand cap floors at 1
+// so a cold start can still build the first queue snapshot).
+func (w *Worker) tick(ctx context.Context, i int) bool {
 	pressureCap := w.curve.Cap(w.scoreValue())
 	demandCap := 1
 	if w.demand != nil {
@@ -169,7 +182,7 @@ func (w *Worker) tick(ctx context.Context, i int) {
 	}
 	if i >= effective {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("degraded").Inc()
-		return
+		return false
 	}
 	unit, task, release, err := w.claimer.Claim(ctx)
 	// release runs AFTER this tick's persist (deferred to function return,
@@ -183,15 +196,15 @@ func (w *Worker) tick(ctx context.Context, i int) {
 		if w.log != nil {
 			w.log.Errorw("claim failed", "error", err)
 		}
-		return
+		return false
 	}
 	if unit == nil && task == nil {
 		cvmetrics.TicksSkippedTotal.WithLabelValues("idle").Inc()
-		return
+		return false
 	}
 	if unit == nil {
 		w.tickSkip(ctx, *task)
-		return
+		return true
 	}
 
 	// Synth units (ae library truth, kodik translation roster): persist the
@@ -200,7 +213,7 @@ func (w *Worker) tick(ctx context.Context, i int) {
 		v := *unit.Synth
 		v.ProbedAt = time.Now().UTC()
 		w.persist(ctx, *unit, v, "synth")
-		return
+		return true
 	}
 
 	prevFails := 0
@@ -228,9 +241,10 @@ func (w *Worker) tick(ctx context.Context, i int) {
 			d.Defer(unit.AnimeID, unit.Provider, v.RetryAfter)
 		}
 		cvmetrics.TicksSkippedTotal.WithLabelValues("provider_unavailable").Inc()
-		return
+		return true
 	}
 	w.persist(ctx, *unit, v, v.Status)
+	return true
 }
 
 func (w *Worker) scoreValue() float64 {

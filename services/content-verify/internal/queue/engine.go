@@ -102,12 +102,14 @@ type Engine struct {
 
 	// inflightUnits/inflightProv are the in-process claim leases that let
 	// several workers Claim concurrently without double-probing the same
-	// unit or hitting the same upstream provider at once. Claim keys: verify
+	// unit or overloading one upstream provider (at most provLimit concurrent
+	// probes per provider). Claim keys: verify
 	// unit → AnimeID+"|"+Provider+"|"+Key.String(); skip task → "skip|" +
 	// primary-unit AnimeID+"|"+Provider+"|"+Team+"|"+Episode (prefixed so it
 	// can never collide with a verify key).
 	inflightUnits map[string]struct{}
-	inflightProv  map[string]struct{}
+	inflightProv  map[string]int
+	provLimit     int
 
 	// pendingCount is the candidate count from the last bandedCandidates
 	// build — the worker's demand signal (see PendingCount). Updated
@@ -115,9 +117,12 @@ type Engine struct {
 	pendingCount atomic.Int64
 }
 
-func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, weights [3]int, freshWindow, idleCooldown time.Duration, idleWindow int, log *logger.Logger) *Engine {
+func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Store, reprobeTTL time.Duration, skipEnabled bool, pins map[string]string, weights [3]int, freshWindow, idleCooldown time.Duration, idleWindow, providerLimit int, log *logger.Logger) *Engine {
 	if pins == nil {
 		pins = map[string]string{}
+	}
+	if providerLimit < 1 {
+		providerLimit = 1
 	}
 	return &Engine{
 		cat: cat, sig: sig, store: store, reprobeTTL: reprobeTTL, skipEnabled: skipEnabled, pins: pins,
@@ -128,7 +133,8 @@ func NewEngine(cat *catalogclient.Client, sig *signals.Signals, store *repo.Stor
 		malIDs:        map[string]string{},
 		deferUntil:    map[string]time.Time{},
 		inflightUnits: map[string]struct{}{},
-		inflightProv:  map[string]struct{}{},
+		inflightProv:  map[string]int{},
+		provLimit:     providerLimit,
 	}
 }
 
@@ -362,25 +368,28 @@ func skipClaimKey(u SkipUnit) string {
 }
 
 // lease marks (provider, key) in-flight under mu and returns an idempotent
-// release closure. ok is false — and release nil — when either provider or
-// key is already held by another in-flight claim.
+// release closure. ok is false — and release nil — when the key is already
+// held by another in-flight claim, or the provider is already at its
+// concurrent-probe limit (provLimit).
 func (e *Engine) lease(provider, key string) (release func(), ok bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if _, blocked := e.inflightProv[provider]; blocked {
+	if e.inflightProv[provider] >= e.provLimit {
 		return nil, false
 	}
 	if _, blocked := e.inflightUnits[key]; blocked {
 		return nil, false
 	}
-	e.inflightProv[provider] = struct{}{}
+	e.inflightProv[provider]++
 	e.inflightUnits[key] = struct{}{}
 	cvmetrics.InflightLeases.Set(float64(len(e.inflightUnits)))
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			e.mu.Lock()
-			delete(e.inflightProv, provider)
+			if e.inflightProv[provider]--; e.inflightProv[provider] <= 0 {
+				delete(e.inflightProv, provider)
+			}
 			delete(e.inflightUnits, key)
 			cvmetrics.InflightLeases.Set(float64(len(e.inflightUnits)))
 			e.mu.Unlock()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -89,7 +90,7 @@ func newEngineFixture(t *testing.T, capsFail bool) *engineFixture {
 	// changing TestClaimEmptyPendingSetsCooldownTTL's outcome from cooldown
 	// to a skip task. See TestClaimReturnsSkipTaskWhenVerifyLaneSettled for
 	// skip-lane coverage.
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv, capsHits: capsHits}
 }
 
@@ -136,7 +137,7 @@ func newTwoAnimeGogoanimeFixture(t *testing.T) *engineFixture {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -320,11 +321,13 @@ func TestClaimBlockedDoesNotSetCooldown(t *testing.T) {
 }
 
 // TestClaimProviderExclusivityAcrossAnime covers cross-anime provider
-// exclusivity: two DIFFERENT anime whose only pending unit both use
-// "gogoanime" must not both be claimable at once — one probe per provider,
-// globally, regardless of which title it belongs to.
+// gating: the per-provider concurrency budget is global, not per-title. With
+// the limit pinned to 1, two DIFFERENT anime whose only pending unit both
+// use "gogoanime" must not both be claimable at once. (The counting-limit
+// behavior itself — N slots, N+1 blocked — is TestLeaseProviderLimit.)
 func TestClaimProviderExclusivityAcrossAnime(t *testing.T) {
 	f := newTwoAnimeGogoanimeFixture(t)
+	f.engine.provLimit = 1
 	ctx := context.Background()
 
 	u1, task1, release1, err := f.engine.Claim(ctx)
@@ -421,7 +424,7 @@ func newSkipEngineFixture(t *testing.T, skipEnabled bool) *engineFixture {
 		t.Fatal(err)
 	}
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, skipEnabled, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -586,7 +589,7 @@ func TestClaimSkipFullyCoveredByAniskipSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, true, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, true, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 
 	u, task, release, err := e.Claim(ctx)
 	if err != nil {
@@ -688,7 +691,7 @@ func newBandedTwoAnimeFixture(t *testing.T) *engineFixture {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	return &engineFixture{engine: e, sig: sig, store: store, srv: srv}
 }
 
@@ -781,7 +784,7 @@ func TestClaimAdvancesIdleCursorOnFreshInterestFetch(t *testing.T) {
 	}
 	store := repo.NewStore(db)
 
-	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, nil)
+	e := NewEngine(cat, sig, store, 720*time.Hour, false, nil, [3]int{60, 30, 10}, 48*time.Hour, 168*time.Hour, 100, 3, nil)
 	e.rng = func() float64 { return 0.99 } // primary = BandIdle
 
 	if got := sig.IdleCursor(ctx); got != 0 {
@@ -797,5 +800,47 @@ func TestClaimAdvancesIdleCursorOnFreshInterestFetch(t *testing.T) {
 	release()
 	if got := sig.IdleCursor(ctx); got != 100 {
 		t.Fatalf("idle cursor after fresh interest fetch = %d, want 100 (idleWindow), got %d", got, got)
+	}
+}
+
+// TestLeaseProviderLimit: at most provLimit concurrent leases per provider;
+// unit keys stay exclusive; releasing a slot frees the provider again and the
+// provider map drains to empty.
+func TestLeaseProviderLimit(t *testing.T) {
+	e := &Engine{inflightUnits: map[string]struct{}{}, inflightProv: map[string]int{}, provLimit: 3}
+
+	var releases []func()
+	for i := 0; i < 3; i++ {
+		r, ok := e.lease("gogoanime", "k"+strconv.Itoa(i))
+		if !ok {
+			t.Fatalf("lease %d for gogoanime should succeed under limit 3", i)
+		}
+		releases = append(releases, r)
+	}
+	if _, ok := e.lease("gogoanime", "k3"); ok {
+		t.Fatal("4th concurrent lease for one provider must be blocked")
+	}
+	if _, ok := e.lease("kodik", "k1"); ok {
+		t.Fatal("an in-flight unit key must stay exclusive across providers")
+	}
+	r, ok := e.lease("kodik", "other")
+	if !ok {
+		t.Fatal("a different provider must not be blocked by gogoanime's limit")
+	}
+	r()
+
+	releases[0]()
+	r, ok = e.lease("gogoanime", "k3")
+	if !ok {
+		t.Fatal("lease must succeed again after a release freed a provider slot")
+	}
+	r()
+	releases[1]()
+	releases[2]()
+	if n := len(e.inflightProv); n != 0 {
+		t.Fatalf("inflightProv should drain to empty, still holds %d entries", n)
+	}
+	if n := len(e.inflightUnits); n != 0 {
+		t.Fatalf("inflightUnits should drain to empty, still holds %d entries", n)
 	}
 }
