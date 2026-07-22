@@ -59,4 +59,33 @@ var (
 			Help: "Failed governor evaluation ticks (Prometheus unreachable or bad response).",
 		},
 	)
+
+	// SignalStaleness is the age (seconds) of the freshest pressure sample at
+	// the last successful poll: time() - timestamp(ae:pressure_score:preview).
+	// Rises when node-exporter scrape or rule evaluation lags under load — the
+	// blind spot a slow-but-succeeding Prometheus would otherwise hide.
+	SignalStaleness = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ae_governor_signal_staleness_seconds",
+			Help: "Age of the freshest pressure sample at last poll (seconds); high => scrape/rule-eval lagging.",
+		},
+	)
+
+	// GovernorStaleTicksTotal counts ticks where the signal was too old to trust
+	// and the governor held the level instead of acting on stale data.
+	GovernorStaleTicksTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "governor_stale_ticks_total",
+			Help: "Ticks where the pressure signal exceeded the staleness budget and the level was held.",
+		},
+	)
+
+	// EgressUplinkFraction is uplink egress ÷ configured capacity
+	// (GOVERNOR_UPLINK_MBPS). 0 when uplink governance is disabled or idle.
+	EgressUplinkFraction = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ae_governor_egress_uplink_fraction",
+			Help: "Uplink egress as a fraction of configured capacity (0 when disabled/idle).",
+		},
+	)
 )

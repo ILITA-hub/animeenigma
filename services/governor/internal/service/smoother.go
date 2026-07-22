@@ -48,5 +48,9 @@ func (s *Smoother) Tick(raw float64) float64 {
 	return s.value
 }
 
+// Value returns the current smoothed value without advancing it — used to hold
+// the score across a stale/grace tick where feeding a sample would be wrong.
+func (s *Smoother) Value() float64 { return s.value }
+
 // Reset zeroes the state (fail-open after sustained Prometheus loss).
 func (s *Smoother) Reset() { s.value = 0 }

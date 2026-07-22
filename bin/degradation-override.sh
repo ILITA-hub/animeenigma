@@ -7,9 +7,10 @@
 # the computed level on the next tick (~15s).
 #
 # Usage:
-#   bin/degradation-override.sh status      # current level/reasons/override
-#   bin/degradation-override.sh set 0|1|2   # pin level (0 normal, 1 elevated, 2 critical)
-#   bin/degradation-override.sh clear       # remove the pin
+#   bin/degradation-override.sh status                # current level/reasons/override(+TTL)
+#   bin/degradation-override.sh set 0|1|2             # pin level, auto-expires (DEGRADATION_OVERRIDE_TTL, default 2h)
+#   bin/degradation-override.sh set 0|1|2 --permanent # pin with NO expiry (remember to clear)
+#   bin/degradation-override.sh clear                 # remove the pin
 set -euo pipefail
 
 REDIS=(docker exec animeenigma-redis redis-cli)
@@ -26,7 +27,12 @@ case "$cmd" in
     echo "published level : ${level:-<no key — governor down or not deployed; consumers fail open to 0>}"
     echo "reasons         : ${reasons:-[]}"
     if [ -n "$override" ]; then
-      echo "override        : PINNED to $override  (bin/degradation-override.sh clear to release)"
+      ottl="$("${REDIS[@]}" TTL "$OVERRIDE_KEY")"
+      case "$ottl" in
+        -1) echo "override        : PINNED to $override  (NO expiry — 'clear' when done)" ;;
+        -2) echo "override        : none" ;;
+        *)  echo "override        : PINNED to $override  (auto-expires in ${ottl}s)" ;;
+      esac
     else
       echo "override        : none"
     fi
@@ -35,21 +41,33 @@ case "$cmd" in
       | python3 -m json.tool 2>/dev/null || true
     ;;
   set)
-    lvl="${2:?usage: degradation-override.sh set 0|1|2}"
+    lvl="${2:?usage: degradation-override.sh set 0|1|2 [--permanent]}"
     case "$lvl" in
       0|1|2) ;;
       *) echo "level must be 0, 1 or 2" >&2; exit 1 ;;
     esac
-    "${REDIS[@]}" SET "$OVERRIDE_KEY" "$lvl" > /dev/null
-    echo "override pinned to $lvl — takes effect on the next governor tick (~15s)."
-    echo "REMEMBER to 'bin/degradation-override.sh clear' when done: the pin has no expiry."
+    # The override is the ONE fail-CLOSED key in this otherwise fail-open system:
+    # forgotten at a shed level it starves background work indefinitely. So it
+    # AUTO-EXPIRES by default (DEGRADATION_OVERRIDE_TTL seconds, default 2h); the
+    # governor keeps computing, so on expiry it snaps back to the real level.
+    # Use --permanent for the rare "pin until I clear it" case.
+    ttl="${DEGRADATION_OVERRIDE_TTL:-7200}"
+    if [ "${3:-}" = "--permanent" ]; then
+      "${REDIS[@]}" SET "$OVERRIDE_KEY" "$lvl" > /dev/null
+      echo "override pinned to $lvl PERMANENTLY (no expiry) — takes effect on the next tick (~15s)."
+      echo "REMEMBER to 'bin/degradation-override.sh clear' when done: this pin will NOT auto-expire."
+    else
+      "${REDIS[@]}" SET "$OVERRIDE_KEY" "$lvl" EX "$ttl" > /dev/null
+      echo "override pinned to $lvl for ${ttl}s (auto-expires) — takes effect on the next tick (~15s)."
+      echo "'bin/degradation-override.sh clear' to release early; 'set $lvl --permanent' to pin with no expiry."
+    fi
     ;;
   clear)
     "${REDIS[@]}" DEL "$OVERRIDE_KEY" > /dev/null
     echo "override cleared — governor returns to the computed level on the next tick."
     ;;
   *)
-    echo "usage: $(basename "$0") status | set 0|1|2 | clear" >&2
+    echo "usage: $(basename "$0") status | set 0|1|2 [--permanent] | clear" >&2
     exit 1
     ;;
 esac

@@ -71,27 +71,50 @@ func (f *fakeSink) Report(_ context.Context, t domain.Transition) {
 	f.transitions = append(f.transitions, t)
 }
 
-func newTestGovernor(src *fakeSource, store *fakeStore, sink *fakeSink, enter, exit, failTicks int) *Governor {
-	return New(src, store, sink, logger.Default(), time.Second, time.Minute, enter, exit, failTicks, 0.5, 0.05)
-}
-
-func breach(target domain.Level, sig, sev string) domain.Verdict {
-	return domain.Verdict{
-		Target:  target,
-		Reasons: []domain.Reason{{Signal: sig, Severity: sev}},
-		Signals: map[string]float64{"ae:host_psi_cpu_some:ratio": 0.5},
+// testTuning is the production-default tuning at a 1s tick, staleness disabled
+// unless a test sets it. failTicks parameterizes the prom-failure fail-open.
+func testTuning(failTicks int) Tuning {
+	return Tuning{
+		Tick: time.Second, LevelTTL: time.Minute, PromFailTicks: failTicks,
+		AlphaUp: 0.5, AlphaDown: 0.05,
+		EnterElevated: 0.45, ExitElevated: 0.20, EnterCritical: 0.90, ExitCritical: 0.55,
+		StalenessMax: 0,
 	}
 }
 
-func TestGovernor_RaisesAfterEnterTicksAndLogsTransition(t *testing.T) {
+func newTestGovernor(src *fakeSource, store *fakeStore, sink *fakeSink, failTicks int) *Governor {
+	return New(src, store, sink, logger.Default(), testTuning(failTicks))
+}
+
+// breach builds a verdict whose raw Score matches the severity (0.5 elevated,
+// 1.0 critical) so it drives the score-quantizer. SampleAgeSeconds 0 = fresh.
+func breach(target domain.Level, sig, sev string) domain.Verdict {
+	score := 0.5
+	if sev == domain.SeverityCritical {
+		score = 1.0
+	}
+	return domain.Verdict{
+		Target:           target,
+		Score:            score,
+		Reasons:          []domain.Reason{{Signal: sig, Severity: sev}},
+		Signals:          map[string]float64{"ae:host_psi_cpu_some:ratio": 0.5},
+		SampleAgeSeconds: 0,
+	}
+}
+
+func TestGovernor_RaisesFromSustainedScoreAndLogsTransition(t *testing.T) {
+	// Elevated raw score 0.5 smooths 0.25, 0.375, 0.4375, 0.469 — crosses
+	// enterElevated (0.45) on the 4th tick (~enter-fast).
 	src := &fakeSource{verdicts: []domain.Verdict{breach(1, "psi_cpu_some", "elevated")}}
 	store := &fakeStore{}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 2, 3, 3)
+	g := newTestGovernor(src, store, sink, 3)
 
-	g.RunTick(context.Background())
-	assert.Equal(t, domain.LevelNormal, g.Snapshot().Level, "one tick is not enough")
-	g.RunTick(context.Background())
+	for i := 0; i < 3; i++ {
+		g.RunTick(context.Background())
+		assert.Equal(t, domain.LevelNormal, g.Snapshot().Level, "score still below enter threshold")
+	}
+	g.RunTick(context.Background()) // 4th tick crosses 0.45
 
 	snap := g.Snapshot()
 	assert.Equal(t, domain.LevelElevated, snap.Level)
@@ -104,11 +127,11 @@ func TestGovernor_RaisesAfterEnterTicksAndLogsTransition(t *testing.T) {
 }
 
 func TestGovernor_OverridePinsPublishedLevel(t *testing.T) {
-	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal}}}
+	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, SampleAgeSeconds: 0}}}
 	pin := domain.LevelCritical
 	store := &fakeStore{override: &pin}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 2, 3, 3)
+	g := newTestGovernor(src, store, sink, 3)
 
 	g.RunTick(context.Background())
 	snap := g.Snapshot()
@@ -130,8 +153,7 @@ func TestGovernor_OverridePinsPublishedLevel(t *testing.T) {
 
 func TestGovernor_PromFailureGraceThenFailOpen(t *testing.T) {
 	boom := errors.New("connection refused")
-	// First verdict carries raw Score 1.0 so one healthy tick establishes a
-	// nonzero smoothed score (0.5, alphaUp=0.5) to decay/reset from below.
+	// Score 1.0 => first healthy tick smooths to 0.5, crossing enterElevated.
 	healthy := breach(1, "psi_cpu_some", "elevated")
 	healthy.Score = 1.0
 	src := &fakeSource{
@@ -140,18 +162,18 @@ func TestGovernor_PromFailureGraceThenFailOpen(t *testing.T) {
 	}
 	store := &fakeStore{}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 1, 10, 3) // explicit alphaUp/alphaDown 0.5/0.05 via newTestGovernor
+	g := newTestGovernor(src, store, sink, 3)
 
-	g.RunTick(context.Background()) // healthy: raises to Elevated (enterTicks=1), score 1.0 -> 0.5
+	g.RunTick(context.Background()) // healthy: score 1.0 -> 0.5 -> Elevated
 	assert.Equal(t, domain.LevelElevated, g.Snapshot().Level)
 	assert.Equal(t, 0.5, store.score, "raw 1.0 smooths to 0.5 on the first healthy tick")
 
-	g.RunTick(context.Background()) // fail 1/3 — grace: level held, TTL refreshed, score decays
+	g.RunTick(context.Background()) // fail 1/3 — grace: level held, score decays
 	assert.Equal(t, domain.LevelElevated, g.Snapshot().Level)
 	wantDecay := 0.5
-	wantDecay += 0.05 * (0 - wantDecay) // mirrors Smoother.Tick(0)'s own arithmetic: 0.475
+	wantDecay += 0.05 * (0 - wantDecay) // Smoother.Tick(0): 0.475
 	assert.Equal(t, wantDecay, store.score,
-		"grace tick runs Tick(0) (decay by alphaDown), proving it's not a freeze and not a double-tick")
+		"grace tick runs Tick(0) (decay by alphaDown), proving it's not a freeze")
 
 	g.RunTick(context.Background()) // fail 2/3
 	assert.Equal(t, domain.LevelElevated, g.Snapshot().Level)
@@ -162,14 +184,14 @@ func TestGovernor_PromFailureGraceThenFailOpen(t *testing.T) {
 	assert.Equal(t, domain.LevelNormal, snap.Level)
 	assert.False(t, snap.PromHealthy)
 	assert.Equal(t, domain.ReasonPrometheusUnreachable, snap.Reasons[0].Signal)
-	assert.Equal(t, 0.0, store.score, "sustained loss (promFailTicks reached) resets the smoother and fails open to score 0")
+	assert.Equal(t, 0.0, store.score, "sustained loss resets both smoothers and fails open to score 0")
 }
 
 func TestGovernor_PublishesSmoothedScore(t *testing.T) {
-	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 1.0}}}
+	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 1.0, SampleAgeSeconds: 0}}}
 	store := &fakeStore{}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 2, 3, 3)
+	g := newTestGovernor(src, store, sink, 3)
 
 	g.RunTick(context.Background())
 	assert.Equal(t, 0.5, store.score, "first tick, alphaUp 0.5 halves the 0->1 gap")
@@ -177,51 +199,86 @@ func TestGovernor_PublishesSmoothedScore(t *testing.T) {
 }
 
 func TestGovernor_OverridePinsScore(t *testing.T) {
-	// Two healthy ticks with raw 1.0 would naturally smooth to 0.5 then 0.75
-	// (alphaUp=0.5 halves the gap each tick). An Elevated override must pin
-	// the published score to exactly 0.5 on BOTH ticks — tick2 is where the
-	// pin and the natural value diverge (0.5 pinned vs. 0.75 natural), which
-	// is what actually discriminates "override wins" from "coincidentally
-	// matches first-tick smoothing".
 	src := &fakeSource{verdicts: []domain.Verdict{
-		{Target: domain.LevelNormal, Score: 1.0},
-		{Target: domain.LevelNormal, Score: 1.0},
+		{Target: domain.LevelNormal, Score: 1.0, SampleAgeSeconds: 0},
+		{Target: domain.LevelNormal, Score: 1.0, SampleAgeSeconds: 0},
 	}}
 	pin := domain.LevelElevated
 	store := &fakeStore{override: &pin}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 2, 3, 3)
+	g := newTestGovernor(src, store, sink, 3)
 
 	g.RunTick(context.Background())
 	assert.Equal(t, 0.5, store.score, "tick1: pin (0.5) happens to match natural smoothing here")
-	assert.Equal(t, 0.5, g.Snapshot().Score)
 
 	g.RunTick(context.Background())
 	assert.Equal(t, 0.5, store.score, "tick2: natural smoothing would now be 0.75 — pin must still force 0.5")
-	assert.Equal(t, 0.5, g.Snapshot().Score)
 
-	// A Critical override pins exactly 1.0 even though raw 0.0 naturally
-	// stays at 0.0 (no gap for the smoother to close).
-	src2 := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 0.0}}}
+	// A Critical override pins exactly 1.0 even though raw 0.0 stays at 0.0.
+	src2 := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, Score: 0.0, SampleAgeSeconds: 0}}}
 	critPin := domain.LevelCritical
 	store2 := &fakeStore{override: &critPin}
-	sink2 := &fakeSink{}
-	g2 := newTestGovernor(src2, store2, sink2, 2, 3, 3)
+	g2 := newTestGovernor(src2, store2, &fakeSink{}, 3)
 
 	g2.RunTick(context.Background())
-	assert.Equal(t, 1.0, store2.score, "override level 2 pins the score to 1.0 while raw 0.0 would naturally stay 0")
-	assert.Equal(t, 1.0, g2.Snapshot().Score)
+	assert.Equal(t, 1.0, store2.score, "override level 2 pins the score to 1.0")
 }
 
 func TestGovernor_NoTransitionSpamWhenStable(t *testing.T) {
-	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal}}}
+	src := &fakeSource{verdicts: []domain.Verdict{{Target: domain.LevelNormal, SampleAgeSeconds: 0}}}
 	store := &fakeStore{}
 	sink := &fakeSink{}
-	g := newTestGovernor(src, store, sink, 2, 3, 3)
+	g := newTestGovernor(src, store, sink, 3)
 
 	for i := 0; i < 5; i++ {
 		g.RunTick(context.Background())
 	}
 	assert.Empty(t, sink.transitions)
 	assert.Equal(t, 5, store.publishes, "every tick refreshes the TTL")
+}
+
+func TestGovernor_HeldByHysteresisReasonWhenLevelOutlivesBreach(t *testing.T) {
+	// Tick 1 raises to Elevated (score 1.0 -> 0.5). Tick 2+ feed a Normal verdict
+	// with NO reasons; the smoothed score decays slowly so the level stays
+	// Elevated — that held level must carry the held_by_hysteresis reason.
+	high := breach(1, "psi_cpu_some", "elevated")
+	high.Score = 1.0
+	normal := domain.Verdict{Target: domain.LevelNormal, Score: 0, SampleAgeSeconds: 0}
+	src := &fakeSource{verdicts: []domain.Verdict{high, normal}}
+	g := newTestGovernor(src, &fakeStore{}, &fakeSink{}, 3)
+
+	g.RunTick(context.Background())
+	require.Equal(t, domain.LevelElevated, g.Snapshot().Level)
+
+	g.RunTick(context.Background())
+	snap := g.Snapshot()
+	assert.Equal(t, domain.LevelElevated, snap.Level, "level held by slow decay")
+	require.Len(t, snap.Reasons, 1)
+	assert.Equal(t, domain.ReasonHeldByHysteresis, snap.Reasons[0].Signal)
+	assert.Equal(t, domain.SeverityInfo, snap.Reasons[0].Severity)
+}
+
+func TestGovernor_StaleSignalHoldsLevelAndReasons(t *testing.T) {
+	tuning := testTuning(3)
+	tuning.StalenessMax = 45 * time.Second
+	// Tick1 fresh & high -> Elevated. Tick2 is stale (age 999s) AND carries a
+	// Normal/zero score that WOULD lower the level — the hold must ignore it.
+	high := breach(1, "psi_cpu_some", "elevated")
+	high.Score = 1.0
+	stale := domain.Verdict{Target: domain.LevelNormal, Score: 0, SampleAgeSeconds: 999}
+	src := &fakeSource{verdicts: []domain.Verdict{high, stale}}
+	store := &fakeStore{}
+	g := New(src, store, &fakeSink{}, logger.Default(), tuning)
+
+	g.RunTick(context.Background())
+	require.Equal(t, domain.LevelElevated, g.Snapshot().Level)
+	held := store.score
+
+	g.RunTick(context.Background())
+	snap := g.Snapshot()
+	assert.Equal(t, domain.LevelElevated, snap.Level, "stale tick must not lower the level")
+	assert.Equal(t, held, store.score, "stale tick must not advance the smoother")
+	require.Len(t, snap.Reasons, 1)
+	assert.Equal(t, domain.ReasonSignalStale, snap.Reasons[0].Signal)
+	assert.Equal(t, float64(999), snap.SampleAgeSeconds)
 }

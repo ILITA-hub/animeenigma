@@ -52,13 +52,30 @@ const (
 const (
 	ReasonManualOverride        = "manual_override"
 	ReasonPrometheusUnreachable = "prometheus_unreachable"
+	// ReasonHeldByHysteresis marks a level that is > 0 purely because the
+	// smoothed score has not yet decayed below the quantizer's exit threshold —
+	// no instantaneous breach is active. Without it the status/dashboard shows
+	// "level 1, reasons: []", which reads as an unexplained degradation.
+	ReasonHeldByHysteresis = "held_by_hysteresis"
+	// ReasonSignalStale marks a tick where Prometheus answered but the freshest
+	// sample is older than the staleness budget (scrape/rule-eval lagging under
+	// the very load we are watching). The governor HOLDS the level on such ticks
+	// rather than trusting stale data to lower shedding.
+	ReasonSignalStale = "signal_stale"
 )
 
-// BreachSignals is the fixed universe of breach signal names emitted by the
-// ae:pressure_breach:* recording rules (docker/prometheus/rules/degradation.yml).
-// Kept as a fixed list so the reason gauge publishes a stable, bounded label
-// set (absent = 0, never a stale 1).
-var BreachSignals = []string{"psi_cpu_some", "psi_io_full", "psi_mem_full", "mem_available"}
+// EgressUplinkSignal is the breach-signal name for uplink-egress pressure
+// (governor-computed from ae:host_egress:bytes_per_second vs GOVERNOR_UPLINK_MBPS,
+// not a Prometheus recording rule). Opt-in: only ever active when an uplink
+// capacity is configured.
+const EgressUplinkSignal = "egress_uplink"
+
+// BreachSignals is the fixed universe of breach signal names the governor can
+// report — the ae:pressure_breach:* recording-rule signals
+// (docker/prometheus/rules/degradation.yml) plus the governor-computed
+// egress_uplink. Kept as a fixed list so the reason gauge publishes a stable,
+// bounded label set (absent = 0, never a stale 1).
+var BreachSignals = []string{"psi_cpu_some", "psi_io_full", "psi_mem_full", "mem_available", EgressUplinkSignal}
 
 // Reason is one active cause of the current level.
 type Reason struct {
@@ -75,8 +92,16 @@ type Verdict struct {
 	// Signals carries the raw ae:host_* signal values for observability
 	// (stored on transitions so "why" survives in ClickHouse).
 	Signals map[string]float64
-	// Score is the raw (pre-smoothing) ae:pressure_score:preview sample.
+	// Score is the raw (pre-smoothing) pressure score: max of
+	// ae:pressure_score:preview and the governor-computed egress band.
 	Score float64
+	// SampleAgeSeconds is the age of the freshest pressure sample at query time
+	// (time() - timestamp(ae:pressure_score:preview)). A negative value means
+	// "unknown" (the age sub-query failed) and is treated as not-stale.
+	SampleAgeSeconds float64
+	// EgressFraction is egress ÷ configured uplink (0 when uplink governance is
+	// disabled). Published for the dashboard, not folded twice.
+	EgressFraction float64
 }
 
 // Snapshot is the currently-published state (served on /api/degradation/status).
@@ -89,6 +114,10 @@ type Snapshot struct {
 	Target      Level              `json:"target"`
 	UpdatedAt   time.Time          `json:"updated_at"`
 	PromHealthy bool               `json:"prometheus_healthy"`
+	// SampleAgeSeconds / EgressFraction mirror the Verdict fields for the status
+	// endpoint + dashboard (negative age = unknown; 0 egress = disabled/idle).
+	SampleAgeSeconds float64 `json:"sample_age_seconds"`
+	EgressFraction   float64 `json:"egress_fraction"`
 }
 
 // Transition records one published-level change; persisted to ClickHouse

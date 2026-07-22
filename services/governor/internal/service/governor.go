@@ -1,6 +1,12 @@
-// Package service hosts the governor evaluation loop: poll Prometheus,
-// smooth through the hysteresis Machine, apply the owner override, publish
-// (Redis + gauges), and report transitions to the analytics history sink.
+// Package service hosts the governor evaluation loop: poll Prometheus, smooth
+// the raw pressure score through ONE asymmetric-EWMA Smoother, quantize it into
+// the discrete level with per-boundary hysteresis, apply the owner override,
+// publish (Redis + gauges), and report transitions to the analytics history
+// sink.
+//
+// One smoothed state (the score) drives both published values: the score is
+// published directly and the level is Quantizer(score), so level and score can
+// never disagree (the old design ran a separate streak Machine for the level).
 package service
 
 import (
@@ -33,6 +39,23 @@ type TransitionSink interface {
 	Report(ctx context.Context, t domain.Transition)
 }
 
+// Tuning carries the governor's timing/hysteresis/staleness knobs. Grouped into
+// a struct so New stays readable as the parameter set grows.
+type Tuning struct {
+	Tick          time.Duration
+	LevelTTL      time.Duration
+	PromFailTicks int
+	AlphaUp       float64
+	AlphaDown     float64
+	EnterElevated float64
+	ExitElevated  float64
+	EnterCritical float64
+	ExitCritical  float64
+	// StalenessMax is the freshest-sample age above which the governor holds the
+	// level rather than trusting the (lagging) signal. 0 disables the guard.
+	StalenessMax time.Duration
+}
+
 // Governor owns the tick loop and the published snapshot.
 type Governor struct {
 	source VerdictSource
@@ -43,9 +66,10 @@ type Governor struct {
 	tick          time.Duration
 	levelTTL      time.Duration
 	promFailTicks int
+	stalenessMax  time.Duration
 
-	machine  *Machine
-	smoother *Smoother
+	quantizer *Quantizer
+	smoother  *Smoother
 
 	mu        sync.RWMutex
 	snapshot  domain.Snapshot
@@ -54,21 +78,19 @@ type Governor struct {
 	now       func() time.Time // injectable for tests
 }
 
-// New builds a Governor. enterTicks/exitTicks parameterize the Machine;
-// alphaUp/alphaDown parameterize the continuous score's Smoother.
-func New(source VerdictSource, store LevelStore, sink TransitionSink, log *logger.Logger,
-	tick, levelTTL time.Duration, enterTicks, exitTicks, promFailTicks int,
-	alphaUp, alphaDown float64) *Governor {
+// New builds a Governor from the injected IO edges and the Tuning knobs.
+func New(source VerdictSource, store LevelStore, sink TransitionSink, log *logger.Logger, t Tuning) *Governor {
 	return &Governor{
 		source:        source,
 		store:         store,
 		sink:          sink,
 		log:           log,
-		tick:          tick,
-		levelTTL:      levelTTL,
-		promFailTicks: promFailTicks,
-		machine:       NewMachine(enterTicks, exitTicks),
-		smoother:      NewSmoother(alphaUp, alphaDown),
+		tick:          t.Tick,
+		levelTTL:      t.LevelTTL,
+		promFailTicks: t.PromFailTicks,
+		stalenessMax:  t.StalenessMax,
+		quantizer:     NewQuantizer(t.EnterElevated, t.ExitElevated, t.EnterCritical, t.ExitCritical),
+		smoother:      NewSmoother(t.AlphaUp, t.AlphaDown),
 		snapshot:      domain.Snapshot{Reasons: []domain.Reason{}, PromHealthy: true},
 		now:           time.Now,
 	}
@@ -115,10 +137,10 @@ func (g *Governor) RunTick(ctx context.Context) {
 			g.publish(ctx, g.currentPublished(), g.smoother.Tick(0), g.Snapshot().Reasons)
 			return
 		}
-		// Sustained loss (fails >= promFailTicks, having failed the grace
-		// check above): fail-open the smoother to a clean 0 too.
+		// Sustained loss: fail open — reset both smoothers so recovery starts
+		// from a clean 0, and publish LevelNormal (never shed on missing data).
 		g.smoother.Reset()
-		// Fail-open: never shed on missing data.
+		g.quantizer.Reset()
 		verdict = domain.Verdict{Target: domain.LevelNormal}
 	} else {
 		g.mu.Lock()
@@ -128,9 +150,27 @@ func (g *Governor) RunTick(ctx context.Context) {
 
 	computed := domain.LevelNormal
 	score := 0.0
+	stale := false
 	if promHealthy {
-		computed, _ = g.machine.Tick(verdict.Target)
-		score = g.smoother.Tick(verdict.Score)
+		if verdict.SampleAgeSeconds >= 0 {
+			govmetrics.SignalStaleness.Set(verdict.SampleAgeSeconds)
+		}
+		govmetrics.EgressUplinkFraction.Set(verdict.EgressFraction) // 0 when disabled/idle
+		stale = g.stalenessMax > 0 && verdict.SampleAgeSeconds > g.stalenessMax.Seconds()
+		if stale {
+			// The freshest sample is older than the budget: scrape or rule
+			// evaluation is lagging (often under the very load we watch). Do NOT
+			// advance the smoother/quantizer — trusting stale data could relax
+			// shedding. Hold the current computed level and last score.
+			govmetrics.GovernorStaleTicksTotal.Inc()
+			g.log.Warnw("pressure signal stale; holding level",
+				"age_s", verdict.SampleAgeSeconds, "budget_s", g.stalenessMax.Seconds())
+			computed = g.quantizer.Level()
+			score = g.smoother.Value()
+		} else {
+			score = g.smoother.Tick(verdict.Score)
+			computed = g.quantizer.Tick(score)
+		}
 	}
 
 	override, oerr := g.store.Override(ctx)
@@ -141,8 +181,15 @@ func (g *Governor) RunTick(ctx context.Context) {
 
 	published := computed
 	reasons := verdict.Reasons
-	if !promHealthy {
+	switch {
+	case !promHealthy:
 		reasons = []domain.Reason{{Signal: domain.ReasonPrometheusUnreachable, Severity: domain.SeverityInfo}}
+	case stale:
+		reasons = []domain.Reason{{Signal: domain.ReasonSignalStale, Severity: domain.SeverityInfo}}
+	case computed > domain.LevelNormal && len(reasons) == 0:
+		// Level held up purely by the slow score decay — surface WHY so the
+		// dashboard never shows "level 1, reasons: []".
+		reasons = []domain.Reason{{Signal: domain.ReasonHeldByHysteresis, Severity: domain.SeverityInfo}}
 	}
 	if override != nil {
 		published = *override
@@ -158,14 +205,16 @@ func (g *Governor) RunTick(ctx context.Context) {
 	prev := g.published
 	g.published = published
 	g.snapshot = domain.Snapshot{
-		Level:       published,
-		Score:       score,
-		Reasons:     reasons,
-		Signals:     verdict.Signals,
-		Override:    override,
-		Target:      verdict.Target,
-		UpdatedAt:   g.now(),
-		PromHealthy: promHealthy,
+		Level:            published,
+		Score:            score,
+		Reasons:          reasons,
+		Signals:          verdict.Signals,
+		Override:         override,
+		Target:           verdict.Target,
+		UpdatedAt:        g.now(),
+		PromHealthy:      promHealthy,
+		SampleAgeSeconds: verdict.SampleAgeSeconds,
+		EgressFraction:   verdict.EgressFraction,
 	}
 	g.mu.Unlock()
 
@@ -213,7 +262,10 @@ func (g *Governor) publish(ctx context.Context, level domain.Level, score float6
 			govmetrics.DegradationReasonActive.WithLabelValues(sig, sev).Set(v)
 		}
 	}
-	for _, syn := range []string{domain.ReasonManualOverride, domain.ReasonPrometheusUnreachable} {
+	for _, syn := range []string{
+		domain.ReasonManualOverride, domain.ReasonPrometheusUnreachable,
+		domain.ReasonHeldByHysteresis, domain.ReasonSignalStale,
+	} {
 		v := 0.0
 		if active[syn+"\x00"+domain.SeverityInfo] {
 			v = 1

@@ -94,8 +94,16 @@ groups:
       - record: ae:pressure_breach:elevated
         expr: ae:host_psi_mem_full:ratio > bool 0.12
         labels: {signal: psi_mem_full}
+      # mem_available is PSI-CORROBORATED (2026-07-22): the rules preamble insists
+      # on PSI-not-static-usage, yet a bare `MemAvailable < 0.10` is a static
+      # trigger that can fire on a healthy high-cache/high-swap box (reclaimable
+      # memory, no actual stalling). Multiply by (psi_mem_full > 0.02) so low
+      # available-memory only counts as pressure when memory is genuinely
+      # stalling. Both operands are single-series {instance,job}, so `*` matches
+      # 1:1 (validated live). Genuine memory distress is still caught
+      # independently by the psi_mem_full breach above.
       - record: ae:pressure_breach:elevated
-        expr: ae:host_mem_available:ratio < bool 0.10
+        expr: (ae:host_mem_available:ratio < bool 0.10) * (ae:host_psi_mem_full:ratio > bool 0.02)
         labels: {signal: mem_available}
 
       - record: ae:pressure_breach:critical
@@ -108,7 +116,7 @@ groups:
         expr: ae:host_psi_mem_full:ratio > bool 0.15
         labels: {signal: psi_mem_full}
       - record: ae:pressure_breach:critical
-        expr: ae:host_mem_available:ratio < bool 0.05
+        expr: (ae:host_mem_available:ratio < bool 0.05) * (ae:host_psi_mem_full:ratio > bool 0.02)
         labels: {signal: mem_available}
 
       - record: ae:pressure_elevated:bool
@@ -142,10 +150,15 @@ groups:
           + 0.5 * clamp_max(clamp_min((ae:host_psi_mem_full:ratio - 0.12) / 0.03, 0), 1)
         labels: {signal: psi_mem_full}
       # mem_available is inverted (lower = worse): 0 at 0.15, 0.5 at 0.10 (elevated), 1.0 at 0.05 (critical).
+      # PSI-corroborated to match the breach rules above: the whole band is gated
+      # to 0 unless memory is actually stalling (psi_mem_full > 0.02), so the
+      # score never rises on reclaimable-cache-driven low MemAvailable alone.
       - record: ae:pressure_score:signal
         expr: >-
-          0.5 * clamp_max(clamp_min((0.15 - ae:host_mem_available:ratio) / 0.05, 0), 1)
-          + 0.5 * clamp_max(clamp_min((0.10 - ae:host_mem_available:ratio) / 0.05, 0), 1)
+          (
+            0.5 * clamp_max(clamp_min((0.15 - ae:host_mem_available:ratio) / 0.05, 0), 1)
+            + 0.5 * clamp_max(clamp_min((0.10 - ae:host_mem_available:ratio) / 0.05, 0), 1)
+          ) * (ae:host_psi_mem_full:ratio > bool 0.02)
         labels: {signal: mem_available}
       - record: ae:pressure_score:preview
         expr: clamp_max(max(ae:pressure_score:signal), 1)

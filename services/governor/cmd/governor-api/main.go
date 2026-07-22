@@ -64,20 +64,30 @@ func main() {
 	collector := metrics.NewCollector("governor")
 
 	gov := service.New(
-		promquery.NewClient(cfg.PrometheusURL),
+		promquery.NewClient(cfg.PrometheusURL, cfg.UplinkMbps, cfg.EgressElevatedFrac, cfg.EgressCriticalFrac),
 		repo.NewRedisStore(redisCache.Client()),
 		repo.NewAnalyticsSink(cfg.AnalyticsURL, log),
 		log,
-		cfg.Tick, cfg.LevelTTL, cfg.EnterTicks, cfg.ExitTicks, cfg.PromFailTicks,
-		cfg.ScoreAlphaUp, cfg.ScoreAlphaDown,
+		service.Tuning{
+			Tick:          cfg.Tick,
+			LevelTTL:      cfg.LevelTTL,
+			PromFailTicks: cfg.PromFailTicks,
+			AlphaUp:       cfg.ScoreAlphaUp,
+			AlphaDown:     cfg.ScoreAlphaDown,
+			EnterElevated: cfg.EnterElevated,
+			ExitElevated:  cfg.ExitElevated,
+			EnterCritical: cfg.EnterCritical,
+			ExitCritical:  cfg.ExitCritical,
+			StalenessMax:  cfg.StalenessMax,
+		},
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	gov.Start(ctx)
 	log.Infow("governor loop started",
-		"tick", cfg.Tick, "enter_ticks", cfg.EnterTicks, "exit_ticks", cfg.ExitTicks,
-		"level_ttl", cfg.LevelTTL, "prometheus", cfg.PrometheusURL)
+		"tick", cfg.Tick, "level_ttl", cfg.LevelTTL, "prometheus", cfg.PrometheusURL,
+		"uplink_mbps", cfg.UplinkMbps, "staleness_max", cfg.StalenessMax)
 
 	router := transport.NewRouter(handler.NewStatusHandler(gov), log, collector)
 	srv := &http.Server{
