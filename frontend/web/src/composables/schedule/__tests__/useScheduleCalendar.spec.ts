@@ -51,6 +51,19 @@ describe('useScheduleCalendar', () => {
     }
   })
 
+  it('keeps entries visible after navigating to the previous week', () => {
+    const cal = useScheduleCalendar({
+      animes: ref(data),
+      now: ref(new Date(2026, 5, 8)),
+      statusOf: () => null,
+      loggedIn: ref(false),
+    })
+
+    cal.shift(-1)
+
+    expect(cal.weekColumns.value.flatMap(c => c.occurrences).map(o => o.episode)).toEqual([9, 22])
+  })
+
   it('week view floats the logged-in user\'s list titles to the top of a day (hybrid sort)', () => {
     const sameDay: ScheduleAnime[] = [
       { id: 'early', name: 'Early', episodes_aired: 0, episodes_count: 12, next_episode_at: '2026-06-08T14:00:00Z' },

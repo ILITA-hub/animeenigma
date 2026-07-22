@@ -34,18 +34,14 @@ describe('projectOccurrences', () => {
     expect(occ.map(o => o.episode)).toEqual([12])
   })
 
-  it('does not invent past weekly episodes before a future next-airing anchor', () => {
+  it('keeps past weekly episodes visible before the next-airing anchor', () => {
     const occ = projectOccurrences(anime(), d('2026-05-25T00:00:00Z'), d('2026-06-09T00:00:00Z'))
-    expect(occ.map(o => o.episode)).toEqual([10])
+    expect(occ.map(o => o.episode)).toEqual([8, 9, 10])
   })
 
-  it('keeps a hiatus title out of weeks before its confirmed next airing', () => {
-    const occ = projectOccurrences(
-      anime({ next_episode_at: '2026-08-12T13:00:00Z', episodes_aired: 11, episodes_count: 19 }),
-      d('2026-07-20T00:00:00Z'),
-      d('2026-07-27T00:00:00Z'),
-    )
-    expect(occ).toEqual([])
+  it('does not back-project before episode 1', () => {
+    const occ = projectOccurrences(anime({ episodes_aired: 0 }), d('2026-05-25T00:00:00Z'), d('2026-06-09T00:00:00Z'))
+    expect(occ.map(o => o.episode)).toEqual([1])
   })
 
   it('does not project a stale anchor into a later week', () => {
