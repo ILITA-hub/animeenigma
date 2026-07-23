@@ -51,14 +51,18 @@ GOGOANIME_ALLOWED_HOSTS = {
 _MEGAPLAY_PLAYER_HOSTS = ("megaplay.buzz", "vidwish.live")
 
 # In-page liveness probe: fetch the candidate master through the real Firefox
-# network stack and return "status|first16chars". A single STRING arg + no
-# typed-array work (keeps Camoufox's xray wrapper happy).
+# network stack and return "status|first64chars". A single STRING arg + no
+# typed-array work (keeps Camoufox's xray wrapper happy). On a thrown fetch()
+# (network-level failure — DNS, connection refused/unreachable, CORS block —
+# all indistinguishable from a bare HTTP status) status is "0" and the tail
+# carries the browser's own error name+message instead of being blank, so a
+# genuine network failure can be told apart from "reached but not a playlist".
 _PROBE_MASTER_JS = """async (url) => {
   try {
     const r = await fetch(url);
     const t = (await r.text()).replace(/^[\\uFEFF\\s]+/, '');
     return r.status + '|' + t.slice(0, 64);
-  } catch (e) { return '0|'; }
+  } catch (e) { return '0|' + (e && e.message ? String(e.name) + ': ' + String(e.message) : String(e)); }
 }"""
 _WORD_RUN = re.compile(r"[0-9A-Za-z]+(?: [0-9A-Za-z]+)*")
 _LEAD_WORD = re.compile(r"^[0-9A-Za-z]+")
@@ -401,35 +405,46 @@ class GogoanimeRecipe(Recipe):
             raise RecipeError("megaplay: no master from getSources or intercepted .m3u8")
 
         last_status: int | None = None
+        last_detail = ""
         for cand in candidates:
-            status, ok = await self._probe_master(rc, cand, referer)
-            last_status = status
+            status, ok, detail = await self._probe_master(rc, cand, referer)
+            last_status, last_detail = status, detail
             if ok:
                 session["master_url"] = cand
                 session["cdn_probe_status"] = status
                 return session
+            if rc.log:
+                rc.log.warning(
+                    "gogoanime: CDN candidate unfetchable host=%s status=%s detail=%s",
+                    host_of(cand), status, detail,
+                )
 
         session["cdn_probe_status"] = last_status
+        detail_suffix = f" detail={last_detail!r}" if last_detail else ""
         raise RecipeError(
             f"megaplay: all {len(candidates)} CDN candidate(s) unfetchable in-browser "
             f"(last status={last_status}) — stream removed/expired ({host_of(candidates[0])})"
+            f"{detail_suffix}"
         )
 
     async def _probe_master(
         self, rc: RecipeContext, url: str, referer: str
-    ) -> tuple[int | None, bool]:
+    ) -> tuple[int | None, bool, str]:
         """Liveness probe via the page's IN-PAGE ``fetch()`` (real Firefox network
         stack — the only client that passes the CDN's Cloudflare fingerprint gate).
         Live iff 200 AND the body is an actual HLS playlist (#EXT…). The recipe's
         page is on the megaplay player origin at this point, so the fetch carries
-        the right Origin/Referer the CDN expects."""
+        the right Origin/Referer the CDN expects. The 3rd return value carries the
+        raw browser-side detail (HTTP body head on a real response, or the
+        fetch() exception name+message on a network-level failure) for diagnosing
+        an opaque ``status=None`` without guessing."""
         try:
             raw = await rc.page.evaluate(_PROBE_MASTER_JS, url)
             status_s, head = raw.split("|", 1)
             status = int(status_s)
-            return (status or None), (status == 200 and head.lstrip().startswith("#EXT"))
-        except Exception:  # noqa: BLE001 - eval/network error == not live
-            return None, False
+            return (status or None), (status == 200 and head.lstrip().startswith("#EXT")), head
+        except Exception as exc:  # noqa: BLE001 - eval/network error == not live
+            return None, False, f"page.evaluate failed: {exc}"
 
     async def _await_getsources(self, captured: dict, cfg: Any) -> str | None:
         """Poll for the getSources request the player fires on init."""

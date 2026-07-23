@@ -171,10 +171,18 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def ctx(page, *, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n", **params):
+class FakeLog:
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args):
+        self.warnings.append(msg % args if args else msg)
+
+
+def ctx(page, *, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n", log=None, **params):
     # The master liveness probe is an in-page fetch → drive it via the page.
     page._probe_status = master_status
-    page._probe_head = master_body[:16]
+    page._probe_head = master_body[:64]
     base = {"episode_url": "https://gogoanimes.fi/one-piece-episode-1", "category": "sub"}
     base.update(params)
     cfg = Config(capture_attempts=3, capture_delay=0.0)
@@ -183,7 +191,7 @@ def ctx(page, *, master_status=200, master_body="#EXTM3U\n#EXT-X-VERSION:3\n", *
         context=FakeContext(REAL_GETSOURCES),
         params=base,
         cfg=cfg,
-        log=None,
+        log=log,
         proxy_id="direct",
     )
 
@@ -207,6 +215,25 @@ class TestGogoanimeChain(unittest.TestCase):
             run(GogoanimeRecipe().resolve(
                 ctx(page, master_status=403, master_body="<!DOCTYPE html><title>Attention Required! | Cloudflare</title>")
             ))
+
+    def test_network_failure_detail_captured_in_error_and_log(self):
+        # A thrown in-page fetch() (DNS/connection failure, or a CORS block) is
+        # indistinguishable from a bare status by number alone — AUTO-recovery
+        # 2026-07-23 hit exactly this against a rotated megaplay CDN mirror
+        # (megap.kotocdn.site) with zero diagnostic detail. status=0 signals the
+        # exception path (_PROBE_MASTER_JS's catch branch); the tail after "|" is
+        # the real browser error, not a truncated HTTP body.
+        page = FakePage()
+        log = FakeLog()
+        with self.assertRaises(RecipeError) as cm:
+            run(GogoanimeRecipe().resolve(
+                ctx(page, master_status=0,
+                    master_body="TypeError: NetworkError when attempting to fetch resource.",
+                    log=log)
+            ))
+        self.assertIn("NetworkError when attempting to fetch resource", str(cm.exception))
+        self.assertTrue(log.warnings)
+        self.assertIn("NetworkError when attempting to fetch resource", log.warnings[0])
 
     def test_expired_master_404_rejected(self):
         page = FakePage()
