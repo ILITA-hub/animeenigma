@@ -305,7 +305,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**What / when / why** for graceful degradation (spec: `docs/superpowers/specs/2026-07-10-graceful-degradation-design.md`).\n\n- **When** \u2014 governor level timeline (left); orange annotations = transitions with reasons (ClickHouse `degradation_transitions`, 365d).\n- **Why** \u2014 *Active reasons* below names what justifies the CURRENT level; *Breached signals* shows the raw threshold verdicts; host + bandwidth rows show the underlying signals.\n- **What** \u2014 *Heavy actors* row = shed candidates (Camoufox, library torrent/encode, upscaler). Phase 3 pauses their admission at Elevated+.\n- **Hysteresis**: enter after ~60s sustained breach, exit after ~5min clean \u2014 the preview stat flapping while the governor holds = working as intended.\n- **Override**: `bin/degradation-override.sh set 0|1|2` pins the level (reason `manual_override`); `clear` releases. Consumers read Redis `ae:degradation:level` (TTL'd \u2014 dead governor fails open to Normal).\n- **Thresholds** (Elevated \u2192 Critical): PSI cpu `some` 25\u219245% \u00b7 PSI io `full` 15\u219230% \u00b7 PSI mem `full` 5\u219215% \u00b7 MemAvailable 10\u21925%. Swap is context-only (chronically ~90% on this box by design)."
+        "content": "**What / when / why** for graceful degradation (specs: `2026-07-10-graceful-degradation-design.md` + `2026-07-23-staggered-degradation.md`).\n\n- **When** \u2014 governor level timeline (left); orange annotations = transitions with reasons (ClickHouse `degradation_transitions`, 365d).\n- **Why** \u2014 *Active reasons* below names what justifies the CURRENT level; *Breached signals* shows the raw threshold verdicts; host + bandwidth rows show the underlying signals.\n- **What** \u2014 actuators now stagger on the smoothed score: torrent seed at `0.20`, storyboard at `0.30`, Camoufox/content-verify curves at `0.40`, encode reduces from `0.40\u21920.80`, download from `0.55\u21920.90`. Running work and user streams finish.\n- **Hysteresis**: the score rises fast and decays slowly; the level adds Schmitt-trigger enter/exit thresholds. Preview flapping while the governor holds is expected.\n- **Override**: `bin/degradation-override.sh set 0|1|2` pins level + score; `clear` releases. Consumers read TTL'd Redis keys \u2014 a dead governor fails open to Normal.\n- **Thresholds** (Elevated \u2192 Critical): PSI cpu `some` 25\u219245% \u00b7 PSI io `full` 15\u219230% \u00b7 PSI mem `full` 5\u219215% \u00b7 MemAvailable 10\u21925%. Swap is context-only (chronically ~90% on this box by design)."
       }
     },
     {
@@ -543,8 +543,8 @@
       },
       "id": 23,
       "type": "state-timeline",
-      "title": "Shed state (what is actually paused)",
-      "description": "ae_degradation_shed as reported by the consumers themselves: library download/encode claim gates + storyboard backfill, and the Camoufox sidecar (1 = new-work admission paused at Elevated, 2 = refusing at Critical). Scheduler skips are momentary \u2014 see scheduler_job_skipped_total{reason=\"degraded\"} instead.",
+      "title": "Shed progression (what is actually reduced)",
+      "description": "Consumer-reported ae_degradation_shed, ordered by independent score curves rather than one shared level edge. 1 = reduced concurrency or paused deferrable admission; 2 = fully paused/refusing. Torrent seed yields at 0.20, storyboard at 0.30, Camoufox/content-verify/encode reduce from ~0.40, and downloads reduce from 0.55. Scheduler skips are momentary \u2014 see scheduler_job_skipped_total{reason=\"degraded\"}.",
       "gridPos": {
         "h": 6,
         "w": 24,
@@ -568,12 +568,12 @@
                   "index": 0
                 },
                 "1": {
-                  "text": "paused",
+                  "text": "reduced / paused",
                   "color": "yellow",
                   "index": 1
                 },
                 "2": {
-                  "text": "refusing",
+                  "text": "paused / refusing",
                   "color": "red",
                   "index": 2
                 }
@@ -624,7 +624,7 @@
       "id": 24,
       "type": "timeseries",
       "title": "Pressure score (governor vs preview)",
-      "description": "The governor's EWMA-smoothed pressure score (ae_degradation_score{job=\"governor\"}, authoritative \u2014 drives the graduated caps) vs the instantaneous, unsmoothed preview (ae:pressure_score:preview). Threshold lines at 0.40 (Elevated-tier caps start biting) and 0.80 (Critical-tier caps).",
+      "description": "The governor's EWMA-smoothed pressure score (ae_degradation_score{job=\"governor\"}, authoritative \u2014 drives the graduated caps) vs the instantaneous preview (ae:pressure_score:preview). Shedding starts in stages at 0.20/0.30/0.40/0.55; the colored 0.40 and 0.80 bands mark the main graduated-cap region.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1581,7 +1581,7 @@
       "id": 16,
       "type": "timeseries",
       "title": "Camoufox pool / sessions",
-      "description": "Live browser profiles, free slots, and retained stream sessions. Phase 3 stops warming at Elevated and refuses new solves (kind=degraded) at Critical.",
+      "description": "Live browser profiles, free slots, retained stream sessions, and the score-driven pool target. Warming and service-class capacity step down gradually from score 0.40; Critical refuses new solves (kind=degraded). User streams remain protected.",
       "gridPos": {
         "h": 8,
         "w": 6,

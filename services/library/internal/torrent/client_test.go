@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -195,26 +196,33 @@ func TestHandle_ProgressBeforeMetadata(t *testing.T) {
 
 // fakeShedChecker is a settable ShedChecker for driving the seed gate's
 // transition logic without a live governor / DegradationWatcher.
-type fakeShedChecker struct{ level atomic.Int32 }
+type fakeShedChecker struct {
+	level atomic.Int32
+	score atomic.Uint64
+}
 
-func (f *fakeShedChecker) set(n int)  { f.level.Store(int32(n)) }
-func (f *fakeShedChecker) Level() int { return int(f.level.Load()) }
+func (f *fakeShedChecker) setLevel(n int)     { f.level.Store(int32(n)) }
+func (f *fakeShedChecker) setScore(n float64) { f.score.Store(math.Float64bits(n)) }
+func (f *fakeShedChecker) Level() int         { return int(f.level.Load()) }
+func (f *fakeShedChecker) Score() float64     { return math.Float64frombits(f.score.Load()) }
 
-// TestShouldPauseSeed pins the pure pause decision: pause at Elevated+ (level>=1),
-// seed at Normal (0) and fail open on a negative/nonsense level.
+// TestShouldPauseSeed pins the first-in-sequence score threshold and Critical
+// hard backstop.
 func TestShouldPauseSeed(t *testing.T) {
 	cases := []struct {
+		score float64
 		level int
 		want  bool
 	}{
-		{-1, false}, // nonsense level fails open (no pause)
-		{0, false},  // Normal: seed
-		{1, true},   // Elevated: pause
-		{2, true},   // Critical: pause
+		{-1, -1, false},
+		{0.19, 0, false},
+		{0.20, 0, true},
+		{0.10, 1, false},
+		{0.00, 2, true},
 	}
 	for _, tc := range cases {
-		if got := shouldPauseSeed(tc.level); got != tc.want {
-			t.Errorf("shouldPauseSeed(%d) = %v, want %v", tc.level, got, tc.want)
+		if got := shouldPauseSeed(tc.score, tc.level); got != tc.want {
+			t.Errorf("shouldPauseSeed(%.2f, %d) = %v, want %v", tc.score, tc.level, got, tc.want)
 		}
 	}
 }
@@ -247,7 +255,7 @@ func TestReconcileSeedGate_TransitionsOnly(t *testing.T) {
 
 	// Escalate to Elevated: exactly one Disallow(true); a repeat tick at the same
 	// level must NOT re-apply.
-	shed.set(1)
+	shed.setScore(seedPauseScore)
 	c.reconcileSeedGate()
 	c.reconcileSeedGate()
 	if want := []bool{true}; !equalBools(applied, want) {
@@ -258,14 +266,15 @@ func TestReconcileSeedGate_TransitionsOnly(t *testing.T) {
 	}
 
 	// Critical (2) is still "pause" -- no new transition, no new apply.
-	shed.set(2)
+	shed.setLevel(2)
 	c.reconcileSeedGate()
 	if want := []bool{true}; !equalBools(applied, want) {
 		t.Fatalf("level 1->2 (still paused): applied=%v, want %v", applied, want)
 	}
 
 	// Recover to Normal: exactly one Allow(false); gauge back to 0.
-	shed.set(0)
+	shed.setLevel(0)
+	shed.setScore(0)
 	c.reconcileSeedGate()
 	c.reconcileSeedGate()
 	if want := []bool{true, false}; !equalBools(applied, want) {

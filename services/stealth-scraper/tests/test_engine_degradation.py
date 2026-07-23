@@ -7,6 +7,7 @@ from unittest import mock
 
 from app.config import Config
 from app.engine import CamoufoxEngine, DegradedShed
+from app import metrics
 from app.recipes.base import RecipeError
 
 
@@ -126,6 +127,18 @@ class TestPollWiresScore(unittest.TestCase):
         self.assertEqual(eng._degradation_score, 0.55)
         # curve 6->2 over 0.40-0.60: floor(6 - 4*0.75) == 3
         self.assertEqual(eng._pool_target(), 3)
+        self.assertEqual(
+            metrics.DEGRADATION_SHED.labels(subsystem="camoufox")._value.get(), 1
+        )
+
+    def test_critical_reports_refusing_not_merely_reduced(self):
+        eng = self._engine()
+        payload = {"data": {"level": 2, "score": 0.95}}
+        with mock.patch("urllib.request.urlopen", return_value=_fake_response(payload)):
+            _run_one_poll_tick(eng)
+        self.assertEqual(
+            metrics.DEGRADATION_SHED.labels(subsystem="camoufox")._value.get(), 2
+        )
 
     def test_poll_error_zeroes_score(self):
         eng = self._engine()

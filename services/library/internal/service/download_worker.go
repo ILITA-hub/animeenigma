@@ -62,10 +62,9 @@ type WorkerPool struct {
 	handlesMu sync.RWMutex
 	handles   map[string]libtorrent.DownloadHandle
 
-	// shed gates NEW job claims while the platform degradation level is
-	// Elevated+ (graceful-degradation Phase 3). Running downloads always
-	// finish — only admission pauses.
-	shed *shedGate
+	// limiter reduces NEW download concurrency one worker at a time as the
+	// smoothed pressure score rises. Running downloads always finish.
+	limiter *gradedLimiter
 
 	wg sync.WaitGroup
 }
@@ -101,13 +100,13 @@ func NewWorkerPool(
 		progressTick: progressTick,
 		pollInterval: 2 * time.Second,
 		log:          log,
-		shed:         newShedGate("library_download", log),
+		limiter:      newDownloadLimiter(workers, log),
 		handles:      make(map[string]libtorrent.DownloadHandle),
 	}
 }
 
 // SetShedChecker wires the degradation watcher (nil-safe; call before Start).
-func (p *WorkerPool) SetShedChecker(c ShedChecker) { p.shed.set(c) }
+func (p *WorkerPool) SetShedChecker(c ShedChecker) { p.limiter.set(c) }
 
 // SetProgressCache injects the live-progress side channel. When set, the worker
 // writes each progress tick here (cheap Redis SET) instead of to the DB; the DB
@@ -171,7 +170,7 @@ func (p *WorkerPool) runWorker(ctx context.Context, idx int) {
 		if ctx.Err() != nil {
 			return
 		}
-		if p.shed.shed() {
+		if !p.limiter.tryAcquire() {
 			if !p.sleep(ctx, p.pollInterval) {
 				return
 			}
@@ -179,6 +178,7 @@ func (p *WorkerPool) runWorker(ctx context.Context, idx int) {
 		}
 		job, err := p.jobRepo.Claim(ctx)
 		if err != nil {
+			p.limiter.release()
 			if p.log != nil {
 				p.log.Warnw("worker claim failed", "worker", idx, "error", err)
 			}
@@ -188,12 +188,14 @@ func (p *WorkerPool) runWorker(ctx context.Context, idx int) {
 			continue
 		}
 		if job == nil {
+			p.limiter.release()
 			if !p.sleep(ctx, p.pollInterval) {
 				return
 			}
 			continue
 		}
 		p.processJob(ctx, job)
+		p.limiter.release()
 	}
 }
 

@@ -136,7 +136,7 @@ func NewStoryboardBackfill(
 		log:        log,
 		pause:      pause,
 		tmpdir:     tmpdir,
-		shed:       newShedGate("library_storyboard", log),
+		shed:       newShedGate("library_storyboard", storyboardPauseScore, log),
 		failedAt:   make(map[string]time.Time),
 		cooldown:   backfillCooldown,
 		clock:      time.Now,

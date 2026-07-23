@@ -129,7 +129,7 @@ type EncoderPool struct {
 	// (the pattern that tripped the host-pressure governor). A running transcode
 	// always finishes; only admission of NEW work is gated, and gated jobs stay
 	// queued in the DB (status='encoding', unclaimed) rather than being dropped.
-	limiter *encodeLimiter
+	limiter *gradedLimiter
 
 	wg sync.WaitGroup
 }

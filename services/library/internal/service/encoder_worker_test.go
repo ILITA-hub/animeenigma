@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -861,61 +862,52 @@ func TestEncoder_NilInvalidator_Safe(t *testing.T) {
 
 // ---- AUTO-575: degradation-aware graded concurrency limiter ----
 
-// fakeLevel is a mutable ShedChecker for encodeLimiter tests.
-type fakeLevel struct{ lvl atomic.Int32 }
+// fakeLevel is a mutable ShedChecker for graded-limiter tests.
+type fakeLevel struct {
+	lvl   atomic.Int32
+	score atomic.Uint64
+}
 
-func (f *fakeLevel) set(n int)             { f.lvl.Store(int32(n)) }
-func (f *fakeLevel) Level() int            { return int(f.lvl.Load()) }
-func (f *fakeLevel) ShouldShed(m int) bool { return f.Level() >= m }
+func (f *fakeLevel) set(n int)          { f.lvl.Store(int32(n)) }
+func (f *fakeLevel) setScore(n float64) { f.score.Store(math.Float64bits(n)) }
+func (f *fakeLevel) Level() int         { return int(f.lvl.Load()) }
+func (f *fakeLevel) Score() float64     { return math.Float64frombits(f.score.Load()) }
 
-// TestEncodeLimiter_GradedCapByLevel proves the cap scales with the degradation
-// level: maxWorkers at level 0, 1 at level 1, 0 at level 2 — and that the
-// injected active-workers gauge tracks acquisitions/releases.
-func TestEncodeLimiter_GradedCapByLevel(t *testing.T) {
+// TestEncodeLimiter_GradedCapByScore proves slots fall away progressively as
+// the score rises, while Critical remains a hard pause backstop.
+func TestEncodeLimiter_GradedCapByScore(t *testing.T) {
 	fl := &fakeLevel{}
 	var active int32
 	lim := newEncodeLimiter(3, func(n int) { atomic.StoreInt32(&active, int32(n)) }, nil)
 	lim.set(fl)
 
-	// Level 0 → full throughput (cap == maxWorkers == 3).
-	fl.set(0)
-	got := 0
-	for lim.tryAcquire() {
-		got++
-	}
-	if got != 3 {
-		t.Fatalf("level 0: acquired %d slots, want 3 (maxWorkers)", got)
-	}
-	if n := atomic.LoadInt32(&active); n != 3 {
-		t.Fatalf("active gauge = %d, want 3 at full cap", n)
-	}
-	for i := 0; i < got; i++ {
-		lim.release()
-	}
-	if n := atomic.LoadInt32(&active); n != 0 {
-		t.Fatalf("active gauge after drain = %d, want 0", n)
-	}
-
-	// Level 1 → serialize (cap == 1).
-	fl.set(1)
-	got = 0
-	for lim.tryAcquire() {
-		got++
-	}
-	if got != 1 {
-		t.Fatalf("level 1: acquired %d slots, want 1 (serialized)", got)
-	}
-	for i := 0; i < got; i++ {
-		lim.release()
-	}
-
-	// Level 2 → pause (cap == 0).
-	fl.set(2)
-	if lim.tryAcquire() {
-		t.Fatalf("level 2: acquire succeeded, want 0 (paused)")
+	for _, tc := range []struct {
+		score float64
+		level int
+		want  int
+	}{
+		{0.00, 0, 3},
+		{0.40, 0, 3},
+		{0.41, 0, 2},
+		{0.60, 1, 1},
+		{0.80, 1, 0},
+		{0.00, 2, 0},
+	} {
+		fl.set(tc.level)
+		fl.setScore(tc.score)
+		got := 0
+		for lim.tryAcquire() {
+			got++
+		}
+		if got != tc.want {
+			t.Errorf("score %.2f level %d: acquired %d, want %d", tc.score, tc.level, got, tc.want)
+		}
+		for i := 0; i < got; i++ {
+			lim.release()
+		}
 	}
 	if n := atomic.LoadInt32(&active); n != 0 {
-		t.Fatalf("active gauge at level 2 = %d, want 0", n)
+		t.Fatalf("active gauge after table = %d, want 0", n)
 	}
 }
 
@@ -924,7 +916,7 @@ func TestEncodeLimiter_GradedCapByLevel(t *testing.T) {
 // rather than being dropped.
 func TestEncodeLimiter_ReleaseFreesSlot(t *testing.T) {
 	fl := &fakeLevel{}
-	fl.set(1) // cap 1
+	fl.setScore(0.60) // cap 1
 	lim := newEncodeLimiter(2, nil, nil)
 	lim.set(fl)
 

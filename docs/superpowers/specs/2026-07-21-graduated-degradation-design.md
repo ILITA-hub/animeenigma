@@ -197,8 +197,9 @@ Metrics: `stealth_pool_target`, `stealth_pool_kills_total{class="service",mode="
   dashboard gets the cap panel too.
 - Fail-open everywhere: missing score key / governor unreachable / Redis down ⇒ score 0.0 ⇒ full
   speed — identical philosophy to the level track.
-- Binary consumers (library, scheduler, catalog backfill) intentionally stay on the level track;
-  migrating them to curves is out of scope.
+- Binary consumers (library, scheduler, catalog backfill) intentionally stay on the level track
+  in this phase. The library portion was later superseded by
+  `2026-07-23-staggered-degradation.md`; scheduler and catalog remain level-driven.
 
 ## 5. Testing
 

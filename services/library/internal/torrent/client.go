@@ -102,7 +102,10 @@ type Client struct {
 // never imports the degradation watcher directly.
 type ShedChecker interface {
 	Level() int
+	Score() float64
 }
+
+const seedPauseScore = 0.20
 
 // seedGateInterval is how often the seed gate reconciles the live degradation
 // level against the applied pause state.
@@ -344,10 +347,12 @@ func (c *Client) StartSeedGate(ctx context.Context, log *logger.Logger, setSeedC
 }
 
 // shouldPauseSeed reports whether background seeding should be paused at the
-// given degradation level. Seeding is pure background egress and is the first
-// thing to yield uplink to live playback, so we pause at Elevated (level>=1) and
-// up. A negative/nonsense level fails open (no pause).
-func shouldPauseSeed(level int) bool { return level >= 1 }
+// given smoothed pressure score. Seeding is pure background egress, so it is
+// deliberately the first actuator in the staggered shed sequence. Critical
+// level remains a hard backstop; negative/nonsense inputs fail open.
+func shouldPauseSeed(score float64, level int) bool {
+	return level >= 2 || score >= seedPauseScore
+}
 
 // runSeedGate reconciles the seed gate every seedGateInterval until ctx is done.
 // The first reconcile runs immediately so a boot into an already-degraded
@@ -373,11 +378,12 @@ func (c *Client) runSeedGate(ctx context.Context) {
 // seed-count gauge is refreshed every tick (a cheap read-only enumeration),
 // independent of transitions.
 func (c *Client) reconcileSeedGate() {
-	level := 0
+	level, score := 0, 0.0
 	if c.shed != nil {
 		level = c.shed.Level()
+		score = c.shed.Score()
 	}
-	pause := shouldPauseSeed(level)
+	pause := shouldPauseSeed(score, level)
 
 	if c.seedPaused.Swap(pause) != pause {
 		if c.applySeedGate != nil {
@@ -390,7 +396,8 @@ func (c *Client) reconcileSeedGate() {
 		gometrics.DegradationShed.WithLabelValues("library_seed").Set(v)
 		if c.seedLog != nil {
 			if pause {
-				c.seedLog.Infow("pausing torrent seeding: platform degraded", "level", level)
+				c.seedLog.Infow("pausing torrent seeding: platform degraded",
+					"score", score, "pause_at", seedPauseScore, "level", level)
 			} else {
 				c.seedLog.Infow("resuming torrent seeding: platform degradation cleared", "level", level)
 			}

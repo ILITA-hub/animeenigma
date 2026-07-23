@@ -640,10 +640,17 @@ class CamoufoxEngine:
                 self._degradation_level = 0
                 self._degradation_score = 0.0
             metrics.DEGRADATION_LEVEL_SEEN.set(self._degradation_level)
-            metrics.DEGRADATION_SHED.labels(subsystem="camoufox").set(
-                0 if self._degradation_level < 1 else self._degradation_level
-            )
-            metrics.POOL_TARGET.set(self._pool_target())
+            pool_target = self._pool_target()
+            # Report the actuator's real graduated state, not merely the
+            # integer governor level: 1 means the score curve reduced the pool,
+            # 2 means Critical is refusing new work.
+            shed_state = 0
+            if self._degradation_level >= 2:
+                shed_state = 2
+            elif pool_target < self.cfg.pool_size:
+                shed_state = 1
+            metrics.DEGRADATION_SHED.labels(subsystem="camoufox").set(shed_state)
+            metrics.POOL_TARGET.set(pool_target)
             try:
                 await self._scale_down_step()
             except Exception:  # noqa: BLE001 — scale-down must never kill the poll loop
