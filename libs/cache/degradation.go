@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // DegradationLevelKey is the Redis key the governor service publishes the
@@ -40,6 +42,16 @@ func NewDegradationWatcher(c *RedisCache, poll time.Duration) *DegradationWatche
 		poll = 5 * time.Second
 	}
 	return &DegradationWatcher{cache: c, poll: poll}
+}
+
+// NewDegradationWatcherFromClient reuses an already-owned Redis client. It is
+// intended for processes such as gateway that need the governor signal but
+// already manage their Redis connection for another subsystem.
+func NewDegradationWatcherFromClient(client *redis.Client, poll time.Duration) *DegradationWatcher {
+	if client == nil {
+		return NewDegradationWatcher(nil, poll)
+	}
+	return NewDegradationWatcher(&RedisCache{client: client}, poll)
 }
 
 // Start launches the poll loop until ctx is done. The first read happens

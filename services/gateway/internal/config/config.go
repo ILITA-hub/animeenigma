@@ -109,7 +109,11 @@ type ServiceURLs struct {
 	// gateway-side enforcement of the ruleset against OTHER services (the
 	// FeatureGate middleware) is Phase 2.
 	PolicyService string
-	WebService    string
+	// VoicevoxService is the Docker-network-only VOICEVOX engine. The gateway
+	// exposes only the bounded Zundamon synthesis facade; the engine itself is
+	// never published on the host or public edge.
+	VoicevoxService string
+	WebService      string
 	// Admin panel services
 	GrafanaService    string
 	PrometheusService string
@@ -166,6 +170,7 @@ func Load() (*Config, error) {
 			UpscalerService:      getEnv("UPSCALER_SERVICE_URL", "http://upscaler:8096"),
 			FanficService:        getEnv("FANFIC_SERVICE_URL", "http://fanfic:8097"),
 			PolicyService:        getEnv("POLICY_SERVICE_URL", "http://policy:8098"),
+			VoicevoxService:      getEnv("VOICEVOX_SERVICE_URL", "http://voicevox:50021"),
 			WebService:           getEnv("WEB_SERVICE_URL", "http://web:80"),
 			// Admin panel services
 			GrafanaService:    getEnv("GRAFANA_SERVICE_URL", "http://grafana:3000"),

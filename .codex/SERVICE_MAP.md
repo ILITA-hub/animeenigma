@@ -4,7 +4,7 @@ This map is based on the current `docker/docker-compose.yml` and Makefile, not t
 
 ## Deployable Compose application services
 
-`auth`, `catalog`, `streaming`, `player`, `rooms`, `scheduler`, `gateway`, `themes`, `scraper`, `stealth-scraper`, `library`, `notifications`, `watch-together`, `gacha`, `recs`, `policy`, `governor`, `storage`, `anidle`, `fanfic`, `analytics`, `upscaler`, and `web` (`frontend/web`).
+`auth`, `catalog`, `streaming`, `player`, `rooms`, `scheduler`, `gateway`, `themes`, `scraper`, `stealth-scraper`, `library`, `notifications`, `watch-together`, `gacha`, `recs`, `policy`, `governor`, `storage`, `anidle`, `fanfic`, `analytics`, `upscaler`, `voicevox`, and `web` (`frontend/web`).
 
 `maintenance` is a host-native service, not a Compose application; build, restart, and verify it through its dedicated maintenance workflow rather than `bin/ae-deploy.sh`.
 

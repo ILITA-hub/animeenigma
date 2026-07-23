@@ -638,6 +638,7 @@ services:
       ANIDLE_SERVICE_URL: http://anidle:8095
       UPSCALER_SERVICE_URL: http://upscaler:8096
       FANFIC_SERVICE_URL: http://fanfic:8097
+      VOICEVOX_SERVICE_URL: http://voicevox:50021
       GRAFANA_SERVICE_URL: http://grafana:3000
       PROMETHEUS_SERVICE_URL: http://prometheus:9090
       REDIS_HOST: redis
@@ -1132,6 +1133,35 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Optional low-priority Zundamon synthesis engine. The official CPU image
+  # bundles the ずんだもん model; only gateway can reach its Docker-network port.
+  # The PID-1 supervisor watches the governor's Redis level, kills the heavy
+  # VOICEVOX process at Critical, and restarts it only after Normal returns.
+  # No Docker socket is mounted.
+  voicevox:
+    logging: *default-logging
+    build:
+      context: ..
+      dockerfile: services/voicevox/Dockerfile
+    container_name: animeenigma-voicevox
+    mem_limit: 2g
+    cpus: 1.0
+    cpu_shares: 128
+    pids_limit: 256
+    oom_score_adj: 750
+    restart: unless-stopped
+    labels:
+      com.animeenigma.governor-priority: low
+    environment:
+      REDIS_ADDR: redis:6379
+      VOICEVOX_GOVERNOR_POLL: 2s
+      VOICEVOX_STOP_GRACE: 10s
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # content-verify (content probing queue, spec 2026-07-16) — periodic
   # audio-language + burned-in-subtitle verdicts on top-N streams via

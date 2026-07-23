@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/authz"
+	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/httputil"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
 	"github.com/ILITA-hub/animeenigma/libs/metrics"
@@ -77,6 +78,20 @@ func NewRouterWithCleanup(
 		log,
 	)
 	featureRuleset.Start(rulesetCtx, rulesetRefreshInterval)
+
+	// Zundamon voice synthesis is a low-priority workload. Reuse the gateway's
+	// Redis client to watch the governor signal, then shed the public facade at
+	// Elevated and Critical before any CPU work reaches VOICEVOX.
+	degradationWatcher := cache.NewDegradationWatcherFromClient(redisClient, 2*time.Second)
+	degradationWatcher.Start(rulesetCtx)
+	var zundamonHandler *handler.ZundamonHandler
+	if cfg.Services.VoicevoxService != "" {
+		var err error
+		zundamonHandler, err = handler.NewZundamonHandler(cfg.Services.VoicevoxService, degradationWatcher, log)
+		if err != nil {
+			log.Fatalw("failed to build Zundamon VOICEVOX facade", "error", err, "target", cfg.Services.VoicevoxService)
+		}
+	}
 
 	r := chi.NewRouter()
 
@@ -374,6 +389,20 @@ func NewRouterWithCleanup(
 		// Track B5: advertise the rotating masked analytics base on every
 		// /api response (see handler/masked_analytics.go).
 		r.Use(handler.MaskedPathHintMiddleware([]byte(cfg.JWT.Secret)))
+
+		// Public, narrowly bounded Zundamon facade. The raw VOICEVOX API stays
+		// Docker-network-only; this surface filters to the exact ずんだもん
+		// speaker, serializes synthesis, and observes governor load shedding.
+		if zundamonHandler == nil {
+			unavailable := func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":{"code":"unavailable","message":"VOICEVOX is not configured"}}`, http.StatusServiceUnavailable)
+			}
+			r.Get("/zundamon/status", unavailable)
+			r.Post("/zundamon/synthesis", unavailable)
+		} else {
+			r.Get("/zundamon/status", zundamonHandler.Status)
+			r.Post("/zundamon/synthesis", zundamonHandler.Synthesize)
+		}
 
 		// Auth service routes (public)
 		r.HandleFunc("/auth/*", proxyHandler.ProxyToAuth)

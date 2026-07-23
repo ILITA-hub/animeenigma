@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 
-const VOICEVOX_ORIGIN = 'http://127.0.0.1:50021'
-const ZUNDAMON_NAME = 'ずんだもん'
+const STATUS_ENDPOINT = '/api/zundamon/status'
+const SYNTHESIS_ENDPOINT = '/api/zundamon/synthesis'
 
 export interface VoicevoxStyle {
   id: number
@@ -9,8 +9,8 @@ export interface VoicevoxStyle {
   type?: string
 }
 
-interface VoicevoxSpeaker {
-  name: string
+interface ZundamonStatusResponse {
+  version: string
   styles: VoicevoxStyle[]
 }
 
@@ -23,16 +23,28 @@ export type ZundamonTtsStatus =
   | 'done'
   | 'error'
 
-export type ZundamonTtsError = 'unavailable' | 'speakerMissing' | 'synthesis' | 'playback'
+export type ZundamonTtsError = 'unavailable' | 'speakerMissing' | 'degraded' | 'busy' | 'synthesis' | 'playback'
 
-function ensureOk(response: Response): Response {
-  if (!response.ok) throw new Error(`VOICEVOX HTTP ${response.status}`)
-  return response
+class ZundamonApiError extends Error {
+  constructor(readonly status: number, readonly code: string) {
+    super(`Zundamon API HTTP ${status}`)
+  }
+}
+
+async function apiError(response: Response): Promise<ZundamonApiError> {
+  let code = ''
+  try {
+    const body = await response.json() as { error?: { code?: string } }
+    code = body.error?.code ?? ''
+  } catch {
+    // The status still provides a safe generic fallback for malformed errors.
+  }
+  return new ZundamonApiError(response.status, code)
 }
 
 /**
- * Talks directly to the visitor's own VOICEVOX engine on loopback.
- * AnimeEnigma never receives the text or generated audio.
+ * Talks to AnimeEnigma's narrow server-side facade over the official
+ * VOICEVOX Zundamon model. The raw engine is never exposed to browsers.
  */
 export function useZundamonTts() {
   const connected = ref(false)
@@ -83,34 +95,25 @@ export function useZundamonTts() {
     const timeout = window.setTimeout(() => controller.abort(), 5000)
 
     try {
-      const [versionResponse, speakersResponse] = await Promise.all([
-        fetch(`${VOICEVOX_ORIGIN}/version`, { cache: 'no-store', signal: controller.signal }),
-        fetch(`${VOICEVOX_ORIGIN}/speakers`, { cache: 'no-store', signal: controller.signal }),
-      ])
-      ensureOk(versionResponse)
-      ensureOk(speakersResponse)
-
-      const [version, speakers] = await Promise.all([
-        versionResponse.json() as Promise<string>,
-        speakersResponse.json() as Promise<VoicevoxSpeaker[]>,
-      ])
-      const zundamon = speakers.find((speaker) => speaker.name === ZUNDAMON_NAME)
-      if (!zundamon || zundamon.styles.length === 0) {
+      const response = await fetch(STATUS_ENDPOINT, { cache: 'no-store', signal: controller.signal })
+      if (!response.ok) throw await apiError(response)
+      const engine = await response.json() as ZundamonStatusResponse
+      if (!engine.styles.length) {
         error.value = 'speakerMissing'
         status.value = 'error'
         return false
       }
 
-      engineVersion.value = version
-      styles.value = zundamon.styles
+      engineVersion.value = engine.version
+      styles.value = engine.styles
       selectedStyleId.value =
-        zundamon.styles.find((style) => style.name === 'ノーマル')?.id ?? zundamon.styles[0].id
+        engine.styles.find((style) => style.name === 'ノーマル')?.id ?? engine.styles[0].id
       connected.value = true
       status.value = 'ready'
       return true
     } catch (caught) {
       if (controller.signal.aborted && activeController !== controller) return false
-      error.value = 'unavailable'
+      error.value = caught instanceof ZundamonApiError && caught.code === 'degraded' ? 'degraded' : 'unavailable'
       status.value = 'error'
       return false
     } finally {
@@ -132,28 +135,18 @@ export function useZundamonTts() {
     activeController = controller
 
     try {
-      const params = new URLSearchParams({
-        text: phrase,
-        speaker: String(selectedStyleId.value),
+      const synthesisResponse = await fetch(SYNTHESIS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: phrase,
+          styleId: selectedStyleId.value,
+          speedScale,
+          pitchScale,
+        }),
+        signal: controller.signal,
       })
-      const queryResponse = ensureOk(
-        await fetch(`${VOICEVOX_ORIGIN}/audio_query?${params}`, {
-          method: 'POST',
-          signal: controller.signal,
-        }),
-      )
-      const query = (await queryResponse.json()) as Record<string, unknown>
-      query.speedScale = speedScale
-      query.pitchScale = pitchScale
-
-      const synthesisResponse = ensureOk(
-        await fetch(`${VOICEVOX_ORIGIN}/synthesis?speaker=${selectedStyleId.value}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(query),
-          signal: controller.signal,
-        }),
-      )
+      if (!synthesisResponse.ok) throw await apiError(synthesisResponse)
       const audioBlob = await synthesisResponse.blob()
       activeAudioUrl = URL.createObjectURL(audioBlob)
       const player = new Audio(activeAudioUrl)
@@ -184,9 +177,10 @@ export function useZundamonTts() {
     } catch (caught) {
       if (controller.signal.aborted) return false
       disposeAudio()
-      error.value = caught instanceof DOMException && caught.name === 'NotAllowedError'
-        ? 'playback'
-        : 'synthesis'
+      if (caught instanceof DOMException && caught.name === 'NotAllowedError') error.value = 'playback'
+      else if (caught instanceof ZundamonApiError && caught.code === 'degraded') error.value = 'degraded'
+      else if (caught instanceof ZundamonApiError && caught.code === 'busy') error.value = 'busy'
+      else error.value = 'synthesis'
       status.value = 'error'
       return false
     } finally {
@@ -197,7 +191,6 @@ export function useZundamonTts() {
   onBeforeUnmount(stop)
 
   return {
-    engineOrigin: VOICEVOX_ORIGIN,
     connected,
     engineReady,
     engineVersion,

@@ -56,34 +56,21 @@
         <Alert
           v-else-if="!engineReady"
           variant="warning"
-          :title="error === 'speakerMissing' ? $t('zundamon.speakerMissingTitle') : $t('zundamon.engineUnavailableTitle')"
+          :title="error === 'speakerMissing'
+            ? $t('zundamon.speakerMissingTitle')
+            : error === 'degraded'
+              ? $t('zundamon.degradedTitle')
+              : $t('zundamon.engineUnavailableTitle')"
           class="mt-6"
         >
           <p>
-            {{ error === 'speakerMissing' ? $t('zundamon.speakerMissingBody') : $t('zundamon.engineUnavailableBody') }}
+            {{ error === 'speakerMissing'
+              ? $t('zundamon.speakerMissingBody')
+              : error === 'degraded'
+                ? $t('zundamon.degradedBody')
+                : $t('zundamon.engineUnavailableBody') }}
           </p>
-          <p class="mt-2">{{ $t('zundamon.corsHint') }}</p>
           <div class="mt-4 flex flex-wrap gap-2">
-            <Button
-              href="https://voicevox.hiroshiba.jp/product/zundamon/"
-              target="_blank"
-              rel="noopener noreferrer"
-              size="sm"
-              variant="outline"
-            >
-              <ExternalLink class="size-4" aria-hidden="true" />
-              {{ $t('zundamon.downloadVoicevox') }}
-            </Button>
-            <Button
-              :href="`${engineOrigin}/setting`"
-              target="_blank"
-              rel="noopener noreferrer"
-              size="sm"
-              variant="ghost"
-            >
-              <Settings2 class="size-4" aria-hidden="true" />
-              {{ $t('zundamon.openEngineSettings') }}
-            </Button>
             <Button size="sm" variant="ghost" @click="connect">
               <RefreshCw class="size-4" aria-hidden="true" />
               {{ $t('zundamon.retry') }}
@@ -177,9 +164,9 @@
         <div class="mt-6 flex gap-3 rounded-xl border border-border bg-muted/40 p-4">
           <ShieldCheck class="mt-0.5 size-5 shrink-0 text-success" aria-hidden="true" />
           <div>
-            <p class="text-sm font-semibold text-foreground">{{ $t('zundamon.localTitle') }}</p>
+            <p class="text-sm font-semibold text-foreground">{{ $t('zundamon.serverTitle') }}</p>
             <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-              {{ $t('zundamon.localBody') }}
+              {{ $t('zundamon.serverBody') }}
             </p>
             <a
               href="https://voicevox.hiroshiba.jp/product/zundamon/"
@@ -206,7 +193,6 @@ import {
   ExternalLink,
   Play,
   RefreshCw,
-  Settings2,
   ShieldCheck,
   Sparkles,
   Square,
@@ -221,7 +207,6 @@ const speedScale = ref(1.1)
 const pitchScale = ref(0)
 
 const {
-  engineOrigin,
   engineReady,
   engineVersion,
   styles,
@@ -242,6 +227,8 @@ const statusMessage = computed(() => {
   if (status.value === 'synthesizing') return t('zundamon.statusSynthesizing')
   if (status.value === 'playing') return t('zundamon.statusPlaying')
   if (status.value === 'done') return t('zundamon.statusDone')
+  if (status.value === 'error' && error.value === 'degraded') return t('zundamon.statusDegraded')
+  if (status.value === 'error' && error.value === 'busy') return t('zundamon.statusBusy')
   if (status.value === 'error' && engineReady.value) return t('zundamon.statusError')
   return ''
 })

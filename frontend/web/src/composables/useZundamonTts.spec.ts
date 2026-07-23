@@ -7,11 +7,6 @@ const zundamonStyles = [
   { id: 3, name: 'ノーマル' },
 ]
 
-const speakers = [
-  { name: '四国めたん', styles: [{ id: 2, name: 'ノーマル' }] },
-  { name: 'ずんだもん', styles: zundamonStyles },
-]
-
 function jsonResponse(data: unknown): Response {
   return {
     ok: true,
@@ -73,15 +68,12 @@ afterEach(() => {
 })
 
 describe('useZundamonTts', () => {
-  it('connects to the local engine and selects the real Zundamon normal style', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse('0.25.0'))
-      .mockResolvedValueOnce(jsonResponse(speakers))
+  it('connects to the server facade and selects the real Zundamon normal style', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ version: '0.25.0', styles: zundamonStyles }))
     const tts = mountComposable()
 
     await expect(tts.connect()).resolves.toBe(true)
-    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:50021/version')
-    expect(fetchMock.mock.calls[1][0]).toBe('http://127.0.0.1:50021/speakers')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/zundamon/status')
     expect(tts.engineReady.value).toBe(true)
     expect(tts.engineVersion.value).toBe('0.25.0')
     expect(tts.styles.value).toEqual(zundamonStyles)
@@ -92,23 +84,21 @@ describe('useZundamonTts', () => {
 
   it('synthesizes through VOICEVOX speaker 3 and plays the returned WAV', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse('0.25.0'))
-      .mockResolvedValueOnce(jsonResponse(speakers))
-      .mockResolvedValueOnce(jsonResponse({ speedScale: 1, pitchScale: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ version: '0.25.0', styles: zundamonStyles }))
       .mockResolvedValueOnce(audioResponse())
     const tts = mountComposable()
     await tts.connect()
 
     await expect(tts.speak('  ずんだもんなのだ！  ', 1.2, 0.03)).resolves.toBe(true)
 
-    const queryCall = fetchMock.mock.calls[2]
-    expect(queryCall[0]).toContain('/audio_query?')
-    expect(queryCall[0]).toContain('speaker=3')
-    expect(queryCall[0]).toContain(encodeURIComponent('ずんだもんなのだ！'))
-
-    const synthesisCall = fetchMock.mock.calls[3]
-    expect(synthesisCall[0]).toBe('http://127.0.0.1:50021/synthesis?speaker=3')
-    expect(JSON.parse(synthesisCall[1].body)).toMatchObject({ speedScale: 1.2, pitchScale: 0.03 })
+    const synthesisCall = fetchMock.mock.calls[1]
+    expect(synthesisCall[0]).toBe('/api/zundamon/synthesis')
+    expect(JSON.parse(synthesisCall[1].body)).toMatchObject({
+      text: 'ずんだもんなのだ！',
+      styleId: 3,
+      speedScale: 1.2,
+      pitchScale: 0.03,
+    })
     expect(play).toHaveBeenCalledTimes(1)
     expect(tts.status.value).toBe('playing')
 
@@ -118,10 +108,8 @@ describe('useZundamonTts', () => {
     tts.app.unmount()
   })
 
-  it('refuses to substitute another voice when the engine has no Zundamon speaker', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse('0.25.0'))
-      .mockResolvedValueOnce(jsonResponse([speakers[0]]))
+  it('refuses to connect when the server has no Zundamon style', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ version: '0.25.0', styles: [] }))
     const tts = mountComposable()
 
     await expect(tts.connect()).resolves.toBe(false)
