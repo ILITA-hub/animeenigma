@@ -136,10 +136,21 @@ ORDER BY (anonymous_id, timestamp)`
 	// identified user if ever known, else the anonymous id. This preserves the
 	// Postgres analytics_events_resolved semantics without a correlated
 	// subquery (unsupported in ClickHouse).
-	createResolvedViewDDL = `CREATE VIEW IF NOT EXISTS events_resolved AS
+	//
+	// nullIf(i.user_id, '') matters: identities.user_id is a non-Nullable
+	// String, so an unmatched LEFT JOIN fills i.user_id with the type default
+	// ('') rather than SQL NULL. coalesce() stops at the first non-NULL
+	// argument, so without nullIf() every anonymous visitor who never linked
+	// to an account resolved to person_id='' instead of falling through to
+	// e.anonymous_id — collapsing all never-linked anonymous visitors into a
+	// single empty bucket that dashboards then miscount as "identified"
+	// (resolved_user_id IS NULL was never true). CREATE OR REPLACE so an
+	// existing deployment picks up the corrected query on next boot, since a
+	// plain view has no data to migrate.
+	createResolvedViewDDL = `CREATE OR REPLACE VIEW events_resolved AS
 SELECT e.*,
-       coalesce(e.user_id, i.user_id)                 AS resolved_user_id,
-       coalesce(e.user_id, i.user_id, e.anonymous_id) AS person_id
+       coalesce(e.user_id, nullIf(i.user_id, ''))                 AS resolved_user_id,
+       coalesce(e.user_id, nullIf(i.user_id, ''), e.anonymous_id) AS person_id
 FROM events AS e
 LEFT JOIN (
     SELECT anonymous_id, argMax(user_id, timestamp) AS user_id
