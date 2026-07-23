@@ -4,6 +4,16 @@ Track issues discovered during development. Each entry should include root cause
 
 ## Active Issues
 
+### ISS-034: Schedule shows phantom weekly episodes for hiatus titles — frontend back-projects from the future `next_episode_at` anchor
+- **Date:** 2026-07-23
+- **Severity:** Medium (user-facing wrong airing dates for every ongoing anime on hiatus; backend correct, no data loss).
+- **Symptom:** Re:Zero S4 (`shikimori_id=61316`) renders as airing "ep 9 on Wed Jul 22" in the current week and ep 10 / ep 11 in the two weeks after, although its only real upcoming airing is ep 12 on 2026-08-12. Reported after five prior fix sessions.
+- **Root cause:** `frontend/web/src/composables/schedule/projection.ts` reconstructs past occurrences by stepping backward in 7-day strides from `next_episode_at` (`date = anchor + k·week`, `episode = episodes_aired + 1 + k`, k ≤ 0). AniList corroboration deliberately pushes that anchor past a hiatus, so every backward stride walks through the gap and invents an airing per week. `Aug 12 − 3 weeks = Jul 22`, `11 + 1 − 3 = 9`. Structural, not off-by-one: even genuinely-aired episodes get both the wrong date and the wrong number.
+- **Backend verified correct:** DB holds `next_episode_at=2026-08-12 13:00Z`/`source=anilist` and survives the nightly refresh; `calendar_sync` last succeeded 2026-07-20 04:00; `GetSchedule` and `/api/anime/schedule` both return the August date.
+- **Why five sessions missed it:** `0972d1de` (Jul 16) fixed the DB anchor, `ad6e6c48`/`5d2fefef` addressed unrelated schedule symptoms, `6094cd6e` (Jul 21) genuinely fixed this and added a hiatus regression test — then `40a6b581` (Jul 22 12:44, three minutes after `8c7d7a07`) re-added backward projection **and deleted that regression test** to satisfy the competing "past weeks must not be empty" requirement. The regressed build is what is live (web container rebuilt Jul 22 16:15 CEST).
+- **Fix constraints:** past occurrences must come from real aired history (`aired_on` + weekly-from-ep-1, or a last-aired timestamp in the feed), never from the future anchor; forward projection stays off; restore the deleted guard test alongside a companion covering past-week visibility so neither requirement can be satisfied by dropping the other.
+- **Status:** 🔬 Researched 2026-07-23, **no fix applied** (research-only session). Full analysis: [`2026-07-23-schedule-rezero-phantom-backprojection.md`](2026-07-23-schedule-rezero-phantom-backprojection.md)
+
 ### ISS-033: Analytics published its cross-service Redis keys to DB 2 while every reader is on DB 0 — `player_ranking` ranking always empty; `read_thresholds` silently never bridged
 - **Date:** 2026-06-15
 - **Severity:** Medium (no user-facing impact). Stage 2b provider-ranking produced no data; the D-03 dynamic read-gate has been running on cold-start static defaults since it shipped (the dynamic half never engaged).
