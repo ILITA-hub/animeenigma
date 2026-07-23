@@ -2,7 +2,6 @@
 // page-scoped composables. Extracted verbatim from Anime.vue's <script setup>.
 
 export interface AnimeWithExtras {
-  japaneseTitle?: string
   type?: string
   hidden?: boolean
   shikimoriId?: string

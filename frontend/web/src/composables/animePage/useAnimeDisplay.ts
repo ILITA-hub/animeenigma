@@ -9,6 +9,7 @@ import {
   isReviewFlagged as isReviewFlaggedPure,
   formatEpisodeCount as formatEpisodeCountPure,
   formatCount as formatCountPure,
+  secondaryTitleForms as secondaryTitleFormsPure,
 } from '@/composables/anime/animeFormatters'
 import type { Review } from './types'
 
@@ -35,6 +36,12 @@ export function useAnimeDisplay(anime: Ref<Anime | null>) {
 
   const isHentai = computed(() =>
     anime.value?.rawGenres?.some(g => g.name === 'Hentai') ?? false
+  )
+
+  // Other-language title forms rendered under the h1 (AUTO-656). The h1 shows
+  // the locale-picked form, so that one is excluded to avoid a duplicate.
+  const secondaryTitles = computed(() =>
+    anime.value ? secondaryTitleFormsPure(anime.value, anime.value.title) : []
   )
 
   const formatDate = (dateStr: string) => {
@@ -101,6 +108,7 @@ export function useAnimeDisplay(anime: Ref<Anime | null>) {
     statusVariant,
     parsedDescription,
     isHentai,
+    secondaryTitles,
     notReleasedYet,
     premiereDate,
     formatDate,

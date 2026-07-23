@@ -46,8 +46,8 @@
           <h1 class="text-2xl md:text-4xl font-semibold text-white mb-2">
             {{ anime.title }}
           </h1>
-          <p v-if="(anime as AnimeWithExtras).japaneseTitle" class="text-lg text-white/50 mb-4">
-            {{ (anime as AnimeWithExtras).japaneseTitle }}
+          <p v-if="secondaryTitles.length" class="text-sm text-muted-foreground mb-4">
+            {{ secondaryTitles.join(' · ') }}
           </p>
 
           <!-- Meta Info -->
@@ -1066,7 +1066,7 @@ async function onToggleTheater() {
 
 // Locale-bound formatters + derived metadata computeds.
 const {
-  statusVariant, parsedDescription, isHentai, notReleasedYet, premiereDate,
+  statusVariant, parsedDescription, isHentai, secondaryTitles, notReleasedYet, premiereDate,
   formatDate, formatNextEpisode, formatEpisodeCount, formatCount,
   formatReviewStats, isReviewFlagged,
 } = useAnimeDisplay(anime)

@@ -115,6 +115,42 @@ export function formatCount(n: number, locale: string): string {
   }
 }
 
+/** Subset of the anime shape the secondary-title row reads. */
+export interface TitleFormsInput {
+  name?: string
+  nameRu?: string
+  nameJp?: string
+}
+
+/**
+ * The anime's other-language title forms, in JP-native → romaji → RU order,
+ * for the muted row under the page h1.
+ *
+ * The h1 already renders whichever form `getLocalizedTitle` picked for the
+ * active locale, so `primaryTitle` is dropped here rather than printed twice.
+ * Empty fields and duplicates collapse out — Shikimori commonly leaves
+ * `name_ru` equal to the romaji `name` when no translation exists — so the
+ * row degrades to fewer entries, or to none at all.
+ */
+export function secondaryTitleForms(
+  anime: TitleFormsInput,
+  primaryTitle?: string,
+): string[] {
+  const key = (s: string) => s.trim().toLowerCase()
+  const seen = new Set<string>()
+  const primary = primaryTitle?.trim()
+  if (primary) seen.add(key(primary))
+
+  const forms: string[] = []
+  for (const candidate of [anime.nameJp, anime.name, anime.nameRu]) {
+    const value = candidate?.trim()
+    if (!value || seen.has(key(value))) continue
+    seen.add(key(value))
+    forms.push(value)
+  }
+  return forms
+}
+
 /**
  * Parse the raw `watch_progress:{animeId}` localStorage JSON and return the
  * episode number with the most-recent `updatedAt`, or undefined when there's
