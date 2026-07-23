@@ -75,7 +75,7 @@
         <span class="text-sm font-semibold text-white truncate">{{ data.author.username }}</span>
       </div>
 
-      <span class="ml-auto text-[13px] text-muted-foreground whitespace-nowrap">{{ reviewDate }}</span>
+      <span class="flex-none text-[13px] text-muted-foreground whitespace-nowrap">{{ reviewDate }}</span>
     </div>
 
     <template #cta>
