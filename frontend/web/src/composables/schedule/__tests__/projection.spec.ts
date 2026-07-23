@@ -34,14 +34,42 @@ describe('projectOccurrences', () => {
     expect(occ.map(o => o.episode)).toEqual([12])
   })
 
-  it('keeps past weekly episodes visible before the next-airing anchor', () => {
+  it('does not derive past episodes from the next-airing anchor', () => {
     const occ = projectOccurrences(anime(), d('2026-05-25T00:00:00Z'), d('2026-06-09T00:00:00Z'))
-    expect(occ.map(o => o.episode)).toEqual([8, 9, 10])
+    expect(occ.map(o => o.episode)).toEqual([10])
   })
 
-  it('does not back-project before episode 1', () => {
-    const occ = projectOccurrences(anime({ episodes_aired: 0 }), d('2026-05-25T00:00:00Z'), d('2026-06-09T00:00:00Z'))
-    expect(occ.map(o => o.episode)).toEqual([1])
+  it('keeps a hiatus title out of weeks before its confirmed next airing', () => {
+    const occ = projectOccurrences(
+      anime({ next_episode_at: '2026-08-12T13:00:00Z', episodes_aired: 11, episodes_count: 19 }),
+      d('2026-07-20T00:00:00Z'),
+      d('2026-07-27T00:00:00Z'),
+    )
+    expect(occ).toEqual([])
+  })
+
+  it('shows a hiatus title in an earlier week only from confirmed history', () => {
+    const rezero = anime({
+      id: 'rezero-s4',
+      next_episode_at: '2026-08-12T13:00:00Z',
+      episodes_aired: 11,
+      episodes_count: 19,
+    })
+    const history = [{
+      anime_id: rezero.id,
+      episode: 11,
+      aired_at: '2026-06-17T13:00:00Z',
+      source: 'anilist',
+      anime: rezero,
+    }]
+    const occ = occurrencesInRange(
+      [rezero],
+      [rezero],
+      history,
+      d('2026-06-15T00:00:00Z'),
+      d('2026-06-22T00:00:00Z'),
+    )
+    expect(occ.map(o => [o.episode, o.date.toISOString()])).toEqual([[11, '2026-06-17T13:00:00.000Z']])
   })
 
   it('does not project a stale anchor into a later week', () => {
@@ -95,12 +123,47 @@ describe('projectOccurrences', () => {
 })
 
 describe('occurrencesInRange', () => {
-  it('flattens occurrences across all anime', () => {
+  it('merges exact historical occurrences with confirmed next airings', () => {
     const list = [
       anime({ id: 'a', next_episode_at: '2026-06-08T17:00:00Z' }),
       anime({ id: 'b', next_episode_at: '2026-06-10T20:00:00Z' }),
     ]
-    const occ = occurrencesInRange(list, d('2026-06-08T00:00:00Z'), d('2026-06-12T00:00:00Z'))
-    expect(occ.map(o => o.anime.id).sort()).toEqual(['a', 'b'])
+    const history = [{
+      anime_id: 'a',
+      episode: 9,
+      aired_at: '2026-06-01T17:00:00Z',
+      source: 'anilist',
+      anime: list[0],
+    }]
+    const occ = occurrencesInRange(list, list, history, d('2026-06-01T00:00:00Z'), d('2026-06-12T00:00:00Z'))
+    expect(occ.map(o => `${o.anime.id}:${o.episode}`).sort()).toEqual(['a:10', 'a:9', 'b:10'])
+  })
+
+  it('ignores malformed or unrelated historical records', () => {
+    const a = anime({ id: 'a' })
+    const history = [
+      { anime_id: 'missing', episode: 1, aired_at: '2026-06-01T17:00:00Z', anime: anime({ id: 'missing' }) },
+      { anime_id: 'a', episode: 0, aired_at: '2026-06-01T17:00:00Z', anime: a },
+      { anime_id: 'a', episode: 9, aired_at: 'invalid', anime: a },
+    ]
+    expect(occurrencesInRange([a], [a], history, d('2026-06-01T00:00:00Z'), d('2026-06-02T00:00:00Z'))).toEqual([])
+  })
+
+  it('does not treat a historical-only anime stale anchor as upcoming', () => {
+    const released = anime({ id: 'released', next_episode_at: '2026-06-08T17:00:00Z' })
+    const history = [{
+      anime_id: released.id,
+      episode: 9,
+      aired_at: '2026-06-01T17:00:00Z',
+      anime: released,
+    }]
+    const occ = occurrencesInRange(
+      [released],
+      [],
+      history,
+      d('2026-06-01T00:00:00Z'),
+      d('2026-06-09T00:00:00Z'),
+    )
+    expect(occ.map(o => o.episode)).toEqual([9])
   })
 })

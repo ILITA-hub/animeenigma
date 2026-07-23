@@ -1,6 +1,6 @@
 // frontend/web/src/composables/useScheduleCalendar.ts
 import { computed, reactive, ref, type Ref } from 'vue'
-import type { ScheduleAnime, Occurrence, TableSortKey } from './schedule/types'
+import type { ScheduleAnime, ScheduleConfirmedOccurrence, Occurrence, TableSortKey } from './schedule/types'
 import { emptyFilters } from './schedule/types'
 import { occurrencesInRange } from './schedule/projection'
 import { applyFilters, availableGenres, sortCellHybrid, statusRank } from './schedule/filterSort'
@@ -18,6 +18,7 @@ export interface DayCellModel {
 
 export interface UseScheduleCalendarOptions {
   animes: Ref<ScheduleAnime[]>
+  confirmedOccurrences: Ref<ScheduleConfirmedOccurrence[]>
   now: Ref<Date>
   statusOf: (animeId: string) => string | null
   loggedIn: Ref<boolean>
@@ -38,8 +39,16 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   const rankOf = (a: ScheduleAnime) =>
     opts.loggedIn.value ? statusRank(opts.statusOf(a.id)) : 2
 
-  const filteredAnimes = computed(() => applyFilters(opts.animes.value, filters, opts.statusOf))
-  const genres = computed(() => availableGenres(opts.animes.value))
+  const allAnimes = computed(() => {
+    const byID = new Map(opts.animes.value.map((anime) => [anime.id, anime]))
+    for (const occurrence of opts.confirmedOccurrences.value) {
+      if (!byID.has(occurrence.anime.id)) byID.set(occurrence.anime.id, occurrence.anime)
+    }
+    return [...byID.values()]
+  })
+  const filteredAnimes = computed(() => applyFilters(allAnimes.value, filters, opts.statusOf))
+  const filteredUpcomingAnimes = computed(() => applyFilters(opts.animes.value, filters, opts.statusOf))
+  const genres = computed(() => availableGenres(allAnimes.value))
 
   const tz = () => opts.timezone?.value
   // "now" expressed in the display timezone's wall clock, so the today
@@ -50,7 +59,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
     void opts.loggedIn.value // track login state so priority re-sorts on auth change
     const days = monthGridDays(viewDate.value)
     const { start, end } = monthGridRange(viewDate.value)
-    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
+    const all = occurrencesInRange(filteredAnimes.value, filteredUpcomingAnimes.value, opts.confirmedOccurrences.value, start, end, tz())
     const m = viewDate.value.getMonth()
     return days.map((date) => {
       const inMonth = date.getMonth() === m
@@ -69,7 +78,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
     const days = weekDays(viewDate.value)
     const start = startOfDay(days[0])
     const end = new Date(start.getTime() + WEEK_MS)
-    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
+    const all = occurrencesInRange(filteredAnimes.value, filteredUpcomingAnimes.value, opts.confirmedOccurrences.value, start, end, tz())
     return days.map((date) => ({
       date,
       inCurrentMonth: date.getMonth() === viewDate.value.getMonth(),
@@ -85,7 +94,7 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
     const days = weekDays(viewDate.value)
     const start = startOfDay(days[0])
     const end = new Date(start.getTime() + WEEK_MS)
-    const all = occurrencesInRange(filteredAnimes.value, start, end, tz())
+    const all = occurrencesInRange(filteredAnimes.value, filteredUpcomingAnimes.value, opts.confirmedOccurrences.value, start, end, tz())
     const cmp: Record<TableSortKey, (x: Occurrence, y: Occurrence) => number> = {
       name: (x, y) => (x.anime.name ?? '').localeCompare(y.anime.name ?? ''),
       date: (x, y) => x.date.getTime() - y.date.getTime(),
@@ -119,9 +128,15 @@ export function useScheduleCalendar(opts: UseScheduleCalendarOptions) {
   const activeFilterCount = computed(() =>
     (filters.search ? 1 : 0) + (filters.myList ? 1 : 0) + filters.genres.size + filters.types.size)
 
+  const visibleRange = computed(() => {
+    if (view.value === 'month') return monthGridRange(viewDate.value)
+    const start = weekStart(viewDate.value)
+    return { start, end: new Date(start.getTime() + WEEK_MS) }
+  })
+
   return {
     view, viewDate, filters, sortKey, sortDir,
-    filteredAnimes, genres, monthCells, weekColumns, tableRows, activeFilterCount,
+    allAnimes, filteredAnimes, genres, monthCells, weekColumns, tableRows, activeFilterCount, visibleRange,
     setView, shift, goToday, setSort, resetFilters,
   }
 }

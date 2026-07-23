@@ -49,7 +49,6 @@ func TestAnimeMetadataEqual(t *testing.T) {
 		b.SortPriority = 5
 		b.Hidden = true
 		b.MALID = "999"
-		b.NextEpisodeSource = "anilist"
 		b.HasEnglish = true
 		assert.True(t, AnimeMetadataEqual(a, b))
 	})
@@ -86,7 +85,10 @@ func TestAnimeMetadataEqual(t *testing.T) {
 			"poster_url":       func(x *domain.Anime) { x.PosterURL = "http://p/2.jpg" },
 			"next_episode_at":  func(x *domain.Anime) { tt := next.Add(time.Hour); x.NextEpisodeAt = &tt },
 			"next_episode_nil": func(x *domain.Anime) { x.NextEpisodeAt = nil },
-			"aired_on":         func(x *domain.Anime) { tt := aired.AddDate(0, 0, 1); x.AiredOn = &tt },
+			"next_episode_source": func(x *domain.Anime) {
+				x.NextEpisodeSource = "anilist"
+			},
+			"aired_on": func(x *domain.Anime) { tt := aired.AddDate(0, 0, 1); x.AiredOn = &tt },
 		}
 		for name, mut := range mutators {
 			a, b := base(), base()

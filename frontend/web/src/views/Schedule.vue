@@ -37,11 +37,11 @@
         :genres="cal.genres.value"
         :logged-in="loggedIn"
         :match-count="cal.filteredAnimes.value.length"
-        :total="schedule.length"
+        :total="cal.allAnimes.value.length"
         @reset="cal.resetFilters()"
       />
 
-      <div v-if="loading" class="flex justify-center py-12">
+      <div v-if="loading || historyLoading" class="flex justify-center py-12">
         <Spinner size="lg" />
       </div>
 
@@ -62,11 +62,12 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { animeApi } from '@/api/client'
 import { useAnime } from '@/composables/useAnime'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { useAuthStore } from '@/stores/auth'
 import { useScheduleCalendar, type ScheduleView } from '@/composables/useScheduleCalendar'
-import type { ScheduleAnime, Occurrence } from '@/composables/schedule/types'
+import type { ScheduleAnime, ScheduleConfirmedOccurrence, Occurrence } from '@/composables/schedule/types'
 import { isSameDay } from '@/composables/schedule/calendarGrid'
 import ScheduleFilters from '@/components/schedule/ScheduleFilters.vue'
 import MonthView from '@/components/schedule/MonthView.vue'
@@ -89,6 +90,8 @@ const watchlist = useWatchlistStore()
 const auth = useAuthStore()
 
 const schedule = ref<ScheduleAnime[]>([])
+const confirmedOccurrences = ref<ScheduleConfirmedOccurrence[]>([])
+const historyLoading = ref(false)
 const now = ref(new Date())
 const loggedIn = computed(() => auth.isAuthenticated)
 
@@ -103,6 +106,7 @@ const tzOptions = computed(() => [
 
 const cal = useScheduleCalendar({
   animes: computed(() => schedule.value),
+  confirmedOccurrences,
   now,
   statusOf: (id: string) => watchlist.getStatus(id),
   loggedIn,
@@ -154,10 +158,37 @@ function readQuery() {
     if (!Number.isNaN(d.getTime())) cal.viewDate.value = d
   }
 }
+
+let historyRequest = 0
+let ready = false
+async function loadConfirmedHistory() {
+  const request = ++historyRequest
+  historyLoading.value = true
+  const { start, end } = cal.visibleRange.value
+  // The calendar ranges are display-zone wall-clock dates. A one-day UTC pad
+  // covers both negative and positive timezone day shifts; projection.ts does
+  // the final exact wall-clock window filter.
+  const from = new Date(start.getTime() - 86400000).toISOString()
+  const to = new Date(end.getTime() + 86400000).toISOString()
+  try {
+    const response = await animeApi.getScheduleOccurrences(from, to)
+    if (request !== historyRequest) return
+    const data = response.data?.data ?? response.data
+    confirmedOccurrences.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    if (request !== historyRequest) return
+    console.error('Failed to fetch confirmed schedule history:', err)
+    confirmedOccurrences.value = []
+  } finally {
+    if (request === historyRequest) historyLoading.value = false
+  }
+}
+
 watch([cal.view, cal.viewDate], () => {
   const d = cal.viewDate.value
   const dstr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   router.replace({ query: { ...route.query, view: cal.view.value, date: dstr } })
+  if (ready) void loadConfirmedHistory()
 })
 
 onMounted(async () => {
@@ -168,5 +199,7 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to fetch schedule:', err)
   }
+  ready = true
+  await loadConfirmedHistory()
 })
 </script>

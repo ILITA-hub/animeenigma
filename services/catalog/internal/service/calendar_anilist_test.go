@@ -43,7 +43,10 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	}
 	fake := &fakeAiringFetcher{
 		byID: map[string]*idmapping.AniListAiring{
-			"100": {AniListID: 1, Status: "RELEASING", NextEpisode: 12, NextAiringAt: &aniLater},
+			"100": {
+				AniListID: 1, Status: "RELEASING", NextEpisode: 12, NextAiringAt: &aniLater,
+				AiringHistory: []idmapping.AniListEpisodeAiring{{Episode: 11, AiringAt: aniEarlier}},
+			},
 			"200": {AniListID: 2, Status: "RELEASING", NextEpisode: 5, NextAiringAt: &aniEarlier},
 			"300": {AniListID: 3, Status: "FINISHED", NextEpisode: 0, NextAiringAt: nil},
 			"500": {AniListID: 5, Status: "RELEASING", NextEpisode: 1, NextAiringAt: &aniLater},
@@ -76,6 +79,9 @@ func TestReconcileCalendarWithAniList(t *testing.T) {
 	assert("600", &shiki, sourceShikimori) // non-ongoing kept on Shikimori
 	if fake.called["600"] {
 		t.Errorf("600: non-ongoing anime must not be fetched from AniList")
+	}
+	if len(seen["100"].airingHistory) != 1 || seen["100"].airingHistory[0].Episode != 11 {
+		t.Errorf("100: expected provider airing history to be retained, got %+v", seen["100"].airingHistory)
 	}
 }
 
@@ -162,4 +168,50 @@ func TestLaterWins(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPastAniListOccurrences(t *testing.T) {
+	cutoff := time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)
+	history := []idmapping.AniListEpisodeAiring{
+		{Episode: 11, AiringAt: cutoff.Add(-24 * time.Hour)},
+		{Episode: 12, AiringAt: cutoff.Add(24 * time.Hour)},
+		{Episode: 0, AiringAt: cutoff.Add(-48 * time.Hour)},
+	}
+	got := pastAniListOccurrences("anime-1", history, cutoff)
+	if len(got) != 1 {
+		t.Fatalf("want one past valid occurrence, got %+v", got)
+	}
+	if got[0].AnimeID != "anime-1" || got[0].Episode != 11 || got[0].Source != sourceAniList {
+		t.Errorf("unexpected occurrence: %+v", got[0])
+	}
+}
+
+func TestConfirmedPreviousOccurrence(t *testing.T) {
+	airedAt := time.Date(2026, 7, 22, 13, 0, 0, 0, time.UTC)
+	now := airedAt.Add(time.Hour)
+
+	t.Run("captures when the provider confirms the episode count advanced", func(t *testing.T) {
+		existing := &domain.Anime{
+			ID: "anime-1", EpisodesAired: 10, NextEpisodeAt: &airedAt, NextEpisodeSource: sourceAniList,
+		}
+		got, ok := confirmedPreviousOccurrence(existing, &domain.Anime{EpisodesAired: 11}, now)
+		if !ok || got.Episode != 11 || !got.AiredAt.Equal(airedAt) || got.Source != sourceAniList {
+			t.Fatalf("unexpected captured occurrence: ok=%v got=%+v", ok, got)
+		}
+	})
+
+	t.Run("does not capture before the count advances", func(t *testing.T) {
+		existing := &domain.Anime{ID: "anime-1", EpisodesAired: 10, NextEpisodeAt: &airedAt}
+		if got, ok := confirmedPreviousOccurrence(existing, &domain.Anime{EpisodesAired: 10}, now); ok || got != nil {
+			t.Fatalf("unexpected occurrence: %+v", got)
+		}
+	})
+
+	t.Run("does not capture a future anchor", func(t *testing.T) {
+		future := now.Add(time.Hour)
+		existing := &domain.Anime{ID: "anime-1", EpisodesAired: 10, NextEpisodeAt: &future}
+		if got, ok := confirmedPreviousOccurrence(existing, &domain.Anime{EpisodesAired: 11}, now); ok || got != nil {
+			t.Fatalf("unexpected occurrence: %+v", got)
+		}
+	})
 }

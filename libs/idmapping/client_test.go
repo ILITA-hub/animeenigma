@@ -436,7 +436,7 @@ func TestResolveByShikimoriIDContext_Succeeds(t *testing.T) {
 }
 
 func TestAniListAiringByMALID_Scheduled(t *testing.T) {
-	const body = `{"data":{"Media":{"id":52991,"status":"RELEASING","nextAiringEpisode":{"episode":12,"airingAt":1786579200}}}}`
+	const body = `{"data":{"Media":{"id":52991,"status":"RELEASING","nextAiringEpisode":{"episode":12,"airingAt":1786579200},"airingSchedule":{"nodes":[{"episode":1,"airingAt":1775653200},{"episode":12,"airingAt":1786579200},{"episode":0,"airingAt":0}]}}}}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, body)
 	}))
@@ -458,6 +458,15 @@ func TestAniListAiringByMALID_Scheduled(t *testing.T) {
 	}
 	if got.NextAiringAt.Location() != time.UTC {
 		t.Errorf("airingAt should be UTC, got %v", got.NextAiringAt.Location())
+	}
+	if len(got.AiringHistory) != 2 {
+		t.Fatalf("AiringHistory: want 2 valid entries, got %+v", got.AiringHistory)
+	}
+	if got.AiringHistory[0].Episode != 1 || got.AiringHistory[0].AiringAt.Unix() != 1775653200 {
+		t.Errorf("unexpected first history entry: %+v", got.AiringHistory[0])
+	}
+	if got.AiringHistory[0].AiringAt.Location() != time.UTC {
+		t.Errorf("history airingAt should be UTC, got %v", got.AiringHistory[0].AiringAt.Location())
 	}
 }
 

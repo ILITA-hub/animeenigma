@@ -24,7 +24,16 @@ export interface ScheduleAnime {
   genres?: ScheduleGenre[]
 }
 
-/** A single projected episode airing on a concrete date/time. */
+/** One provider-confirmed historical airing returned by the catalog. */
+export interface ScheduleConfirmedOccurrence {
+  anime_id: string
+  episode: number
+  aired_at: string
+  source?: string
+  anime: ScheduleAnime
+}
+
+/** A single confirmed episode airing on a concrete date/time. */
 export interface Occurrence {
   anime: ScheduleAnime
   episode: number

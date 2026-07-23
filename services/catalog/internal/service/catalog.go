@@ -213,6 +213,10 @@ func (s *CatalogService) upsertAnimeFromExternal(ctx context.Context, anime *dom
 		anime.ID = existing.ID
 		anime.HasVideo = existing.HasVideo
 		anime.CreatedAt = existing.CreatedAt
+		if err := s.captureConfirmedPreviousOccurrence(ctx, existing, anime); err != nil {
+			return err
+		}
+		defendAniListNextEpisode(anime, existing)
 		if err := s.animeRepo.Update(ctx, anime); err != nil {
 			return err
 		}

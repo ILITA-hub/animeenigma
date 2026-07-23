@@ -528,6 +528,11 @@ func (s *CatalogService) GetSchedule(ctx context.Context) ([]*domain.Anime, erro
 	return animes, nil
 }
 
+// GetScheduleOccurrences returns provider-confirmed episode history in [from, to).
+func (s *CatalogService) GetScheduleOccurrences(ctx context.Context, from, to time.Time) ([]domain.AnimeAiringOccurrence, error) {
+	return s.animeRepo.GetAiringOccurrences(ctx, from, to)
+}
+
 // GetOngoingAnime gets all ongoing anime
 func (s *CatalogService) GetOngoingAnime(ctx context.Context, page, pageSize int, sort, order string, recentOnly bool) ([]*domain.Anime, int64, error) {
 	animes, total, err := s.animeRepo.GetOngoingAnime(ctx, page, pageSize, sort, order, recentOnly)

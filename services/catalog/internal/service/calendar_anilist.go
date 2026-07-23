@@ -85,6 +85,7 @@ func (s *CatalogService) reconcileCalendarWithAniList(ctx context.Context, seen 
 		var aniListAt *time.Time
 		if airing != nil {
 			aniListAt = airing.NextAiringAt
+			info.airingHistory = airing.AiringHistory
 		}
 		chosen, fromAniList := laterWins(info.nextEpisodeAt, aniListAt)
 		info.nextEpisodeAt = chosen
@@ -100,6 +101,54 @@ func (s *CatalogService) reconcileCalendarWithAniList(ctx context.Context, seen 
 			metrics.NextEpisodeSourceTotal.WithLabelValues(sourceShikimori).Inc()
 		}
 	}
+}
+
+func pastAniListOccurrences(animeID string, history []idmapping.AniListEpisodeAiring, cutoff time.Time) []domain.AnimeAiringOccurrence {
+	occurrences := make([]domain.AnimeAiringOccurrence, 0, len(history))
+	for _, airing := range history {
+		if airing.Episode <= 0 || airing.AiringAt.After(cutoff) {
+			continue
+		}
+		occurrences = append(occurrences, domain.AnimeAiringOccurrence{
+			AnimeID: animeID,
+			Episode: airing.Episode,
+			AiredAt: airing.AiringAt.UTC(),
+			Source:  sourceAniList,
+		})
+	}
+	return occurrences
+}
+
+func (s *CatalogService) persistAniListAiringHistory(ctx context.Context, animeID string, history []idmapping.AniListEpisodeAiring) error {
+	return s.animeRepo.UpsertAiringOccurrences(ctx, pastAniListOccurrences(animeID, history, time.Now().UTC()))
+}
+
+func confirmedPreviousOccurrence(existing, fresh *domain.Anime, now time.Time) (*domain.AnimeAiringOccurrence, bool) {
+	if existing == nil || fresh == nil || existing.NextEpisodeAt == nil || existing.NextEpisodeAt.After(now) {
+		return nil, false
+	}
+	episode := existing.EpisodesAired + 1
+	if episode <= 0 || fresh.EpisodesAired < episode {
+		return nil, false
+	}
+	source := existing.NextEpisodeSource
+	if source == "" {
+		source = sourceShikimori
+	}
+	return &domain.AnimeAiringOccurrence{
+		AnimeID: existing.ID,
+		Episode: episode,
+		AiredAt: existing.NextEpisodeAt.UTC(),
+		Source:  source,
+	}, true
+}
+
+func (s *CatalogService) captureConfirmedPreviousOccurrence(ctx context.Context, existing, fresh *domain.Anime) error {
+	occurrence, ok := confirmedPreviousOccurrence(existing, fresh, time.Now().UTC())
+	if !ok {
+		return nil
+	}
+	return s.animeRepo.UpsertAiringOccurrences(ctx, []domain.AnimeAiringOccurrence{*occurrence})
 }
 
 // defendAniListNextEpisode preserves an AniList-corroborated next-episode date on

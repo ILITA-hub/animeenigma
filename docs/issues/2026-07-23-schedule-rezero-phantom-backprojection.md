@@ -1,8 +1,8 @@
 # ISS-034 — Re:Zero S4 shows phantom weekly episodes on the schedule (frontend back-projection)
 
 - **Date:** 2026-07-23
-- **Status:** 🔬 Researched, **NO FIX APPLIED** (owner asked for research only)
-- **Severity:** Medium — user-facing wrong airing dates for every ongoing anime on hiatus. No data loss; backend is correct.
+- **Status:** ✅ Resolved 2026-07-23
+- **Severity:** Medium — user-facing wrong airing dates for ongoing anime on hiatus. No data loss.
 - **Reported as:** "Despite 5 fix sessions, Re:Zero 4 is still shown as scheduled now, but should be only in August."
 - **Canonical case:** Re:Zero kara Hajimeru Isekai Seikatsu 4th Season — `shikimori_id=61316`, uuid `0d23c011-b1b0-4a84-ba7b-f743fcc1a910`
 
@@ -21,7 +21,7 @@ Reproduced by running the deployed `projectOccurrences` against the live API pay
 (`next_episode_at=2026-08-12T13:00:00Z`, `episodes_aired=11`, `episodes_count=19`).
 In timezones ≥ UTC+12 the anchor shifts a day and the phantom lands on **today** (Jul 23) instead of Jul 22.
 
-## Root cause — frontend only
+## Primary root cause — frontend back-projection
 
 `frontend/web/src/composables/schedule/projection.ts` (current `main`, commit `40a6b581`) reconstructs *past*
 occurrences by stepping **backward in 7-day strides from the future anchor**:
@@ -44,23 +44,25 @@ so every 7-day step backward from it walks **through the hiatus** and invents an
 Arithmetic for Re:Zero: `Aug 12 − 3 weeks = Jul 22`, `episode = 11 + 1 − 3 = 9`. The `episode >= 1` guard does not
 fire (9 ≥ 1), and the `episode <= episodes_count` guard does not fire (9 ≤ 19), so nothing stops it.
 
-The defect is **structural, not off-by-one**: even for the episodes that genuinely aired, back-projection produces
-the wrong date *and* the wrong number. Real ep 11 aired around Jun 17; this code claims it airs Aug 5. Correct past
-reconstruction requires real aired history (e.g. `aired_on` + weekly-from-ep-1, or a `last_episode_aired_at` field
-added to the schedule feed) — it cannot be derived from a future anchor.
+The defect is **structural, not off-by-one**: even for episodes that genuinely aired, back-projection produces
+the wrong date *and* the wrong number. Real ep 11 aired on Jun 17; this code claims it airs Aug 5. Correct past
+reconstruction requires provider-confirmed occurrence history. A weekly reconstruction from a season start date
+is also unsafe because it silently fabricates dates across any earlier delay or skipped week.
 
-## What is NOT broken (verified live 2026-07-23)
+## Secondary defect — backend anchor provenance was not durable on every path
 
-The entire backend chain is correct and needs no change:
+The first live check showed the expected AniList anchor
+(`next_episode_at=2026-08-12T13:00:00Z`, `next_episode_source=anilist`), but a later check during implementation
+found it had regressed to the Shikimori date (`2026-07-29`) with no source provenance.
 
-| Layer | Evidence |
-|---|---|
-| DB row | `next_episode_at = 2026-08-12 13:00:00+00`, `next_episode_source = anilist`, refreshed 2026-07-22 13:32 — the AniList value survives the nightly Shikimori refresh, so the `0972d1de` allowlist fix holds |
-| `calendar_sync` | `job_successes.last_success_at = 2026-07-20 04:00:54+00` (weekly Mon 04:00 cron ran) |
-| `GetSchedule` | `services/catalog/internal/repo/anime.go:543` — ongoing + `next_episode_at > NOW() - INTERVAL '7 days'`; Re:Zero passes |
-| `GET /api/anime/schedule` | returns `"next_episode_at":"2026-08-12T13:00:00Z"`, `"next_episode_source":"anilist"` for shikimori_id 61316 |
+Two metadata paths could still overwrite a defended AniList anchor:
 
-The wrong dates are created in the browser, after a correct payload arrives.
+- the generic external-anime upsert used by Shikimori-backed flows;
+- the direct single-anime refresh path.
+
+Both bypassed `defendAniListNextEpisode`, and `AnimeMetadataEqual` did not compare `next_episode_source`, so a
+provenance-only correction could be treated as no change. The incident therefore had two active layers: the
+browser fabricated occurrences from any future anchor, and some backend paths could still degrade that anchor.
 
 ## Why five fix sessions did not settle it
 
@@ -84,16 +86,24 @@ The two fix directions were oscillating between two real requirements:
 Each session optimised one and broke the other. 5b additionally removed the guard test protecting B, so the
 suite went green on the regression.
 
-## Constraints for a real fix
+## Resolution
 
-1. **Never derive past occurrences from the future anchor.** Past entries need actual aired history — either
-   `aired_on` + weekly-from-episode-1 (bounded by `episodes_aired`), or a new last-aired timestamp on the schedule
-   payload. Anything that steps backward from `next_episode_at` reintroduces this bug.
-2. **Keep forward projection off.** `next_episode_at` confirms exactly one airing; projecting past it re-creates the
-   original AUTO-632-era phantom-future problem.
-3. **Restore the deleted regression test verbatim** (`keeps a hiatus title out of weeks before its confirmed next
-   airing`) plus a companion asserting requirement A, so the next session cannot satisfy one by deleting the other.
-4. Re:Zero S4 (anchor Aug 12, `episodes_aired=11`, `episodes_count=19`) is the standing fixture for both.
+1. **The frontend no longer projects in either direction.** `next_episode_at` contributes exactly one confirmed
+   upcoming occurrence. Past dates come only from confirmed history returned by the catalog.
+2. **Catalog stores durable, correction-safe occurrences.** AniList `airingSchedule` nodes are upserted by
+   `(anime_id, episode)` with timestamp and source provenance. When `episodes_aired` advances, the previously
+   confirmed next anchor is also captured as history, so daily refreshes preserve new airings between full AniList
+   reconciliations.
+3. **A bounded historical API feeds every schedule view.** `GET /api/anime/schedule/occurrences?from=…&to=…`
+   returns exact occurrences and their anime metadata for at most 70 days. The frontend refreshes this range as the
+   user navigates month, week, or table views and merges it with the exact upcoming anchor.
+4. **All metadata update paths preserve anchor provenance.** Generic upsert, direct refresh, batch refresh, and
+   calendar reconciliation now run the same AniList defense. Metadata equality includes `next_episode_source`.
+   `GetSchedule` returns only genuinely upcoming anchors instead of retaining stale anchors for client projection.
+5. **Both requirements are locked by tests.** The restored Re:Zero fixture proves the July hiatus weeks stay empty;
+   its companion proves episode 11 appears on Jun 17 from confirmed history. Additional tests cover historical
+   released anime, malformed/unrelated occurrence filtering, correction-safe persistence, hidden-anime exclusion,
+   AniList history parsing, and provenance comparison.
 
 ## Process lesson
 
@@ -103,9 +113,12 @@ and re-derive whether the two requirements can both hold before choosing one.
 
 ## References
 
-- `frontend/web/src/composables/schedule/projection.ts` — defect site
-- `frontend/web/src/composables/useScheduleCalendar.ts:53,72,88` — the three consumers (month, week, table views)
-- `frontend/web/src/composables/schedule/__tests__/projection.spec.ts` — test file the guard was removed from
-- `services/catalog/internal/repo/anime.go:543` — `GetSchedule` (verified correct)
-- `services/catalog/internal/service/calendar_anilist.go` — AniList corroboration (verified correct)
+- `frontend/web/src/composables/schedule/projection.ts` — exact occurrence merge; no projection
+- `frontend/web/src/composables/useScheduleCalendar.ts` — month, week, and table consumers
+- `frontend/web/src/composables/schedule/__tests__/projection.spec.ts` — hiatus and confirmed-history regressions
+- `services/catalog/internal/domain/anime_airing_occurrence.go` — durable occurrence model
+- `services/catalog/internal/repo/anime_airing_occurrence.go` — correction-safe persistence and bounded reads
+- `services/catalog/internal/service/calendar_anilist.go` — AniList history ingestion and anchor capture
+- `services/catalog/internal/handler/anime.go` — bounded historical schedule endpoint
+- `libs/idmapping/client.go` — AniList airing-history query
 - `docs/superpowers/specs/2026-06-25-anilist-airing-corroboration-design.md` — why the anchor jumps the hiatus

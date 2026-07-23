@@ -403,6 +403,35 @@ func (h *CatalogHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, animes)
 }
 
+// GetScheduleOccurrences handles provider-confirmed historical airings.
+func (h *CatalogHandler) GetScheduleOccurrences(w http.ResponseWriter, r *http.Request) {
+	from, err := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
+	if err != nil {
+		httputil.BadRequest(w, "from must be an RFC3339 timestamp")
+		return
+	}
+	to, err := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
+	if err != nil {
+		httputil.BadRequest(w, "to must be an RFC3339 timestamp")
+		return
+	}
+	if !to.After(from) {
+		httputil.BadRequest(w, "to must be after from")
+		return
+	}
+	if to.Sub(from) > 70*24*time.Hour {
+		httputil.BadRequest(w, "schedule occurrence range cannot exceed 70 days")
+		return
+	}
+
+	occurrences, err := h.catalogService.GetScheduleOccurrences(r.Context(), from.UTC(), to.UTC())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, occurrences)
+}
+
 // GetOngoingAnime handles getting all ongoing anime
 func (h *CatalogHandler) GetOngoingAnime(w http.ResponseWriter, r *http.Request) {
 	page := pagination.ParseIntParam(r.URL.Query().Get("page"), 1)

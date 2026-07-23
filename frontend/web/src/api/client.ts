@@ -386,6 +386,8 @@ export const animeApi = {
   getPopular: () => apiClient.get('/anime/popular'),
   getRecent: () => apiClient.get('/anime/recent'),
   getSchedule: () => apiClient.get('/anime/schedule'),
+  getScheduleOccurrences: (from: string, to: string) =>
+    apiClient.get('/anime/schedule/occurrences', { params: { from, to } }),
   getOngoing: (params?: { sort?: string; order?: 'asc' | 'desc'; recent?: boolean }) =>
     apiClient.get('/anime/ongoing', { params }),
   getAnnounced: (limit = 20) => apiClient.get('/anime', { params: { status: 'announced', page_size: limit } }),

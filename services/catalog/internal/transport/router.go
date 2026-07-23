@@ -164,6 +164,7 @@ func NewRouter(
 			r.Get("/popular", catalogHandler.GetPopularAnime)
 			r.Get("/recent", catalogHandler.GetRecentAnime)
 			r.Get("/schedule", catalogHandler.GetSchedule)
+			r.Get("/schedule/occurrences", catalogHandler.GetScheduleOccurrences)
 			r.Get("/ongoing", catalogHandler.GetOngoingAnime)
 			r.Post("/batch-refresh", catalogHandler.BatchRefreshAnime)
 			r.Post("/calendar-sync", catalogHandler.SyncCalendar)

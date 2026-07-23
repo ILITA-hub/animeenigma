@@ -8,6 +8,7 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	"github.com/ILITA-hub/animeenigma/libs/errors"
+	"github.com/ILITA-hub/animeenigma/libs/idmapping"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/parser/shikimori"
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/repo"
@@ -39,6 +40,11 @@ func (s *CatalogService) RefreshAnimeFromShikimori(ctx context.Context, animeID 
 	shikimoriAnime.ID = existing.ID
 	shikimoriAnime.HasVideo = existing.HasVideo
 	shikimoriAnime.CreatedAt = existing.CreatedAt
+
+	if err := s.captureConfirmedPreviousOccurrence(ctx, existing, shikimoriAnime); err != nil {
+		return nil, fmt.Errorf("capture confirmed airing: %w", err)
+	}
+	defendAniListNextEpisode(shikimoriAnime, existing)
 
 	// Update in database
 	if err := s.animeRepo.Update(ctx, shikimoriAnime); err != nil {
@@ -285,6 +291,10 @@ func (s *CatalogService) refreshStaleAnime(ctx context.Context, fresh, existing 
 	fresh.HasVideo = existing.HasVideo
 	fresh.CreatedAt = existing.CreatedAt
 
+	if err := s.captureConfirmedPreviousOccurrence(ctx, existing, fresh); err != nil {
+		return false, fmt.Errorf("capture confirmed airing: %w", err)
+	}
+
 	// Defend an AniList-corroborated next-episode date against this Shikimori
 	// batch refresh, which would otherwise clobber the correction.
 	defendAniListNextEpisode(fresh, existing)
@@ -381,6 +391,7 @@ type calendarInfo struct {
 	nextEpisodeAt *time.Time
 	source        string // sourceShikimori (default) or sourceAniList after reconciliation
 	status        string // Shikimori anime status ("ongoing", "anons", …); gates AniList reconciliation to ongoing only
+	airingHistory []idmapping.AniListEpisodeAiring
 }
 
 // dedupeCalendarEntries collapses calendar entries (one per upcoming episode) to
@@ -479,6 +490,13 @@ func (s *CatalogService) importMissingCalendarAnime(ctx context.Context, missing
 				failed++
 				continue
 			}
+			if info := seen[anime.ShikimoriID]; len(info.airingHistory) > 0 {
+				if err := s.persistAniListAiringHistory(ctx, anime.ID, info.airingHistory); err != nil {
+					s.log.Warnw("failed to persist AniList airing history",
+						"shikimori_id", anime.ShikimoriID, "error", err)
+					failed++
+				}
+			}
 			imported++
 		}
 
@@ -497,6 +515,13 @@ func (s *CatalogService) importMissingCalendarAnime(ctx context.Context, missing
 func (s *CatalogService) updateExistingCalendarEpisodes(ctx context.Context, existingByShikimoriID map[string]*domain.Anime, seen map[string]*calendarInfo) (updated, failed int) {
 	for id, existing := range existingByShikimoriID {
 		info := seen[id]
+		if len(info.airingHistory) > 0 {
+			if err := s.persistAniListAiringHistory(ctx, existing.ID, info.airingHistory); err != nil {
+				s.log.Warnw("failed to persist AniList airing history",
+					"id", existing.ID, "shikimori_id", id, "error", err)
+				failed++
+			}
+		}
 		if info.nextEpisodeAt == nil {
 			continue
 		}

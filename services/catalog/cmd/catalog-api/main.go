@@ -92,6 +92,7 @@ func main() {
 	// `anime` table that AutoMigrate never owns) and were removed. (audit L389)
 	if err := db.AutoMigrate(
 		&domain.Anime{},
+		&domain.AnimeAiringOccurrence{},
 		&domain.Genre{},
 		&domain.Video{},
 		&domain.PinnedTranslation{},

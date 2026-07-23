@@ -130,6 +130,7 @@ func AnimeMetadataEqual(a, b *domain.Anime) bool {
 		scoreEqual(a.Score, b.Score) &&
 		a.PosterURL == b.PosterURL &&
 		timePtrEqual(a.NextEpisodeAt, b.NextEpisodeAt) &&
+		a.NextEpisodeSource == b.NextEpisodeSource &&
 		timePtrEqual(a.AiredOn, b.AiredOn) &&
 		timePtrEqual(a.ReleasedOn, b.ReleasedOn)
 }
@@ -388,9 +389,9 @@ func (r *AnimeRepository) SetEnglishDub(ctx context.Context, animeID string, has
 // ListEnglishDubCandidates returns up to limit titles whose EN-dub verdict is
 // missing or stale, most-deserving first:
 //
-//	1. never probed (english_dub_checked_at IS NULL)
-//	2. ongoing and last probed more than ongoingAge ago — dubs ship after subs
-//	3. anything last probed more than staleAge ago
+//  1. never probed (english_dub_checked_at IS NULL)
+//  2. ongoing and last probed more than ongoingAge ago — dubs ship after subs
+//  3. anything last probed more than staleAge ago
 //
 // Only has_english = true rows are ever returned: no EN source means no EN
 // dub, and the restriction keeps thousands of pointless provider calls off
@@ -543,11 +544,9 @@ func (r *AnimeRepository) UpdateShikimoriID(ctx context.Context, animeID string,
 func (r *AnimeRepository) GetSchedule(ctx context.Context) ([]*domain.Anime, error) {
 	var animes []*domain.Anime
 	err := r.db.WithContext(ctx).
-		// A 7-day grace window (matching the weekly calendar_sync cadence) keeps anime
-		// whose anchor has merely gone stale between syncs: the frontend occurrence
-		// projection re-derives the correct future airing from a past anchor via weekly
-		// k-offsets. Genuinely stalled/abandoned series still fall out past 7 days.
-		Where("status = ? AND next_episode_at IS NOT NULL AND next_episode_at > NOW() - INTERVAL '7 days' AND (hidden = ? OR hidden IS NULL)",
+		// The feed contains exact upcoming anchors only. Past episodes come from
+		// anime_airing_occurrences; clients must never project a stale anchor.
+		Where("status = ? AND next_episode_at IS NOT NULL AND next_episode_at >= NOW() AND (hidden = ? OR hidden IS NULL)",
 			"ongoing", false).
 		Order("next_episode_at ASC").
 		Find(&animes).Error

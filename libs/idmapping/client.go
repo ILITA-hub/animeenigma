@@ -63,10 +63,17 @@ type MappingResult struct {
 // reflects the real broadcast schedule and models hiatuses. NextAiringAt is nil
 // when AniList has no upcoming episode scheduled (e.g. FINISHED series).
 type AniListAiring struct {
-	AniListID    int        // AniList Media.id
-	Status       string     // RELEASING | FINISHED | NOT_YET_RELEASED | CANCELLED | HIATUS
-	NextEpisode  int        // nextAiringEpisode.episode; 0 when none scheduled
-	NextAiringAt *time.Time // nextAiringEpisode.airingAt (unix seconds → UTC); nil when none
+	AniListID     int                    // AniList Media.id
+	Status        string                 // RELEASING | FINISHED | NOT_YET_RELEASED | CANCELLED | HIATUS
+	NextEpisode   int                    // nextAiringEpisode.episode; 0 when none scheduled
+	NextAiringAt  *time.Time             // nextAiringEpisode.airingAt (unix seconds → UTC); nil when none
+	AiringHistory []AniListEpisodeAiring // Provider schedule; callers decide which past entries to persist.
+}
+
+// AniListEpisodeAiring is one episode timestamp from Media.airingSchedule.
+type AniListEpisodeAiring struct {
+	Episode  int
+	AiringAt time.Time
 }
 
 // Client interacts with the ARM anime ID mapping API (arm.haglund.dev).
@@ -303,6 +310,12 @@ type aniListAiringResponse struct {
 				Episode  int   `json:"episode"`
 				AiringAt int64 `json:"airingAt"`
 			} `json:"nextAiringEpisode"`
+			AiringSchedule struct {
+				Nodes []struct {
+					Episode  int   `json:"episode"`
+					AiringAt int64 `json:"airingAt"`
+				} `json:"nodes"`
+			} `json:"airingSchedule"`
 		} `json:"Media"`
 	} `json:"data"`
 	Errors []struct {
@@ -401,7 +414,7 @@ func (c *Client) AniListAiringByMALID(ctx context.Context, malID string) (*AniLi
 	}
 
 	body := fmt.Sprintf(
-		`{"query":"query($mal:Int){Media(idMal:$mal,type:ANIME){id status nextAiringEpisode{episode airingAt}}}","variables":{"mal":%d}}`,
+		`{"query":"query($mal:Int){Media(idMal:$mal,type:ANIME){id status nextAiringEpisode{episode airingAt} airingSchedule(page:1,perPage:50){nodes{episode airingAt}}}}","variables":{"mal":%d}}`,
 		intID,
 	)
 
@@ -427,6 +440,15 @@ func (c *Client) AniListAiringByMALID(ctx context.Context, malID string) (*AniLi
 		out.NextEpisode = m.NextAiringEpisode.Episode
 		t := time.Unix(m.NextAiringEpisode.AiringAt, 0).UTC()
 		out.NextAiringAt = &t
+	}
+	for _, node := range m.AiringSchedule.Nodes {
+		if node.Episode <= 0 || node.AiringAt <= 0 {
+			continue
+		}
+		out.AiringHistory = append(out.AiringHistory, AniListEpisodeAiring{
+			Episode:  node.Episode,
+			AiringAt: time.Unix(node.AiringAt, 0).UTC(),
+		})
 	}
 	return out, nil
 }
