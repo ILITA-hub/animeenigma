@@ -85,9 +85,15 @@ def tier2(img, langs='eng+rus+jpn', tmp='/tmp/_subband.png'):
     joined = ' '.join(words)
     # "real text" = enough alnum chars recognised with decent confidence
     good = [c for c in confs if c >= 60]
+    good_words = [w for w, c in zip(words, confs) if c >= 60]
     alnum = sum(ch.isalnum() for ch in joined)
     real = (len(good) >= 2 and alnum >= 6)
-    scr, counts = script_of(joined)
+    # Script is classified from HIGH-CONFIDENCE words only: low-conf OCR noise
+    # routinely misreads Cyrillic glyphs as Latin homoglyphs (e.g. digit '3'
+    # for 'З', 'H' for 'Н') and, left in the unfiltered joined text, can tip
+    # the majority-script vote to the wrong language (live RU hardsub
+    # misclassified "en", 2026-07-23).
+    scr, counts = script_of(' '.join(good_words))
     mean_conf = float(np.mean(confs)) if confs else 0.0
     return dict(real_text=bool(real), n_words=len(words), n_conf60=len(good),
                 alnum=alnum, mean_conf=mean_conf, script=scr, counts=counts,
