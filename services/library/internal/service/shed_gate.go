@@ -31,11 +31,12 @@ const (
 // (both pools run >1 worker by default) — the paused flag is atomic, so the
 // transition log/gauge fire once, not per worker.
 type shedGate struct {
-	checker   ShedChecker
-	subsystem string
-	pauseAt   float64
-	log       *logger.Logger
-	paused    atomic.Bool
+	checker     ShedChecker
+	subsystem   string
+	pauseAt     float64
+	log         *logger.Logger
+	paused      atomic.Bool
+	initialized atomic.Bool
 }
 
 func newShedGate(subsystem string, pauseAt float64, log *logger.Logger) *shedGate {
@@ -53,15 +54,17 @@ func (g *shedGate) shed() bool {
 		score, level = g.checker.Score(), g.checker.Level()
 	}
 	shed := level >= 2 || score >= g.pauseAt
-	if g.paused.Swap(shed) != shed {
+	changed := g.paused.Swap(shed) != shed
+	first := !g.initialized.Swap(true)
+	if first || changed {
 		v := 0.0
 		if shed {
 			v = 1
-			if g.log != nil {
+			if changed && g.log != nil {
 				g.log.Infow("pausing new work: platform degraded",
 					"subsystem", g.subsystem, "score", score, "pause_at", g.pauseAt, "level", level)
 			}
-		} else if g.log != nil {
+		} else if changed && g.log != nil {
 			g.log.Infow("resuming work: degradation cleared", "subsystem", g.subsystem)
 		}
 		gometrics.DegradationShed.WithLabelValues(g.subsystem).Set(v)
@@ -95,8 +98,9 @@ type gradedLimiter struct {
 	// importing binary (the auto-registration trap). nil-safe.
 	setActive func(int)
 
-	active  atomic.Int32
-	lastCap atomic.Int32
+	active      atomic.Int32
+	lastCap     atomic.Int32
+	initialized atomic.Bool
 }
 
 // newEncodeLimiter builds a limiter capping concurrent transcodes at maxWorkers
@@ -162,7 +166,10 @@ func (l *gradedLimiter) currentCap() int {
 		score = l.checker.Score()
 	}
 	c := l.capFor(score, level)
-	if prev := l.lastCap.Swap(int32(c)); prev != int32(c) {
+	prev := l.lastCap.Swap(int32(c))
+	changed := prev != int32(c)
+	first := !l.initialized.Swap(true)
+	if first || changed {
 		shed := 0.0
 		switch {
 		case c == 0:
@@ -171,7 +178,7 @@ func (l *gradedLimiter) currentCap() int {
 			shed = 1
 		}
 		gometrics.DegradationShed.WithLabelValues(l.subsystem).Set(shed)
-		if l.log != nil {
+		if changed && l.log != nil {
 			l.log.Infow("worker concurrency cap changed (platform degradation)",
 				"subsystem", l.subsystem, "cap", c, "max", l.maxWorkers,
 				"score", score, "reduce_at", l.reduceAt, "pause_at", l.pauseAt, "level", level)

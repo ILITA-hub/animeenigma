@@ -252,6 +252,9 @@ func TestReconcileSeedGate_TransitionsOnly(t *testing.T) {
 	if len(applied) != 0 {
 		t.Fatalf("level 0 boot: applied=%v, want no calls", applied)
 	}
+	if g := gauge(); g != 0 {
+		t.Fatalf("level 0 boot: shed gauge=%v, want explicit 0", g)
+	}
 
 	// Escalate to Elevated: exactly one Disallow(true); a repeat tick at the same
 	// level must NOT re-apply.

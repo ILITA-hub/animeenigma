@@ -1,6 +1,11 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	gometrics "github.com/ILITA-hub/animeenigma/libs/metrics"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+)
 
 func TestStaggeredLibraryActuatorOrder(t *testing.T) {
 	encode := newEncodeLimiter(2, nil, nil)
@@ -41,5 +46,29 @@ func TestGradedLimiterCriticalBackstop(t *testing.T) {
 	lim := newDownloadLimiter(3, nil)
 	if got := lim.capFor(0, 2); got != 0 {
 		t.Fatalf("level 2 with score 0: cap=%d, want 0", got)
+	}
+}
+
+func TestActuatorsPublishNormalStateOnFirstCheck(t *testing.T) {
+	checker := &fakeLevel{}
+
+	gate := newShedGate("test_gate_initial", storyboardPauseScore, nil)
+	gate.set(checker)
+	gometrics.DegradationShed.WithLabelValues("test_gate_initial").Set(2)
+	if gate.shed() {
+		t.Fatal("normal score unexpectedly shed gate")
+	}
+	if got := testutil.ToFloat64(gometrics.DegradationShed.WithLabelValues("test_gate_initial")); got != 0 {
+		t.Fatalf("gate initial gauge=%v, want 0", got)
+	}
+
+	lim := newGradedLimiter("test_limiter_initial", 2, 0.4, 0.8, nil, nil)
+	lim.set(checker)
+	gometrics.DegradationShed.WithLabelValues("test_limiter_initial").Set(2)
+	if got := lim.currentCap(); got != 2 {
+		t.Fatalf("normal limiter cap=%d, want 2", got)
+	}
+	if got := testutil.ToFloat64(gometrics.DegradationShed.WithLabelValues("test_limiter_initial")); got != 0 {
+		t.Fatalf("limiter initial gauge=%v, want 0", got)
 	}
 }

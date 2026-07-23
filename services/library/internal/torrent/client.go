@@ -84,17 +84,15 @@ type Client struct {
 	storage storage.ClientImplCloser
 
 	// --- degradation-aware seeding shed (graceful-degradation Phase 3 follow-up) ---
-	// While the platform degradation level is Elevated+ (level>=1) the seed gate
-	// calls DisallowDataUpload on every torrent so background seeding -- pure
-	// background egress -- yields uplink to live playback, and AllowDataUpload
-	// again at level 0. Fully reversible: no torrent is dropped and no on-disk data
-	// is lost. Fail-open: a nil checker (or a down/undeployed governor) reads as
-	// level 0, so seeding runs normally.
-	shed          ShedChecker      // degradation source; nil-safe (SetShedChecker)
-	seedPaused    atomic.Bool      // last applied gate state; act/log only on transitions
-	applySeedGate func(pause bool) // injectable seam (tests); nil => real anacrolix impl
-	setSeedCount  func(int)        // optional library_torrent_seed_count setter (nil-safe)
-	seedLog       *logger.Logger   // optional; nil-safe
+	// At score 0.20 the seed gate calls DisallowDataUpload on every torrent so
+	// pure background egress yields to playback. Fully reversible: no torrent is
+	// dropped and no on-disk data is lost. Missing governor data fails open.
+	shed                ShedChecker      // degradation source; nil-safe (SetShedChecker)
+	seedPaused          atomic.Bool      // last applied gate state
+	seedGateInitialized atomic.Bool      // publish the normal gauge on first reconcile
+	applySeedGate       func(pause bool) // injectable seam (tests); nil => real anacrolix impl
+	setSeedCount        func(int)        // optional library_torrent_seed_count setter (nil-safe)
+	seedLog             *logger.Logger   // optional; nil-safe
 }
 
 // ShedChecker is the narrow degradation-consumer surface the seed gate reads
@@ -385,8 +383,10 @@ func (c *Client) reconcileSeedGate() {
 	}
 	pause := shouldPauseSeed(score, level)
 
-	if c.seedPaused.Swap(pause) != pause {
-		if c.applySeedGate != nil {
+	changed := c.seedPaused.Swap(pause) != pause
+	first := !c.seedGateInitialized.Swap(true)
+	if first || changed {
+		if changed && c.applySeedGate != nil {
 			c.applySeedGate(pause)
 		}
 		v := 0.0
@@ -394,7 +394,7 @@ func (c *Client) reconcileSeedGate() {
 			v = 1
 		}
 		gometrics.DegradationShed.WithLabelValues("library_seed").Set(v)
-		if c.seedLog != nil {
+		if changed && c.seedLog != nil {
 			if pause {
 				c.seedLog.Infow("pausing torrent seeding: platform degraded",
 					"score", score, "pause_at", seedPauseScore, "level", level)
