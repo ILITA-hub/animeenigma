@@ -618,6 +618,27 @@ export interface ResolvedUser {
   role?: string
 }
 
+/** Admin-only user projection (includes role + telegram, unlike PublicUser). */
+export interface AdminUser {
+  id: string
+  username: string
+  public_id: string
+  role: string
+  telegram_id?: number
+  telegram_username?: string
+  telegram_first_name?: string
+  avatar?: string
+  created_at: string
+}
+
+/** Paginated admin users list envelope (matches the auth service response). */
+export interface AdminUsersListResponse {
+  items: AdminUser[]
+  total: number
+  page: number
+  page_size: number
+}
+
 /** RBAC-and-roulette P1 — policy-service feature-flag runtime access rule.
  *  `failSafe` decides who can reach the feature when the policy service
  *  itself is unreachable (gateway FeatureGate fails static to this value).
@@ -739,6 +760,13 @@ export const adminApi = {
     apiClient.get<ResolvedUser | { data: ResolvedUser }>('/admin/users/resolve', {
       params: { q },
     }),
+  // Admin user directory — list/search all users (auth service, /api/admin/users).
+  listUsers: (params?: { q?: string; role?: string; page?: number; page_size?: number }) =>
+    apiClient.get<AdminUsersListResponse | { data: AdminUsersListResponse }>('/admin/users', { params }),
+  // Change a user's role (user | librarian | admin). Backend refuses to change
+  // the caller's own role (403).
+  updateUserRole: (id: string, role: string) =>
+    apiClient.patch<AdminUser | { data: AdminUser }>(`/admin/users/${encodeURIComponent(id)}/role`, { role }),
   unhideAnime: (animeId: string) => apiClient.delete(`/admin/anime/${animeId}/hide`),
   // Update shikimori_id
   updateShikimoriId: (animeId: string, shikimoriId: string) =>
