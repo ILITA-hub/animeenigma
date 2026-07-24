@@ -6,6 +6,7 @@
   >
     <img
       v-if="src"
+      ref="imgEl"
       :src="resolvedSrc"
       :alt="alt"
       loading="lazy"
@@ -18,13 +19,17 @@
          browser's native progressive (top-down) poster render stays visible
          underneath as loading feedback; fades out on @load. Its OWN
          positioned element so the sk-drift ::after sweep anchors to it
-         (see main.css). -->
+         (see main.css). `capReached` force-hides it once the ::after sweep's
+         iteration cap elapses (its animationend bubbles here from ::after), so
+         a stuck `loaded` (e.g. Firefox not re-firing `load` for a cached img)
+         can never leave the sweep frozen as a permanent streak over the poster. -->
     <Transition name="sk-fade">
       <div
-        v-if="!loaded"
+        v-if="!loaded && !capReached"
         class="absolute inset-0 sk-drift pointer-events-none"
         :class="roundedClass"
         aria-hidden="true"
+        @animationend="capReached = true"
       />
     </Transition>
 
@@ -37,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { cardPosterUrl, getImageFallbackUrl } from '@/composables/useImageProxy'
 
 const props = withDefaults(
@@ -56,6 +61,23 @@ const props = withDefaults(
 
 const loaded = ref(false)
 
+// Force-hides the drift skeleton once its sweep animation's iteration cap
+// elapses (~21s), independent of `loaded` — a hard safety net so a stuck
+// `loaded` flag can never render the frozen sweep as a permanent artifact.
+const capReached = ref(false)
+
+const imgEl = ref<HTMLImageElement | null>(null)
+
+// Synchronous fallback for browsers/timing where the native `load` event does
+// not (re)fire for an already-cached <img> — notably Firefox on SPA nav back to
+// a view whose posters were just seen. If the element is already decoded (has
+// real pixels), mark it loaded immediately so the skeleton fades. Runs on mount
+// and whenever `resolvedSrc` rebinds (the error fallback chain swaps the URL).
+function syncLoadedFromCache() {
+  const img = imgEl.value
+  if (img && img.complete && img.naturalWidth > 0) loaded.value = true
+}
+
 // Fallback chain when serving a resized proxy URL: proxied → original → done.
 // Without proxyWidth the legacy chain applies: original → full-size proxy.
 const fallbackStage = ref(0)
@@ -66,6 +88,11 @@ const resolvedSrc = computed(() => {
   if (proxied === props.src) return props.src
   return fallbackStage.value === 0 ? proxied : props.src
 })
+
+// Register the cached-load sync after `resolvedSrc` exists (watch reads it).
+// flush: 'post' so the check runs after Vue patches the new src onto the <img>.
+onMounted(syncLoadedFromCache)
+watch(resolvedSrc, syncLoadedFromCache, { flush: 'post' })
 
 const ratioClass = computed(() => (props.ratio === '16/9' ? 'aspect-[16/9]' : 'aspect-[2/3]'))
 const roundedClass = computed(() => {
