@@ -714,6 +714,11 @@ services:
       TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      # Passkey/cert alt-login (spec 2026-07-24). Non-secret — same value in
+      # every environment that serves the real domain. RP_ID must equal the
+      # domain a passkey was registered against; RP_ORIGINS is comma-separated.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-animeenigma.org}
+      WEBAUTHN_RP_ORIGINS: ${WEBAUTHN_RP_ORIGINS:-https://animeenigma.org}
       TRACING_ENABLED: "true"
     ports:
       - "127.0.0.1:8080:8080"
@@ -1621,6 +1626,13 @@ services:
         # Short git commit hash of the deployed build (shown in the footer).
         # `make redeploy-web` exports it from `git rev-parse --short HEAD`.
         VITE_GIT_COMMIT: "${VITE_GIT_COMMIT:-}"
+        # Passkey/cert alt-login (spec 2026-07-24): origin of the mTLS
+        # cert.animeenigma.org vhost that useCertAutoLogin.ts silently probes
+        # on load. Empty/unset ⇒ probe disabled (feature off). Set
+        # VITE_CERT_LOGIN_BASE in docker/.env to https://cert.animeenigma.org
+        # for prod once the vhost + CA are installed (see
+        # infra/nginx/cert.animeenigma.org.conf, bin/ae-cert-ca-install.sh).
+        VITE_CERT_LOGIN_BASE: "${VITE_CERT_LOGIN_BASE:-}"
     container_name: animeenigma-web
     mem_limit: 256m             # M494: OOM guardrail (host-OOM -> single-container restart)
     restart: unless-stopped

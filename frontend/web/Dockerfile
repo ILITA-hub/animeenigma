@@ -14,6 +14,10 @@ ARG VITE_HLS_PROXY_TIERS=""
 # Short git commit hash of the deployed build, surfaced in the site footer so we
 # can tell at a glance which commit is live. Empty when built outside a checkout.
 ARG VITE_GIT_COMMIT=""
+# Passkey/cert alt-login (spec 2026-07-24): origin of the mTLS
+# cert.animeenigma.org vhost useCertAutoLogin.ts silently probes on load.
+# Empty ⇒ probe disabled (feature off).
+ARG VITE_CERT_LOGIN_BASE=""
 
 # Set environment variables for build
 ENV VITE_API_URL=$VITE_API_URL
@@ -22,6 +26,7 @@ ENV VITE_MSK_ASSET_HOST=$VITE_MSK_ASSET_HOST
 ENV VITE_HLS_PROXY_BASE=$VITE_HLS_PROXY_BASE
 ENV VITE_HLS_PROXY_TIERS=$VITE_HLS_PROXY_TIERS
 ENV VITE_GIT_COMMIT=$VITE_GIT_COMMIT
+ENV VITE_CERT_LOGIN_BASE=$VITE_CERT_LOGIN_BASE
 
 # Copy package files
 COPY package.json bun.lock ./
