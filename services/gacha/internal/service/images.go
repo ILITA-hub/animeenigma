@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net"
 	"net/http"
@@ -14,9 +17,15 @@ import (
 	apperrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/videoutils/netguard"
 	"github.com/google/uuid"
+	xdraw "golang.org/x/image/draw"
 )
 
 const maxImageBytes = 10 << 20 // 10 MiB
+
+const (
+	maxDimension = 2048 // longest side after ingest; larger uploads are downscaled
+	jpegQuality  = 85
+)
 
 // objectStore is a thin adapter over *videoutils.Storage.Upload — defined here
 // so tests can inject a fake without importing the MinIO client.
@@ -119,6 +128,79 @@ func makeKey(kind, ext string) string {
 	return fmt.Sprintf("%s/%s%s", kind, uuid.NewString(), ext)
 }
 
+// optimize recompresses ingested art: oversized images are downscaled to fit
+// maxDimension, fully-opaque images become JPEG q85 (anime art PNGs are
+// typically 8-10x smaller as JPEG), transparent ones stay PNG (JPEG has no
+// alpha). GIF (animation) and WebP (no stdlib encoder) pass through, as does
+// anything that fails to decode — optimization must never fail an upload.
+// Returns (bytes, contentType, ext).
+func optimize(buf []byte, ct string) ([]byte, string, string) {
+	if ct != "image/png" && ct != "image/jpeg" {
+		return buf, ct, extForCT(ct)
+	}
+	img, _, err := image.Decode(bytes.NewReader(buf))
+	if err != nil {
+		return buf, ct, extForCT(ct)
+	}
+
+	b := img.Bounds()
+	longest := max(b.Dx(), b.Dy())
+	scaled := false
+	if longest > maxDimension {
+		scale := float64(maxDimension) / float64(longest)
+		dst := image.NewRGBA(image.Rect(0, 0,
+			int(float64(b.Dx())*scale+0.5), int(float64(b.Dy())*scale+0.5)))
+		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, xdraw.Over, nil)
+		img = dst
+		scaled = true
+	}
+
+	// Opaque images always normalize to JPEG: anime art PNGs are typically
+	// 8-10x smaller as JPEG, and format normalization (one predictable
+	// content-type for all opaque art) is worth it even on the rare
+	// synthetic/flat-color input where JPEG's fixed block overhead loses to
+	// PNG's deflate.
+	if isOpaque(img) {
+		var out bytes.Buffer
+		if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: jpegQuality}); err == nil {
+			return out.Bytes(), "image/jpeg", ".jpg"
+		}
+		return buf, ct, extForCT(ct)
+	}
+
+	// Transparency: only worth re-encoding when we actually downscaled.
+	if scaled {
+		var out bytes.Buffer
+		if err := png.Encode(&out, img); err == nil && out.Len() < len(buf) {
+			return out.Bytes(), "image/png", ".png"
+		}
+	}
+	return buf, ct, extForCT(ct)
+}
+
+// isOpaque reports whether every pixel has full alpha.
+func isOpaque(img image.Image) bool {
+	if o, ok := img.(interface{ Opaque() bool }); ok {
+		return o.Opaque()
+	}
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0xffff {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func extForCT(ct string) string {
+	if ext, ok := allowedContentTypes[ct]; ok {
+		return ext
+	}
+	return ""
+}
+
 // IngestFromURL downloads the image at rawURL and stores it under
 // {kind}/{uuid}.{ext}. Returns the object key.
 func (s *ImageService) IngestFromURL(ctx context.Context, rawURL, kind string) (string, error) {
@@ -157,8 +239,7 @@ func (s *ImageService) IngestFromURL(ctx context.Context, rawURL, kind string) (
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	ext, err := resolveExt(ct)
-	if err != nil {
+	if _, err := resolveExt(ct); err != nil {
 		return "", err
 	}
 
@@ -173,8 +254,13 @@ func (s *ImageService) IngestFromURL(ctx context.Context, rawURL, kind string) (
 			fmt.Sprintf("image exceeds %d byte cap", s.maxBytes))
 	}
 
-	key := makeKey(kind, ext)
-	if err := s.store.Upload(ctx, key, bytes.NewReader(buf), int64(len(buf)), ct); err != nil {
+	// Normalise the content type (strip "; charset=..." etc.) before handing
+	// it to optimize — it must be the bare MIME the ext was resolved from.
+	trimmedCT := strings.TrimSpace(strings.SplitN(ct, ";", 2)[0])
+	buf2, ct2, ext2 := optimize(buf, trimmedCT)
+
+	key := makeKey(kind, ext2)
+	if err := s.store.Upload(ctx, key, bytes.NewReader(buf2), int64(len(buf2)), ct2); err != nil {
 		return "", fmt.Errorf("store image: %w", err)
 	}
 	return key, nil
@@ -221,8 +307,10 @@ func (s *ImageService) IngestUpload(ctx context.Context, file io.Reader, filenam
 		}
 	}
 
-	key := makeKey(kind, ext)
-	if err := s.store.Upload(ctx, key, bytes.NewReader(buf), int64(len(buf)), ct); err != nil {
+	buf2, ct2, ext2 := optimize(buf, ct)
+
+	key := makeKey(kind, ext2)
+	if err := s.store.Upload(ctx, key, bytes.NewReader(buf2), int64(len(buf2)), ct2); err != nil {
 		return "", fmt.Errorf("store upload: %w", err)
 	}
 	return key, nil

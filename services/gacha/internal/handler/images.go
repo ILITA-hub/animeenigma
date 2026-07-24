@@ -56,7 +56,7 @@ func (h *ImagesHandler) Serve(w http.ResponseWriter, r *http.Request) {
 		ct = meta.ContentType
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	if _, err := io.Copy(w, rc); err != nil {
