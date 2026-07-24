@@ -553,6 +553,10 @@ groups:
       # dashboard template vars, so σ=3 / window=24h are hardcoded here; the
       # "Activity Register — Awareness Overview" dashboard panel keeps the tunable
       # $sigma/$window. Byte/volume baseline filters source='be' AND effect_kind='egress'.
+      # `last_req > 20` floor added 2026-07-24 (mirrors EgressVolumeAnomaly's 500MiB/h
+      # floor): near-zero-traffic ops (health checks, internal probes, ~1-8 req/h) have
+      # a tiny baseline_avg/stddev, so ordinary Poisson jitter trivially clears 3σ.
+      # Fired on `catalog GET /health` (avg 2.69, last_req 8) with no real traffic change.
       - uid: activity-register-volume-anomaly
         title: Activity Register Volume Anomaly
         condition: C
@@ -583,7 +587,7 @@ groups:
                   )
                   SELECT operation,
                          last_req > baseline_avg + 3 * baseline_sd AS is_anomaly
-                  FROM stats WHERE baseline_avg > 0
+                  FROM stats WHERE baseline_avg > 0 AND last_req > 20
                 ) WHERE is_anomaly
               format: table
               queryType: sql
