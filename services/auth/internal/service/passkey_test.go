@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/ILITA-hub/animeenigma/libs/cache"
 	liberrors "github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/config"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 )
@@ -183,6 +185,41 @@ func TestFinishLogin_ExpiredCeremony(t *testing.T) {
 	appErr, ok := liberrors.IsAppError(err)
 	if !ok || appErr.Code != liberrors.CodeUnauthorized {
 		t.Fatalf("want Unauthorized AppError; got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// warnOnCloneWarning
+// ---------------------------------------------------------------------------
+
+// TestWarnOnCloneWarning_LogsAndIncrementsMetric covers Finding 1's
+// clone-warning path directly. Driving it through the full
+// FinishDiscoverableLogin flow would require a real WebAuthn assertion — a
+// valid ECDSA-signed authenticator response whose signature verifies
+// against a stored public key — which isn't practical to construct in a
+// unit test without vendoring a virtual-authenticator test harness. The
+// clone-warning decision is a pure post-verification branch (log + metric,
+// never reject the login), so it is exercised in isolation here rather than
+// faked through cryptographic material.
+func TestWarnOnCloneWarning_LogsAndIncrementsMetric(t *testing.T) {
+	svc, _, _ := newTestPasskeyService(t)
+
+	before := testutil.ToFloat64(metrics.AuthEventsTotal.WithLabelValues("passkey_login", "clone_warning"))
+	svc.warnOnCloneWarning("u-1", "pk-1", true)
+	after := testutil.ToFloat64(metrics.AuthEventsTotal.WithLabelValues("passkey_login", "clone_warning"))
+	if after != before+1 {
+		t.Fatalf("clone_warning metric = %v, want %v", after, before+1)
+	}
+}
+
+func TestWarnOnCloneWarning_NoWarningNoMetric(t *testing.T) {
+	svc, _, _ := newTestPasskeyService(t)
+
+	before := testutil.ToFloat64(metrics.AuthEventsTotal.WithLabelValues("passkey_login", "clone_warning"))
+	svc.warnOnCloneWarning("u-1", "pk-1", false)
+	after := testutil.ToFloat64(metrics.AuthEventsTotal.WithLabelValues("passkey_login", "clone_warning"))
+	if after != before {
+		t.Fatalf("clone_warning metric = %v, want unchanged %v", after, before)
 	}
 }
 

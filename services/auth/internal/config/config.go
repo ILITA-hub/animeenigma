@@ -111,9 +111,27 @@ func Load() (*Config, error) {
 		MagicLinkTargetBase: strings.TrimRight(getEnv("MAGIC_LINK_TARGET_BASE", "https://animeenigma.org"), "/"),
 		WebAuthn: WebAuthnConfig{
 			RPID:      getEnv("WEBAUTHN_RP_ID", "animeenigma.org"),
-			RPOrigins: strings.Split(getEnv("WEBAUTHN_RP_ORIGINS", "https://animeenigma.org"), ","),
+			RPOrigins: parseRPOrigins(getEnv("WEBAUTHN_RP_ORIGINS", "https://animeenigma.org")),
 		},
 	}, nil
+}
+
+// parseRPOrigins splits a comma-separated WEBAUTHN_RP_ORIGINS value into
+// trimmed, non-empty origins. Without trimming, an operator-typed
+// "https://a.com, https://b.com" would leave a leading-space origin that the
+// browser's real Origin header can never match, silently breaking the
+// ceremony for that origin.
+func parseRPOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		origins = append(origins, p)
+	}
+	return origins
 }
 
 func getEnvBool(key string, defaultVal bool) bool {

@@ -101,6 +101,7 @@ func (s *PasskeyService) loadWAUser(ctx context.Context, userID string) (*waUser
 	for i := range rows {
 		c, cerr := toLibraryCredential(&rows[i])
 		if cerr != nil {
+			s.log.Warnw("skipping undecodable passkey credential", "passkey_id", rows[i].ID, "error", cerr)
 			continue
 		}
 		creds = append(creds, c)
@@ -247,9 +248,26 @@ func (s *PasskeyService) FinishLogin(ctx context.Context, ceremonyID string, r *
 		metrics.AuthEventsTotal.WithLabelValues("passkey_login", "failure").Inc()
 		return nil, errors.Unauthorized("passkey verification failed")
 	}
+	s.warnOnCloneWarning(matchedUser.ID, matched.ID, cred.Authenticator.CloneWarning)
 	_ = s.store.UpdateSignCount(ctx, matched.ID, cred.Authenticator.SignCount, timeNow())
 	metrics.AuthEventsTotal.WithLabelValues("passkey_login", "success").Inc()
 	return matchedUser, nil
+}
+
+// warnOnCloneWarning surfaces the authenticator's clone-detection signal
+// (WebAuthn Level 2 §7.2 step 17: the assertion's signature counter did not
+// strictly increase past the stored value, which the spec flags as evidence
+// the credential's private key may have been cloned onto multiple
+// authenticators). This is warn-only by product decision: the login is
+// still allowed to proceed and the sign count is still updated by the
+// caller — we only get the incident onto the radar via a structured log
+// line plus the passkey_login/clone_warning metric.
+func (s *PasskeyService) warnOnCloneWarning(userID, passkeyID string, cloneWarning bool) {
+	if !cloneWarning {
+		return
+	}
+	s.log.Warnw("passkey clone warning: sign count regression", "user_id", userID, "passkey_id", passkeyID)
+	metrics.AuthEventsTotal.WithLabelValues("passkey_login", "clone_warning").Inc()
 }
 
 func (s *PasskeyService) List(ctx context.Context, userID string) ([]domain.WebAuthnCredential, error) {
