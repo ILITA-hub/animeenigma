@@ -188,6 +188,19 @@ func (r *UserRepository) UpdateApiKeyHash(ctx context.Context, userID string, ha
 	return nil
 }
 
+// UpdateCertAutoLogin toggles the mTLS-vhost silent-login setting (settings
+// modal toggle, spec 2026-07-24).
+func (r *UserRepository) UpdateCertAutoLogin(ctx context.Context, userID string, enabled bool) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("cert_auto_login", enabled)
+	if result.Error != nil {
+		return fmt.Errorf("update cert auto login: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&domain.User{}).Where("username = ?", username).Count(&count).Error; err != nil {

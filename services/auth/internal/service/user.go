@@ -254,3 +254,9 @@ func (s *UserService) UpdateActivityVisibility(ctx context.Context, userID, visi
 	}
 	return s.userRepo.UpdateActivityVisibility(ctx, userID, visibility)
 }
+
+// UpdateCertAutoLogin toggles whether a valid client-cert handshake on the
+// mTLS vhost silently logs this user in (settings modal toggle).
+func (s *UserService) UpdateCertAutoLogin(ctx context.Context, userID string, enabled bool) error {
+	return s.userRepo.UpdateCertAutoLogin(ctx, userID, enabled)
+}

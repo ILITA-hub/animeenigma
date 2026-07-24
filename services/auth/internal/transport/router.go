@@ -19,6 +19,8 @@ func NewRouter(
 	sessionsHandler *handler.SessionsHandler,
 	magicLinkHandler *handler.MagicLinkHandler,
 	userResolveHandler *handler.UserResolveHandler,
+	passkeyHandler *handler.PasskeyHandler,
+	certHandler *handler.CertHandler,
 	jwtConfig authz.JWTConfig,
 	log *logger.Logger,
 	metricsCollector *metrics.Collector,
@@ -43,6 +45,12 @@ func NewRouter(
 	r.Get("/magic-link-generate", magicLinkHandler.Generate)
 	r.Get("/magic-link-login", magicLinkHandler.Login)
 
+	// mTLS-vhost cert-login endpoints (root mux — NOT under /api, so the
+	// gateway's API prefix never proxies them; only cert.animeenigma.org's
+	// nginx location reaches HandshakeLogin from outside the Docker network).
+	r.Get("/cert/handshake-login", certHandler.HandshakeLogin)
+	r.Get("/cert/ca.pem", certHandler.CAPem)
+
 	// Metrics endpoint
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Handler().ServeHTTP(w, r)
@@ -66,6 +74,9 @@ func NewRouter(
 			r.Post("/telegram/webhook", telegramBotHandler.HandleWebhook)
 			r.Post("/refresh", authHandler.RefreshToken)
 			r.Post("/logout", authHandler.Logout)
+			r.Post("/passkey/login/begin", passkeyHandler.LoginBegin)
+			r.Post("/passkey/login/finish", passkeyHandler.LoginFinish)
+			r.Post("/cert/consume", certHandler.Consume)
 		})
 
 		// Protected auth routes
@@ -84,6 +95,14 @@ func NewRouter(
 			r.Get("/auth/sessions", sessionsHandler.List)
 			r.Delete("/auth/sessions/{id}", sessionsHandler.Revoke)
 			r.Post("/auth/sessions/revoke-others", sessionsHandler.RevokeOthers)
+			r.Post("/auth/passkey/register/begin", passkeyHandler.RegisterBegin)
+			r.Post("/auth/passkey/register/finish", passkeyHandler.RegisterFinish)
+			r.Get("/auth/passkeys", passkeyHandler.List)
+			r.Delete("/auth/passkeys/{id}", passkeyHandler.Delete)
+			r.Post("/auth/cert/issue", certHandler.Issue)
+			r.Get("/auth/certs", certHandler.List)
+			r.Delete("/auth/certs/{id}", certHandler.Revoke)
+			r.Put("/auth/profile/cert-auto-login", certHandler.UpdateAutoLogin)
 		})
 
 		// Public profile by public_id

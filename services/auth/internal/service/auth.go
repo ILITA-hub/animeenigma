@@ -702,6 +702,17 @@ func (s *AuthService) createSessionAndAuthResponse(
 	}, nil
 }
 
+// GetUserByID exposes user lookup for sibling handlers (passkey/cert flows).
+func (s *AuthService) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
+	return s.userRepo.GetByID(ctx, id)
+}
+
+// SessionForUser mints a session for an already-authenticated user — the
+// terminal step of passkey login (external proof happened in PasskeyService).
+func (s *AuthService) SessionForUser(ctx context.Context, user *domain.User, sc SessionContext) (*domain.AuthResponse, error) {
+	return s.createSessionAndAuthResponse(ctx, user, sc)
+}
+
 // truncateUA caps user-agent length at 1024 to avoid pathological headers
 // blowing up DB rows.
 func truncateUA(ua string) string {

@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// Auto-migrate schema
-	if err := db.AutoMigrate(&domain.User{}, &domain.UserSession{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.UserSession{}, &domain.AuthCA{}, &domain.UserCertificate{}, &domain.WebAuthnCredential{}); err != nil {
 		log.Fatalw("failed to migrate database", "error", err)
 	}
 
@@ -103,10 +103,22 @@ func main() {
 	// Initialize repositories
 	userRepo := repo.NewUserRepository(db.DB)
 	sessionRepo := repo.NewSessionRepository(db.DB)
+	certRepo := repo.NewCertRepository(db.DB)
+	passkeyRepo := repo.NewPasskeyRepository(db.DB)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, cfg.GuestTokenTTL, log)
 	userService := service.NewUserService(userRepo, sessionRepo, log)
+
+	// certRepo implements both caStore and userCertStore — pass it twice.
+	certService := service.NewCertService(certRepo, certRepo, log)
+	if err := certService.EnsureCA(context.Background()); err != nil {
+		log.Fatalw("ensure ca", "error", err)
+	}
+	passkeyService, err := service.NewPasskeyService(cfg.WebAuthn, passkeyRepo, userRepo, redisCache, log)
+	if err != nil {
+		log.Fatalw("init passkey service", "error", err)
+	}
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)
@@ -115,12 +127,14 @@ func main() {
 	sessionsHandler := handler.NewSessionsHandler(authService, log)
 	magicLinkHandler := handler.NewMagicLinkHandler(authService, authHandler, cfg.MagicLinkTargetBase, log)
 	userResolveHandler := handler.NewUserResolveHandler(userRepo, log)
+	passkeyHandler := handler.NewPasskeyHandler(passkeyService, authService, authHandler, log)
+	certHandler := handler.NewCertHandler(certService, authService, userService, authHandler, log)
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, passkeyHandler, certHandler, cfg.JWT, log, metricsCollector)
 
 	// Register Telegram webhook (warn on failure, don't block startup)
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {
