@@ -16,6 +16,17 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 )
 
+// randomHexToken returns n cryptographically random bytes, hex-encoded.
+// Shared by this package's opaque one-time random id generators (the
+// cert-login token here and the WebAuthn ceremony id in passkey.go).
+func randomHexToken(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // ErrCertAutoLoginDisabled: the cert is valid and known, but the user has the
 // auto-login toggle off. The handler maps this to a 403 the frontend
 // negative-caches (vs the generic 401 it retries on next visit).
@@ -86,11 +97,11 @@ func (s *AuthService) HandshakeCertLogin(ctx context.Context, verify, escapedPEM
 
 	_ = certs.certStore.TouchUserCert(ctx, row.ID)
 
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("rand: %w", err)
+	tok, err := randomHexToken(32)
+	if err != nil {
+		return "", err
 	}
-	token := certLoginTokenPrefix + hex.EncodeToString(b)
+	token := certLoginTokenPrefix + tok
 	val := &certLoginSession{UserID: user.ID, CertID: row.ID}
 	if err := s.cache.Set(ctx, cache.KeyCertLogin(token), val, cache.TTLCertLogin); err != nil {
 		return "", fmt.Errorf("store cert login token: %w", err)

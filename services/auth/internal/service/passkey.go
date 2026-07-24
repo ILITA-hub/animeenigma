@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -110,11 +108,7 @@ func (s *PasskeyService) loadWAUser(ctx context.Context, userID string) (*waUser
 }
 
 func newCeremonyID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("rand: %w", err)
-	}
-	return hex.EncodeToString(b), nil
+	return randomHexToken(16)
 }
 
 // BeginRegistration starts an enroll ceremony for a logged-in user.

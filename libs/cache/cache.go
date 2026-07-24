@@ -71,76 +71,50 @@ func New(cfg Config) (*RedisCache, error) {
 }
 
 func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) error {
-	start := time.Now()
-	data, err := c.client.Get(ctx, key).Bytes()
-	if err != nil {
-		if err == redis.Nil {
-			metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
-			metrics.CacheOperationsTotal.WithLabelValues("get", "miss").Inc()
-			if c.agg != nil {
-				c.agg.Observe(ctx, KeyClass(key), "miss")
-			}
-			return ErrNotFound
-		}
-		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
-		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
-		if c.agg != nil {
-			c.agg.Observe(ctx, KeyClass(key), "error")
-		}
-		return fmt.Errorf("cache get: %w", err)
-	}
-
-	if err := json.Unmarshal(data, dest); err != nil {
-		metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
-		metrics.CacheOperationsTotal.WithLabelValues("get", "error").Inc()
-		if c.agg != nil {
-			c.agg.Observe(ctx, KeyClass(key), "error")
-		}
-		return fmt.Errorf("cache unmarshal: %w", err)
-	}
-
-	metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
-	metrics.CacheOperationsTotal.WithLabelValues("get", "hit").Inc()
-	if c.agg != nil {
-		c.agg.Observe(ctx, KeyClass(key), "hit")
-	}
-	return nil
+	return c.getVia(ctx, "get", key, dest, c.client.Get)
 }
 
 // GetDel implements the Cache interface — atomic read-and-delete via Redis
-// GETDEL. It mirrors Get's unmarshal/metrics/error shaping exactly, so
+// GETDEL. It shares Get's unmarshal/metrics/error shaping (via getVia), so
 // callers can swap a Get+Delete pair for a single race-free call.
 func (c *RedisCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	return c.getVia(ctx, "getdel", key, dest, c.client.GetDel)
+}
+
+// getVia implements the shared read/unmarshal/metrics/error shape behind Get
+// and GetDel; op labels the metrics/error text ("get"/"getdel") and fetch is
+// the underlying Redis command (client.Get or client.GetDel).
+func (c *RedisCache) getVia(ctx context.Context, op, key string, dest interface{}, fetch func(context.Context, string) *redis.StringCmd) error {
 	start := time.Now()
-	data, err := c.client.GetDel(ctx, key).Bytes()
+	data, err := fetch(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
-			metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
-			metrics.CacheOperationsTotal.WithLabelValues("getdel", "miss").Inc()
+			metrics.CacheOperationDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+			metrics.CacheOperationsTotal.WithLabelValues(op, "miss").Inc()
 			if c.agg != nil {
 				c.agg.Observe(ctx, KeyClass(key), "miss")
 			}
 			return ErrNotFound
 		}
-		metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
-		metrics.CacheOperationsTotal.WithLabelValues("getdel", "error").Inc()
+		metrics.CacheOperationDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues(op, "error").Inc()
 		if c.agg != nil {
 			c.agg.Observe(ctx, KeyClass(key), "error")
 		}
-		return fmt.Errorf("cache getdel: %w", err)
+		return fmt.Errorf("cache %s: %w", op, err)
 	}
 
 	if err := json.Unmarshal(data, dest); err != nil {
-		metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
-		metrics.CacheOperationsTotal.WithLabelValues("getdel", "error").Inc()
+		metrics.CacheOperationDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues(op, "error").Inc()
 		if c.agg != nil {
 			c.agg.Observe(ctx, KeyClass(key), "error")
 		}
 		return fmt.Errorf("cache unmarshal: %w", err)
 	}
 
-	metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
-	metrics.CacheOperationsTotal.WithLabelValues("getdel", "hit").Inc()
+	metrics.CacheOperationDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
+	metrics.CacheOperationsTotal.WithLabelValues(op, "hit").Inc()
 	if c.agg != nil {
 		c.agg.Observe(ctx, KeyClass(key), "hit")
 	}

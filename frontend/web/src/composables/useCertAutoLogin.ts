@@ -1,17 +1,12 @@
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import i18n from '@/i18n'
-import {
-  CERT_SUPPRESS_KEY,
-  CERT_NEG_CACHE_KEY,
-  clearCertSuppressionFlags,
-} from '@/composables/certLoginFlags'
+import { CERT_SUPPRESS_KEY, CERT_NEG_CACHE_KEY } from '@/composables/certLoginFlags'
 
 // Re-exported for backward-compat with the spec's expected exports from
 // this module; canonical definitions live in the leaf `certLoginFlags`
 // module (shared with stores/auth.ts to avoid a duplicated/circular pair).
 export { CERT_SUPPRESS_KEY, CERT_NEG_CACHE_KEY }
-export const clearCertSuppression = clearCertSuppressionFlags
 
 const NEG_CACHE_MS = 24 * 60 * 60 * 1000
 const PROBE_TIMEOUT_MS = 2500
