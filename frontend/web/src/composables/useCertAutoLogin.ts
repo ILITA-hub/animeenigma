@@ -43,7 +43,15 @@ export async function tryCertAutoLogin(): Promise<boolean> {
   if (negUntil && Date.now() < negUntil) return false
 
   try {
+    // credentials: 'include' is required even though this is a same-site-less
+    // cross-origin GET with no cookies to send: an uncredentialed cross-origin
+    // fetch never presents a TLS client certificate (Fetch spec §"HTTP-network
+    // fetch" ties client-cert auth to the credentials mode; Chrome's socket
+    // pools additionally won't reuse/open a cert-bearing connection for a
+    // no-credentials request). Without this, the browser silently skips the
+    // cert picker and the probe always falls through to a plain 401/403.
     const res = await fetch(`${base.replace(/\/$/, '')}/cert-login`, {
+      credentials: 'include',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
     if (res.status === 403) {

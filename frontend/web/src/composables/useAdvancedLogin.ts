@@ -177,6 +177,10 @@ export function useAdvancedLogin() {
     try {
       const { cert_auto_login } = await advancedLoginApi.setCertAutoLogin(enabled)
       if (auth.user) auth.setUser({ ...auth.user, cert_auto_login })
+      // Re-enabling the toggle should let a fresh silent probe run right away —
+      // otherwise a stale 24h negative cache from before the toggle was flipped
+      // back on would keep suppressing auto-login until it expires.
+      if (enabled && cert_auto_login) clearCertSuppressionFlags()
     } catch (e) {
       fail(e)
     } finally {

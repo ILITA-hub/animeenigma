@@ -10,6 +10,7 @@ trap 'rm -f "$TMP"' EXIT
 
 curl -fsS http://127.0.0.1:8080/cert/ca.pem -o "$TMP"
 grep -q "BEGIN CERTIFICATE" "$TMP" || { echo "unexpected CA payload"; exit 1; }
+grep -q "END CERTIFICATE" "$TMP" || { echo "truncated CA payload"; exit 1; }
 
 install -m 0644 "$TMP" "$DEST"
 nginx -t && systemctl reload nginx

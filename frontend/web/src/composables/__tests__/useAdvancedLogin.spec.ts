@@ -167,7 +167,29 @@ describe('setCertAutoLogin', () => {
     expect(error.value).toBeNull()
   })
 
-  it('on a failed PUT, leaves the store untouched and sets error state', async () => {
+  it('on a successful enable, clears cert suppression flags so a just-re-enabled toggle is not shadowed by a stale 24h negative cache', async () => {
+    const auth = useAuthStore()
+    auth.setUser({ id: 'u1', username: 'bob', email: 'b@x.com', role: 'user', cert_auto_login: false })
+    setCertAutoLoginMock.mockResolvedValue({ cert_auto_login: true })
+
+    const { setCertAutoLogin } = useAdvancedLogin()
+    await setCertAutoLogin(true)
+
+    expect(clearSuppressionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('on a successful disable, does not clear cert suppression flags', async () => {
+    const auth = useAuthStore()
+    auth.setUser({ id: 'u1', username: 'bob', email: 'b@x.com', role: 'user', cert_auto_login: true })
+    setCertAutoLoginMock.mockResolvedValue({ cert_auto_login: false })
+
+    const { setCertAutoLogin } = useAdvancedLogin()
+    await setCertAutoLogin(false)
+
+    expect(clearSuppressionMock).not.toHaveBeenCalled()
+  })
+
+  it('on a failed PUT, leaves the store untouched, sets error state, and does not clear suppression flags', async () => {
     const auth = useAuthStore()
     auth.setUser({ id: 'u1', username: 'bob', email: 'b@x.com', role: 'user', cert_auto_login: false })
     const setUserSpy = vi.spyOn(auth, 'setUser')
@@ -179,6 +201,7 @@ describe('setCertAutoLogin', () => {
     expect(setUserSpy).not.toHaveBeenCalled()
     expect(auth.user?.cert_auto_login).toBe(false)
     expect(error.value).toBe('put_failed')
+    expect(clearSuppressionMock).not.toHaveBeenCalled()
   })
 })
 

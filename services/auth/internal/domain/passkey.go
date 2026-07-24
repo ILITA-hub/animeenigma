@@ -8,7 +8,7 @@ import "time"
 type WebAuthnCredential struct {
 	ID           string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID       string     `gorm:"type:uuid;index" json:"-"`
-	CredentialID string     `gorm:"size:512;uniqueIndex" json:"-"`
+	CredentialID string     `gorm:"type:text;uniqueIndex" json:"-"`
 	PublicKey    []byte     `json:"-"`
 	SignCount    uint32     `json:"-"`
 	Transports   string     `gorm:"size:128" json:"-"`
