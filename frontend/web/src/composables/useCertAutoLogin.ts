@@ -18,6 +18,29 @@ function lsSet(key: string, val: string) {
   try { localStorage.setItem(key, val) } catch { /* privacy modes */ }
 }
 
+/** sessionStorage marker: the app-bootstrap probe already ran this session. */
+export const CERT_BOOTSTRAP_PROBED_KEY = 'ae_cert_probed'
+
+/**
+ * App-bootstrap variant of {@link tryCertAutoLogin}: probes at most once per
+ * browser session. Plain site visits (home page etc.) auto-login through this
+ * without re-firing the browser's certificate picker on every reload; the
+ * login page and protected-route guard keep using the unthrottled probe so an
+ * explicit login attempt always retries.
+ */
+export async function tryCertAutoLoginOnce(): Promise<boolean> {
+  try {
+    if (sessionStorage.getItem(CERT_BOOTSTRAP_PROBED_KEY) === '1') return false
+    sessionStorage.setItem(CERT_BOOTSTRAP_PROBED_KEY, '1')
+  } catch { /* privacy modes: fall through and probe */ }
+  return tryCertAutoLogin()
+}
+
+// Concurrent probes (app bootstrap + router guard on a protected deep link)
+// would each open a connection and could double-fire the cert picker; share
+// one in-flight probe instead.
+let inFlight: Promise<boolean> | null = null
+
 /**
  * Silently probes the mTLS vhost and, when the browser presents a valid
  * client certificate for a user with the auto-login toggle ON, exchanges the
@@ -30,7 +53,14 @@ function lsSet(key: string, val: string) {
  *  - a recent probe answered "auto_login_disabled" (24h negative cache —
  *    avoids re-prompting toggled-off cert holders with the browser picker)
  */
-export async function tryCertAutoLogin(): Promise<boolean> {
+export function tryCertAutoLogin(): Promise<boolean> {
+  if (!inFlight) {
+    inFlight = probe().finally(() => { inFlight = null })
+  }
+  return inFlight
+}
+
+async function probe(): Promise<boolean> {
   const base = import.meta.env.VITE_CERT_LOGIN_BASE as string | undefined
   if (!base) return false
   if (lsGet(CERT_SUPPRESS_KEY) === '1') return false

@@ -190,6 +190,7 @@ async function copyPassword(): Promise<void> {
             <p>{{ t('profile.advancedLogin.cert.instructionsIos') }}</p>
             <p>{{ t('profile.advancedLogin.cert.instructionsAndroid') }}</p>
             <p>{{ t('profile.advancedLogin.cert.instructionsLinux') }}</p>
+            <p>{{ t('profile.advancedLogin.cert.instructionsFirefox') }}</p>
           </div>
         </details>
 

@@ -438,6 +438,13 @@ onMounted(async () => {
   if (authStore.token && !authStore.user) {
     await authStore.fetchUser()
   }
+  // TLS-cert auto-login on plain site visits (owner report 2026-07-24): the
+  // router guard only probes on protected routes and Auth.vue only on the
+  // login page, so an anonymous visitor landing on a public page (home) was
+  // never auto-logged-in. Fire-and-forget; once per browser session.
+  if (!authStore.isAuthenticated) {
+    void import('@/composables/useCertAutoLogin').then(m => m.tryCertAutoLoginOnce())
+  }
 })
 
 onBeforeUnmount(() => {

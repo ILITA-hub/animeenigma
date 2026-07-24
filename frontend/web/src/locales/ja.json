@@ -857,7 +857,8 @@
         "instructionsMacos": "macOS: .p12を開いてパスワードを入力すると、証明書がキーチェーンに追加されます",
         "instructionsIos": "iOS: .p12をダウンロードし、設定 → 一般 → VPNとデバイス管理 → プロファイルをインストール",
         "instructionsAndroid": "Android: 設定 → セキュリティ → 暗号化と認証情報 → 証明書をインストール（VPNとアプリ）",
-        "instructionsLinux": "Linux: .p12をブラウザーにインポートします（設定 → プライバシー → 証明書）"
+        "instructionsLinux": "Linux: .p12をブラウザーにインポートします（設定 → プライバシー → 証明書）",
+        "instructionsFirefox": "Firefox（全OS）: システムの証明書ストアを参照しません。Firefox本体にインポートしてください: 設定 → プライバシーとセキュリティ → 証明書 → 証明書を表示 → あなたの証明書 → インポート"
       }
     },
     "settings": {

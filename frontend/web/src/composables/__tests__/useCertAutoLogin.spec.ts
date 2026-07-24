@@ -10,8 +10,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import {
   tryCertAutoLogin,
+  tryCertAutoLoginOnce,
   CERT_SUPPRESS_KEY,
   CERT_NEG_CACHE_KEY,
+  CERT_BOOTSTRAP_PROBED_KEY,
 } from '../useCertAutoLogin'
 
 const fetchMock = vi.fn()
@@ -19,6 +21,7 @@ const fetchMock = vi.fn()
 beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
+  sessionStorage.clear()
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
   vi.stubEnv('VITE_CERT_LOGIN_BASE', 'https://cert.example')
@@ -121,5 +124,34 @@ describe('tryCertAutoLogin', () => {
     expect(result).toBe(false)
     const { toasts } = useToast()
     expect(toasts.value).toHaveLength(0)
+  })
+
+  it('(g) concurrent probes share one in-flight fetch (bootstrap + guard race)', async () => {
+    fetchMock.mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ token: 'tok' }),
+    })
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'consumeCertToken').mockResolvedValue(true)
+
+    const [a, b] = await Promise.all([tryCertAutoLogin(), tryCertAutoLogin()])
+
+    expect(a).toBe(true)
+    expect(b).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('tryCertAutoLoginOnce', () => {
+  it('probes on the first call, then skips for the rest of the session', async () => {
+    fetchMock.mockResolvedValue({ status: 401, ok: false, json: async () => ({}) })
+
+    await tryCertAutoLoginOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem(CERT_BOOTSTRAP_PROBED_KEY)).toBe('1')
+
+    await tryCertAutoLoginOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
