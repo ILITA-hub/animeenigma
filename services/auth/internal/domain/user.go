@@ -44,14 +44,17 @@ type User struct {
 	// ActivityVisibility is enforced server-side by the player service
 	// (activity feed + public watchlist reads) — see
 	// docs/superpowers/specs/2026-06-12-activity-visibility-design.md.
-	ActivityVisibility string         `gorm:"size:20;default:'all'" json:"activity_visibility"`
-	Avatar             string         `gorm:"type:text" json:"avatar,omitempty"`
-	Timezone           string         `gorm:"size:64" json:"timezone,omitempty"`
-	ApiKeyHash         *string        `gorm:"size:64;uniqueIndex" json:"-"`
-	Role               authz.Role     `gorm:"size:20;default:'user'" json:"role"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
+	ActivityVisibility string  `gorm:"size:20;default:'all'" json:"activity_visibility"`
+	Avatar             string  `gorm:"type:text" json:"avatar,omitempty"`
+	Timezone           string  `gorm:"size:64" json:"timezone,omitempty"`
+	ApiKeyHash         *string `gorm:"size:64;uniqueIndex" json:"-"`
+	// CertAutoLogin: when true, a valid client-cert handshake on the mTLS
+	// vhost silently logs this user in (spec 2026-07-24). Server-side SSoT.
+	CertAutoLogin bool           `gorm:"default:false" json:"cert_auto_login"`
+	Role          authz.Role     `gorm:"size:20;default:'user'" json:"role"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // RegisterRequest represents a registration request

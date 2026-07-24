@@ -28,7 +28,8 @@ func newUserServiceWithSessions(t *testing.T) (*UserService, *gorm.DB) {
 		`CREATE TABLE users (
 			id text primary key, username text, password_hash text, telegram_id integer,
 			public_id text, public_statuses text, activity_visibility text default 'all',
-			avatar text, timezone text, api_key_hash text, role text default 'user',
+			avatar text, timezone text, api_key_hash text, cert_auto_login integer default 0,
+			role text default 'user',
 			created_at datetime, updated_at datetime, deleted_at datetime
 		)`,
 	).Error)
