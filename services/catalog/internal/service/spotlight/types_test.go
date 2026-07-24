@@ -517,6 +517,27 @@ func TestPlatformStatsData_EmptyTilesMarshalArray(t *testing.T) {
 	}
 }
 
+func TestGachaPromoData_RoundTrip(t *testing.T) {
+	t.Parallel()
+	in := GachaPromoData{PullCostSingle: 100, PullCostTen: 900, PitySSRAt: 90}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"pull_cost_single":100`, `"pull_cost_ten":900`, `"pity_ssr_at":90`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("expected %s in %s", want, b)
+		}
+	}
+	var out GachaPromoData
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out != in {
+		t.Fatalf("round-trip mismatch: in=%+v out=%+v", in, out)
+	}
+}
+
 func TestStatsHero_UptimePercentOmittedWhenNil(t *testing.T) {
 	t.Parallel()
 	b, err := json.Marshal(StatsHero{WorkingOK: false, UptimeQuip: "x", Service: "s", Tagline: "t"})

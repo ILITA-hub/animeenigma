@@ -40,7 +40,7 @@ Every card SFC wraps `SpotlightCardShell.vue`. Never hand-roll the frame.
 |---|---|---|
 | `cyan` | content core | featured, personal_pick, platform_stats |
 | `pink` | live / personal activity | now_watching, continue_watching_new |
-| `violet` | meta / service | random_tail, latest_news, telegram_news, not_time_yet |
+| `violet` | meta / service | random_tail, latest_news, telegram_news, not_time_yet, gacha_promo |
 
 Cards are differentiated by **kicker icon + layout character**, not by new
 hues. Never add a 4th accent; never use raw Tailwind palette colors (DS lint
@@ -101,6 +101,12 @@ will fail the build).
 - Resolvers run under an **800ms per-card deadline** — parallelize multiple
   upstream calls (see `platform_stats.go` tile goroutines), never walk them
   sequentially.
+- **Card `Priority` semantics**: default 1.0; values BELOW 2.0 (e.g. curated's
+  1.5) only bias the carousel's weighted-random opening pick. Values `>= 2.0`
+  (frontend `PINNED_PRIORITY_MIN`, weightedRandom.ts) make the card **pinned**:
+  `useSpotlight` orders it first in the deck and the carousel ALWAYS opens on
+  it (`openingSlideIndex`). One pinned promo at a time, please — two pinned
+  cards compete by raw priority value (highest wins slide 0).
 
 ## 6. Mobile (390px, frame 470px)
 
@@ -128,7 +134,7 @@ will fail the build).
 
 ## Recipe: add a Spotlight card type (5 anchors, ~50 lines)
 
-`HeroSpotlightBlock` (workstream `hero-spotlight`) is a 12-card rotating carousel; adding another touches 5 anchors. Read the guidelines above alongside this recipe.
+`HeroSpotlightBlock` (workstream `hero-spotlight`) is a 14-card rotating carousel; adding another touches 5 anchors. Read the guidelines above alongside this recipe.
 
 1. **BE resolver** — create `services/catalog/internal/service/spotlight/cards/{new_type}.go` implementing `spotlight.Resolver` (`Type()` + `Resolve(ctx, userID *string) (*spotlight.Card, error)`). Mirror `featured.go` («Рекомендуем сегодня»): manual `cache.Get`/`cache.Set` with `errors.Is(err, cache.ErrNotFound)`; return `(nil,nil)` ineligible, `(nil,err)` failure, `(*Card,nil)` success. Multi-item resolvers MUST apply `spotlight.AdaptiveSlice` (1-2-3 layout rule). Login-only resolvers return `(nil,nil)` when `userID==nil`. Carry the `spotlight:` Redis key prefix for new keys (HSB-NF-03). Co-locate a `_test.go` with handwritten fakes (no testify/mock).
 2. **BE Data type** — add the JSON-shaped `{NewType}Data` struct to `services/catalog/internal/service/spotlight/types.go` (extends the Card union). Add a round-trip marshal/unmarshal test to `types_test.go`.

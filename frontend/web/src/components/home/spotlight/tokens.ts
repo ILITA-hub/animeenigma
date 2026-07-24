@@ -39,6 +39,7 @@ export type SpotlightIconName =
   | 'lightning'
   | 'star'
   | 'quote'
+  | 'gem'
 
 export interface CardToken {
   accent: SpotlightAccent
@@ -138,6 +139,7 @@ export const cardTokens: CardTokenMap = {
   daily_fanfic:          { accent: 'pink',   kickerKey: 'spotlight.dailyFanfic.title',         icon: 'book'     },
   daily_review:          { accent: 'pink',   kickerKey: 'spotlight.dailyReview.title',         icon: 'quote'    },
   upcoming_for_you:      { accent: 'cyan',   kickerKey: 'spotlight.upcomingForYou.title',      icon: 'clock'    },
+  gacha_promo:           { accent: 'violet', kickerKey: 'spotlight.gachaPromo.title',          icon: 'gem'      },
 }
 
 

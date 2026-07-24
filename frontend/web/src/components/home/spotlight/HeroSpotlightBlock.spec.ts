@@ -506,4 +506,43 @@ describe('HeroSpotlightBlock', () => {
       }
     },
   )
+
+  // ── «Лудка» promo (2026-07-24) ─ pinned card contract ───────────────────
+  describe('gacha_promo pinned promo', () => {
+    const gachaCard: SpotlightCard = {
+      type: 'gacha_promo' as const,
+      priority: 5,
+      data: { pull_cost_single: 100, pull_cost_ten: 900, pity_ssr_at: 90 },
+    }
+
+    it('dispatches gacha_promo via the v-if/v-else-if chain', async () => {
+      mockState.loading.value = false
+      mockState.cards.value = []
+      const wrapper = mountBlock()
+      mockState.cards.value = [gachaCard]
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="gacha-headline"]').exists()).toBe(true)
+      const label = wrapper.find('[role="group"]').attributes('aria-label') ?? ''
+      expect(label).toContain('spotlight.gachaPromo.title')
+    })
+
+    it('always opens on the pinned first card, ignoring the random pick', async () => {
+      // Force the weighted-random fallback toward the LAST index — if the
+      // pin contract regressed, the carousel would open on index 3.
+      const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.99)
+      try {
+        mockState.loading.value = false
+        mockState.cards.value = []
+        const wrapper = mountBlock()
+        // Deck as produced by useSpotlight's pinnedFirst: promo at index 0.
+        mockState.cards.value = [gachaCard, ...mockCards(3)]
+        await flushPromises()
+
+        expect(readActiveIndex(wrapper)).toBe(0)
+      } finally {
+        rnd.mockRestore()
+      }
+    })
+  })
 })

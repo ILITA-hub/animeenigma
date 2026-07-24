@@ -27,3 +27,47 @@ export function weightedRandomIndex(
   }
   return cards.length - 1
 }
+
+/**
+ * Cards at or above this priority are *pinned*: `pinnedFirst` orders them to
+ * the front of the deck and `openingSlideIndex` always opens the carousel on
+ * the first of them (no random pick). Weights BELOW the threshold (e.g.
+ * curated's 1.5) keep the classic "biased random" semantics. The backend
+ * counterpart is documented in services/catalog/.../cards/gacha_promo.go.
+ */
+export const PINNED_PRIORITY_MIN = 2
+
+function cardPriority(card: SpotlightCard): number {
+  return card.priority ?? 1
+}
+
+export function isPinned(card: SpotlightCard): boolean {
+  return cardPriority(card) >= PINNED_PRIORITY_MIN
+}
+
+/**
+ * Stable-moves pinned cards to the front (highest priority first — ties keep
+ * server order); non-pinned cards keep their relative server order. Returns
+ * the input array untouched when nothing is pinned.
+ */
+export function pinnedFirst(cards: SpotlightCard[]): SpotlightCard[] {
+  const pinned = cards
+    .filter(isPinned)
+    .sort((a, b) => cardPriority(b) - cardPriority(a))
+  if (pinned.length === 0) return cards
+  return [...pinned, ...cards.filter((c) => !isPinned(c))]
+}
+
+/**
+ * Opening-slide pick for HeroSpotlightBlock: a deck whose first card is
+ * pinned (i.e. already ordered by `pinnedFirst`) always opens on it;
+ * otherwise fall back to the classic weighted-random pick.
+ */
+export function openingSlideIndex(
+  cards: SpotlightCard[],
+  rng: () => number = Math.random,
+): number {
+  const first = cards[0]
+  if (first && isPinned(first)) return 0
+  return weightedRandomIndex(cards, rng)
+}

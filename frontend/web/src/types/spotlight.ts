@@ -311,6 +311,19 @@ export interface UpcomingForYouData {
   items: UpcomingForYouItem[]
 }
 
+/**
+ * GachaPromoCard — static «Лудка» feature-launch promo. Fields mirror the
+ * locked gacha economy (services/gacha pull engine) so the card renders the
+ * real pull costs + hard-pity number. Ships with priority 5.0 — a *pinned*
+ * card (>= PINNED_PRIORITY_MIN, see weightedRandom.ts): ordered first and
+ * always the opening slide.
+ */
+export interface GachaPromoData {
+  pull_cost_single: number
+  pull_cost_ten: number
+  pity_ssr_at: number
+}
+
 /* ──────────────────────────────────────────────────────────────────────── */
 /*  Discriminated union — narrows correctly in the v-if/v-else-if dispatch  */
 /*  chain inside HeroSpotlightBlock.vue.                                    */
@@ -330,6 +343,7 @@ export type SpotlightCard = (
   | { type: 'daily_fanfic'; data: DailyFanficData }
   | { type: 'daily_review'; data: DailyReviewData }
   | { type: 'upcoming_for_you'; data: UpcomingForYouData }
+  | { type: 'gacha_promo'; data: GachaPromoData }
 ) & { priority?: number }
 
 /* ──────────────────────────────────────────────────────────────────────── */

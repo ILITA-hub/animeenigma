@@ -2,6 +2,7 @@ import { ref, onMounted } from 'vue'
 import { apiClient } from '@/api/client'
 import { createFetchCache } from '@/composables/createFetchCache'
 import type { SpotlightCard, SpotlightResponse } from '@/types/spotlight'
+import { pinnedFirst } from '@/components/home/spotlight/weightedRandom'
 
 /**
  * useSpotlight — fetches the HeroSpotlightBlock card payload from
@@ -56,7 +57,10 @@ export function useSpotlight() {
       // Array.isArray guard — backend may return `cards: null` on partial
       // failure or test fixtures; the block must self-hide rather than
       // crash the render.
-      cards.value = Array.isArray(body?.cards) ? body.cards : []
+      // pinnedFirst: promo cards with priority >= PINNED_PRIORITY_MIN are
+      // ordered to the front — the aggregator's goroutine fan-out returns
+      // cards in nondeterministic order, so the deck order is decided here.
+      cards.value = pinnedFirst(Array.isArray(body?.cards) ? body.cards : [])
       cache.markFresh()
     } catch (e) {
       // Single warn for observability per UI-SPEC §State Contract. No

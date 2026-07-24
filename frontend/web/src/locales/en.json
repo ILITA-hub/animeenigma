@@ -2050,6 +2050,16 @@
     "guest_banner_login": "Log in to save progress"
   },
   "spotlight": {
+    "gachaPromo": {
+      "title": "Лудка",
+      "newBadge": "NEW",
+      "headline": "Лудка is live!",
+      "description": "Collect cards of your favorite anime characters: spin banners, chase SSR drops and grow your collection in your profile.",
+      "pityHint": "Guaranteed SSR within {n} pulls",
+      "costsLine": "×1 pull — {one} Энигм · ×10 — {ten}",
+      "earnHint": "Энигмы are earned by watching episodes and claiming the daily bonus.",
+      "cta": "Open Лудка"
+    },
     "regionLabel": "Today's spotlight",
     "slideLabel": "Slide {n} of {total}",
     "slideLabelWithTitle": "Slide {n} of {total}: {title}",

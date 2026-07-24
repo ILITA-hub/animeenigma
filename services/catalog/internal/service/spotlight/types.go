@@ -269,6 +269,17 @@ type UpcomingForYouData struct {
 	Items []UpcomingForYouItem `json:"items"`
 }
 
+// GachaPromoData is the payload for `Card{Type: "gacha_promo"}` — the
+// static «Лудка» feature-launch promo. The fields mirror the locked gacha
+// economy (services/gacha pull engine: x1=100 / x10=900 Энигмы, hard pity
+// SSR at pull 90) so the card copy renders the real numbers instead of
+// hardcoding them in frontend strings.
+type GachaPromoData struct {
+	PullCostSingle int `json:"pull_cost_single"`
+	PullCostTen    int `json:"pull_cost_ten"`
+	PitySSRAt      int `json:"pity_ssr_at"`
+}
+
 // Response is the top-level envelope returned by `GET /api/home/spotlight`.
 //
 // CRITICAL: Cards MUST marshal as `[]` (empty array) and NOT `null` when

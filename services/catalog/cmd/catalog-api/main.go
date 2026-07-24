@@ -746,6 +746,9 @@ func main() {
 		// Upcoming-for-you — announced titles matched to the user's taste
 		// via recs (spec 2026-07-17). Login-only.
 		cards.NewUpcomingForYouResolver(spotlightRecsClient, cards.NewGormListedFilter(db.DB), redisCache, log),
+		// «Лудка» launch promo — static, pinned first (priority 5.0; the
+		// frontend opens the carousel on any card with priority >= 2).
+		cards.NewGachaPromoResolver(),
 	}
 	spotlightAggregator := spotlight.NewAggregator(redisCache, log, spotlightResolvers)
 	spotlightHandler := handler.NewSpotlightHandler(spotlightAggregator, cfg.SpotlightEnabled, log)

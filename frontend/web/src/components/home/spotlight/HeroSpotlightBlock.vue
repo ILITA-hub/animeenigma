@@ -154,6 +154,11 @@
             :key="`upcoming_for_you:${currentIndex}`"
             :data="active.data"
           />
+          <GachaPromoCard
+            v-else-if="active.type === 'gacha_promo'"
+            :key="`gacha_promo:${currentIndex}`"
+            :data="active.data"
+          />
         </transition>
       </div>
       <!-- SR-only pause announcement (UI-SPEC §A11y; F1.3/F6.1 resolution).
@@ -197,10 +202,11 @@ import CuratedCard from './cards/CuratedCard.vue'
 import DailyFanficCard from './cards/DailyFanficCard.vue'
 import DailyReviewCard from './cards/DailyReviewCard.vue'
 import UpcomingForYouCard from './cards/UpcomingForYouCard.vue'
+import GachaPromoCard from './cards/GachaPromoCard.vue'
 import { getLocalizedTitle } from '@/utils/title'
 import { preloadImage } from '@/utils/preload-image'
 import { cardPosterUrl } from '@/composables/useImageProxy'
-import { weightedRandomIndex } from './weightedRandom'
+import { openingSlideIndex } from './weightedRandom'
 
 // Locked at 7000 ms per HSB-FE-03. Do not parametrize — the cadence is part
 // of the product spec, not a knob.
@@ -466,7 +472,10 @@ function schedulePrefetch(): void {
 // guarantees we seed exactly once, after the response has populated.
 watch(() => cards.value.length, (n) => {
   if (n > 0 && !initialized) {
-    currentIndex.value = weightedRandomIndex(cards.value)
+    // openingSlideIndex: pinned promo decks (useSpotlight orders them
+    // first) always open on slide 0; otherwise the classic weighted-random
+    // variety pick.
+    currentIndex.value = openingSlideIndex(cards.value)
     initialized = true
     startCycle()
     schedulePrefetch()
@@ -543,6 +552,8 @@ function cardTitle(card: SpotlightCard): string {
       return t('spotlight.dailyFanfic.title')
     case 'daily_review':
       return t('spotlight.dailyReview.title')
+    case 'gacha_promo':
+      return t('spotlight.gachaPromo.title')
     case 'upcoming_for_you': {
       const first = card.data.items[0]
       return first

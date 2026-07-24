@@ -204,6 +204,33 @@ describe('useSpotlight', () => {
     expect((vm.cards[0] as { data: { anime: { id: string } } }).data.anime.id).toBe('second-a')
   })
 
+  it('orders pinned promo cards first (priority >= PINNED_PRIORITY_MIN)', async () => {
+    // The aggregator's goroutine fan-out returns cards in nondeterministic
+    // order — the composable applies pinnedFirst so a pinned promo (e.g.
+    // gacha_promo, priority 5) always lands at index 0.
+    apiGetSpy.mockResolvedValueOnce({
+      data: {
+        cards: [
+          { type: 'featured', priority: 1, data: { anime: { id: 'a-1' } } },
+          {
+            type: 'gacha_promo',
+            priority: 5,
+            data: { pull_cost_single: 100, pull_cost_ten: 900, pity_ssr_at: 90 },
+          },
+          { type: 'curated', priority: 1.5, data: { anime: { id: 'a-2' } } },
+        ],
+        generated_at: '2026-07-24T10:00:00Z',
+      },
+    })
+
+    const wrapper = mountHarness()
+    await flushPromises()
+    await nextTick()
+
+    const vm = wrapper.vm as unknown as HarnessVm
+    expect(vm.cards.map((c) => c.type)).toEqual(['gacha_promo', 'featured', 'curated'])
+  })
+
   it('serves a second mount from the module cache without refetching', async () => {
     apiGetSpy.mockResolvedValueOnce({
       data: {

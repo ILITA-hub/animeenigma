@@ -2,7 +2,7 @@
   <!--
     Workstream hero-spotlight — v1.1-polish Phase 01 (HSB-V11-CC-03).
 
-    Inline-SVG sprite for the 9 spotlight icons. Why inline rather than an
+    Inline-SVG sprite for the spotlight icons. Why inline rather than an
     icon library:
       - Adds <3 KB gzipped vs. ~30 KB for heroicons/lucide.
       - One pass through the template — Tailwind class forwarding works
@@ -205,6 +205,22 @@
     :role="role"
   >
     <path d="M7 17H4a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5h1v4H7a1 1 0 0 0-1 1v1h3v2a2 2 0 0 1-2 2ZM19 17h-3a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5h1v4h-1a1 1 0 0 0-1 1v1h3v2a2 2 0 0 1-2 2Z" />
+  </svg>
+
+  <svg
+    v-else-if="name === 'gem'"
+    :class="forwardedClass"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    :aria-hidden="ariaHidden"
+    :aria-label="forwardedAriaLabel"
+    :role="role"
+  >
+    <path d="M6 4h12l4 5-10 11L2 9zM11 4 8.5 9l3.5 10 3.5-10L13 4M2 9h20" />
   </svg>
 </template>
 

@@ -2004,6 +2004,16 @@
     }
   },
   "spotlight": {
+    "gachaPromo": {
+      "title": "ガチャ",
+      "newBadge": "NEW",
+      "headline": "ガチャ、ついに登場!",
+      "description": "好きなアニメキャラクターのカードを集めよう。バナーを回してSSRを狙い、プロフィールのコレクションを充実させよう。",
+      "pityHint": "{n}回以内にSSR確定",
+      "costsLine": "×1 — {one}エニグマ · ×10 — {ten}",
+      "earnHint": "エニグマはエピソード視聴とデイリーボーナスで貯まります。",
+      "cta": "ガチャを開く"
+    },
     "regionLabel": "今日の注目",
     "slideLabel": "{n} / {total} スライド",
     "slideLabelWithTitle": "{n} / {total} スライド: {title}",
