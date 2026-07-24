@@ -1,5 +1,10 @@
 import type { SpotlightCard } from '@/types/spotlight'
 
+/** A card's effective priority weight (backend default is 1.0). */
+function cardPriority(card: SpotlightCard): number {
+  return card.priority ?? 1
+}
+
 /**
  * Picks a card index at random, biased by each card's `priority` weight
  * (default 1). A priority-1.5 card is 1.5× likelier to be chosen than a
@@ -15,7 +20,7 @@ export function weightedRandomIndex(
 ): number {
   if (cards.length === 0) return 0
   const weights = cards.map((c) => {
-    const w = c.priority ?? 1
+    const w = cardPriority(c)
     return w > 0 ? w : 0
   })
   const total = weights.reduce((a, w) => a + w, 0)
@@ -36,10 +41,6 @@ export function weightedRandomIndex(
  * counterpart is documented in services/catalog/.../cards/gacha_promo.go.
  */
 export const PINNED_PRIORITY_MIN = 2
-
-function cardPriority(card: SpotlightCard): number {
-  return card.priority ?? 1
-}
 
 export function isPinned(card: SpotlightCard): boolean {
   return cardPriority(card) >= PINNED_PRIORITY_MIN
