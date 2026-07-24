@@ -1796,14 +1796,31 @@ export async function tryCertAutoLogin(): Promise<boolean> {
     const payload = await res.json().catch(() => null)
     const token = payload?.data?.token ?? payload?.token
     if (!token) return false
-    return await useAuthStore().consumeCertToken(token)
+    const ok = await useAuthStore().consumeCertToken(token)
+    if (ok) notifyCertLogin()
+    return ok
   } catch {
     // Timeout, TLS failure, user dismissed the cert picker, network error —
     // all mean "no auto-login this time"; fall through to the login page.
     return false
   }
 }
+
+/**
+ * Small success toast after a silent cert login (owner request 2026-07-24):
+ * the login page never shows, so this is the only feedback the user gets.
+ * Find the project's EXISTING toast/notification mechanism first
+ * (`grep -rln "toast\|Toast\|notification" frontend/web/src/composables frontend/web/src/components/ui | head`)
+ * and use it with the i18n key `auth.certAutoLoginSuccess`. Only if the
+ * project has NO toast primitive, fall back to a `sessionStorage` handoff
+ * flag ('ae_cert_login_toast'='1') that App.vue reads once on mount and
+ * renders as a small self-dismissing (4s) glass-card banner, bottom-right,
+ * semantic tokens only.
+ */
+function notifyCertLogin() { /* implement per the comment above */ }
 ```
+
+The `notifyCertLogin` body above is the ONE deliberately unresolved piece: it depends on which toast mechanism exists — resolve it at implementation time per the comment, and delete the comment scaffolding.
 
 - [ ] **Step 4: Router guard.** In `router/index.ts`, in the auth guard (`if (to.meta.requiresAuth && !authStore.isAuthenticated ...)` branch at ~line 432), BEFORE `next({ name: 'auth' })`:
 
@@ -1866,7 +1883,7 @@ async function loginWithPasskey() {
 
 (make `onMounted`'s callback `async`).
 
-- [ ] **Step 6: Vitest for the composable.** `__tests__/useCertAutoLogin.spec.ts` — mock `fetch` + pinia store; cases: (a) no VITE base → false, no fetch; (b) suppression flag → false, no fetch; (c) 403 auto_login_disabled → false + negative-cache key set; (d) 200 `{token}` → consumeCertToken called, returns its result; (e) fetch throws → false. Stub `import.meta.env` via `vi.stubEnv('VITE_CERT_LOGIN_BASE', 'https://cert.example')`. Follow the existing vitest setup (beware the vue-i18n `createI18n` barrel mock trap — don't import the store's i18n side-effects; `vi.mock('@/api/client')`).
+- [ ] **Step 6: Vitest for the composable.** `__tests__/useCertAutoLogin.spec.ts` — mock `fetch` + pinia store; cases: (a) no VITE base → false, no fetch; (b) suppression flag → false, no fetch; (c) 403 auto_login_disabled → false + negative-cache key set; (d) 200 `{token}` → consumeCertToken called, returns its result; (e) fetch throws → false; (f) on consume success the cert-login success toast/notification path fires (mock it), on failure it does not. Stub `import.meta.env` via `vi.stubEnv('VITE_CERT_LOGIN_BASE', 'https://cert.example')`. Follow the existing vitest setup (beware the vue-i18n `createI18n` barrel mock trap — don't import the store's i18n side-effects; `vi.mock('@/api/client')`).
 - [ ] **Step 7: Run.** `cd /tmp/ae-alt-login/frontend/web && bunx vitest run src/composables/__tests__/useCertAutoLogin.spec.ts && bunx vue-tsc --noEmit` (remember vue-tsc false-pass caveat: also run `bunx tsc --noEmit` if the project does elsewhere) → PASS.
 - [ ] **Step 8: Commit.** `git commit -m "feat(web): passkey login button + TLS-cert auto-login probe" -- frontend/web`
 
@@ -1912,6 +1929,7 @@ async function loginWithPasskey() {
 ```
 auth.passkeyLogin        = "Войти через passkey"
 auth.passkeyError        = "Не удалось войти через passkey"
+auth.certAutoLoginSuccess = "Вы вошли по TLS-сертификату"
 profile.advancedLogin.title            = "Продвинутый логин"
 profile.advancedLogin.subtitle         = "Passkey и вход по TLS-сертификату"
 profile.advancedLogin.open             = "Настроить"

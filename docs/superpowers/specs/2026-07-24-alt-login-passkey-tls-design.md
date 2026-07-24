@@ -110,6 +110,7 @@ Login throttling: reuse `loginthrottle` keyed by IP for `login/finish` failures.
 - Router guard (unauthenticated → `/auth` path): before rendering `Auth.vue`, if `localStorage.ae_cert_suppress != '1'`, probe `https://cert.animeenigma.org/cert-login` with a **2.5 s timeout** while showing a minimal "checking" state:
   - Success → `POST /api/auth/cert/consume` → session → continue to the originally requested route. **The login page never renders.**
   - Any failure/timeout/403 → render `Auth.vue` normally. On `auto_login_disabled`, set a negative-cache flag (localStorage, 24 h) so toggled-off cert holders aren't re-prompted with the browser cert picker on every visit.
+- On success, show a small non-blocking toast («Вы вошли по TLS-сертификату», i18n en/ru/ja) so the silent login is visible (owner request 2026-07-24).
 - Browser cert-picker: users *without* an AE cert see nothing (the CertificateRequest names only our CA). Users *with* one get the native picker approximately once per browser session (Firefox can remember; Chrome re-asks per session). Inherent to mTLS; accepted.
 - **Logout suppression (owner-approved):** explicit logout sets `ae_cert_suppress=1` — auto-login is paused in this browser; the login page shows normally. Any successful manual login (Telegram or passkey) clears the flag, re-arming auto-login. Issuing a cert in this browser also clears it.
 
