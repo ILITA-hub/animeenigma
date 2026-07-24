@@ -21,6 +21,17 @@ func isUUID(s string) bool {
 	return uuidPattern.MatchString(s)
 }
 
+// validateUUIDs returns an InvalidInput error naming the first entry in ids
+// that isn't a well-formed UUID, or nil if all are valid.
+func validateUUIDs(ids []string) error {
+	for _, id := range ids {
+		if !isUUID(id) {
+			return apperrors.InvalidInput("invalid id: " + id)
+		}
+	}
+	return nil
+}
+
 // AdminHandler serves /api/gacha/admin/* — admin-gated content CRUD.
 type AdminHandler struct {
 	content *service.ContentService
@@ -133,11 +144,9 @@ func (h *AdminHandler) BulkUpdateCards(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	for _, id := range req.IDs {
-		if !isUUID(id) {
-			httputil.Error(w, apperrors.InvalidInput("invalid id: "+id))
-			return
-		}
+	if err := validateUUIDs(req.IDs); err != nil {
+		httputil.Error(w, err)
+		return
 	}
 	n, err := h.content.BulkUpdateCards(r.Context(), req)
 	if err != nil {
@@ -159,11 +168,9 @@ func (h *AdminHandler) BulkDeleteCards(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	for _, id := range req.IDs {
-		if !isUUID(id) {
-			httputil.Error(w, apperrors.InvalidInput("invalid id: "+id))
-			return
-		}
+	if err := validateUUIDs(req.IDs); err != nil {
+		httputil.Error(w, err)
+		return
 	}
 	n, err := h.content.BulkDeleteCards(r.Context(), req.IDs)
 	if err != nil {

@@ -138,8 +138,7 @@ async function processItem(item: UploadItem) {
     let imagePath = item.imagePath
     if (!imagePath) {
       const res = await gachaAdminApi.uploadFile(item.file, 'cards')
-      const data = (res as { data?: { data?: { image_path?: string } } }).data
-      imagePath = data?.data?.image_path ?? ''
+      imagePath = res.data.data?.image_path ?? ''
       if (!imagePath) throw new Error('empty image_path')
       item.imagePath = imagePath
     }

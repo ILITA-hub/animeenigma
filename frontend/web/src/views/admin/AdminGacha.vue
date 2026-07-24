@@ -64,7 +64,7 @@
             </span>
             <Select
               v-model="bulkRarity"
-              :options="rarityEditOptions"
+              :options="rarityOptions"
               :placeholder="$t('gacha.admin.bulk_set_rarity')"
               size="sm"
               class="w-28"
@@ -180,7 +180,7 @@
                   <td class="px-3 py-2">
                     <Select
                       :model-value="card.rarity"
-                      :options="rarityEditOptions"
+                      :options="rarityOptions"
                       size="sm"
                       class="w-20"
                       @update:model-value="v => onInlineRarity(card, v as Rarity)"
@@ -903,12 +903,6 @@ watch(bulkGroup, v => {
 })
 
 const bulkGroupOptions = computed(() => groups.value.map(g => ({ value: g.id, label: g.name })))
-const rarityEditOptions = [
-  { value: 'N', label: 'N' },
-  { value: 'R', label: 'R' },
-  { value: 'SR', label: 'SR' },
-  { value: 'SSR', label: 'SSR' },
-]
 
 function confirmBulkDelete() {
   const ids = Array.from(selectedIds.value)
