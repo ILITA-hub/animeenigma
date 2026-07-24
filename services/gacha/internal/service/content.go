@@ -120,6 +120,54 @@ func (s *ContentService) ListCards(ctx context.Context, f repo.CardFilter) ([]do
 	return s.cards.ListCards(ctx, f)
 }
 
+// BulkCardSet mirrors repo.CardBulkSet with JSON pointer semantics — keys
+// absent from the request body are left unchanged on every card.
+type BulkCardSet struct {
+	Name        *string        `json:"name"`
+	SourceTitle *string        `json:"source_title"`
+	Rarity      *domain.Rarity `json:"rarity"`
+	Enabled     *bool          `json:"enabled"`
+}
+
+// BulkUpdateCardsRequest is the PATCH /api/gacha/admin/cards/bulk payload.
+type BulkUpdateCardsRequest struct {
+	IDs []string    `json:"ids"`
+	Set BulkCardSet `json:"set"`
+}
+
+// BulkUpdateCards validates and applies a partial update to a set of cards,
+// returning the number of cards actually updated (missing/soft-deleted ids
+// are skipped, not errors — the caller refetches the list anyway).
+func (s *ContentService) BulkUpdateCards(ctx context.Context, req BulkUpdateCardsRequest) (int64, error) {
+	if len(req.IDs) == 0 {
+		return 0, apperrors.InvalidInput("ids is required")
+	}
+	set := req.Set
+	if set.Name == nil && set.SourceTitle == nil && set.Rarity == nil && set.Enabled == nil {
+		return 0, apperrors.InvalidInput("set must contain at least one field")
+	}
+	if set.Name != nil && *set.Name == "" {
+		return 0, apperrors.InvalidInput("card name cannot be empty")
+	}
+	if set.Rarity != nil && !domain.ValidRarity(*set.Rarity) {
+		return 0, apperrors.InvalidInput("invalid rarity: must be N, R, SR, or SSR")
+	}
+	return s.cards.BulkUpdateCards(ctx, req.IDs, repo.CardBulkSet{
+		Name:        set.Name,
+		SourceTitle: set.SourceTitle,
+		Rarity:      set.Rarity,
+		Enabled:     set.Enabled,
+	})
+}
+
+// BulkDeleteCards soft-deletes a set of cards, returning how many were deleted.
+func (s *ContentService) BulkDeleteCards(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, apperrors.InvalidInput("ids is required")
+	}
+	return s.cards.BulkDeleteCards(ctx, ids)
+}
+
 // ─── Groups ───────────────────────────────────────────────────────────────────
 
 // CreateGroup creates a new named group.

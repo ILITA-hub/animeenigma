@@ -162,6 +162,110 @@ func TestCreateBanner_DefaultsAndValidation(t *testing.T) {
 	}
 }
 
+func TestBulkUpdateCards_ValidationAndApply(t *testing.T) {
+	svc := newContentService(t)
+	ctx := context.Background()
+
+	c1, err := svc.CreateCard(ctx, CreateCardRequest{Name: "A", Rarity: domain.RarityN, ImagePath: "cards/a.webp"})
+	if err != nil {
+		t.Fatalf("create c1: %v", err)
+	}
+	c2, err := svc.CreateCard(ctx, CreateCardRequest{Name: "B", Rarity: domain.RarityN, ImagePath: "cards/b.webp"})
+	if err != nil {
+		t.Fatalf("create c2: %v", err)
+	}
+
+	// Empty ids → InvalidInput
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{}); !isInvalidInput(err) {
+		t.Errorf("empty ids: want InvalidInput, got %v", err)
+	}
+
+	// Empty set → InvalidInput
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{IDs: []string{c1.ID}}); !isInvalidInput(err) {
+		t.Errorf("empty set: want InvalidInput, got %v", err)
+	}
+
+	// Empty-string name → InvalidInput (source_title MAY be blanked, name may not)
+	empty := ""
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{
+		IDs: []string{c1.ID}, Set: BulkCardSet{Name: &empty},
+	}); !isInvalidInput(err) {
+		t.Errorf("empty name: want InvalidInput, got %v", err)
+	}
+
+	// Bad rarity → InvalidInput
+	bad := domain.Rarity("XX")
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{
+		IDs: []string{c1.ID}, Set: BulkCardSet{Rarity: &bad},
+	}); !isInvalidInput(err) {
+		t.Errorf("bad rarity: want InvalidInput, got %v", err)
+	}
+
+	// Valid partial update: rarity+enabled+blank source on both cards; a
+	// nonexistent id is silently skipped (affected count reports reality).
+	sr := domain.RaritySR
+	on := true
+	blank := ""
+	n, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{
+		IDs: []string{c1.ID, c2.ID, "00000000-0000-0000-0000-000000000000"},
+		Set: BulkCardSet{Rarity: &sr, Enabled: &on, SourceTitle: &blank},
+	})
+	if err != nil {
+		t.Fatalf("bulk update: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("want 2 rows affected (missing id skipped), got %d", n)
+	}
+
+	got, err := svc.GetCard(ctx, c1.ID)
+	if err != nil {
+		t.Fatalf("get c1: %v", err)
+	}
+	if got.Rarity != domain.RaritySR || !got.Enabled {
+		t.Errorf("c1 not updated: %+v", got)
+	}
+	if got.Name != "A" {
+		t.Errorf("untouched field must survive: name = %q, want A", got.Name)
+	}
+}
+
+func TestBulkDeleteCards(t *testing.T) {
+	svc := newContentService(t)
+	ctx := context.Background()
+
+	c1, err := svc.CreateCard(ctx, CreateCardRequest{Name: "A", Rarity: domain.RarityN, ImagePath: "cards/a.webp"})
+	if err != nil {
+		t.Fatalf("create c1: %v", err)
+	}
+	c2, err := svc.CreateCard(ctx, CreateCardRequest{Name: "B", Rarity: domain.RarityN, ImagePath: "cards/b.webp"})
+	if err != nil {
+		t.Fatalf("create c2: %v", err)
+	}
+
+	if _, err := svc.BulkDeleteCards(ctx, nil); !isInvalidInput(err) {
+		t.Errorf("empty ids: want InvalidInput, got %v", err)
+	}
+
+	n, err := svc.BulkDeleteCards(ctx, []string{c1.ID, c2.ID})
+	if err != nil {
+		t.Fatalf("bulk delete: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("want 2 deleted, got %d", n)
+	}
+
+	if _, err := svc.GetCard(ctx, c1.ID); err == nil {
+		t.Error("c1 must be soft-deleted (GetCard should return NotFound)")
+	}
+	list, err := svc.ListCards(ctx, repo.CardFilter{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("want empty list after bulk delete, got %d", len(list))
+	}
+}
+
 func isInvalidInput(err error) bool {
 	if err == nil {
 		return false

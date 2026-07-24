@@ -148,3 +148,40 @@ func (r *ContentRepository) GroupCardIDs(ctx context.Context, groupID string) ([
 	}
 	return cardIDs, nil
 }
+
+// CardBulkSet carries the optional fields BulkUpdateCards applies.
+// nil pointer = leave that column unchanged.
+type CardBulkSet struct {
+	Name        *string
+	SourceTitle *string
+	Rarity      *domain.Rarity
+	Enabled     *bool
+}
+
+// BulkUpdateCards applies the non-nil fields of set to every card in ids.
+// Soft-deleted cards are excluded by GORM's default scope; returns rows affected.
+func (r *ContentRepository) BulkUpdateCards(ctx context.Context, ids []string, set CardBulkSet) (int64, error) {
+	updates := map[string]any{}
+	if set.Name != nil {
+		updates["name"] = *set.Name
+	}
+	if set.SourceTitle != nil {
+		updates["source_title"] = *set.SourceTitle
+	}
+	if set.Rarity != nil {
+		updates["rarity"] = *set.Rarity
+	}
+	if set.Enabled != nil {
+		updates["enabled"] = *set.Enabled
+	}
+	res := r.db.WithContext(ctx).Model(&domain.Card{}).Where("id IN ?", ids).Updates(updates)
+	return res.RowsAffected, res.Error
+}
+
+// BulkDeleteCards soft-deletes every card in ids. Same semantics as DeleteCard:
+// group/banner join rows stay in place — every join query already filters on
+// gacha_cards.deleted_at. Returns rows affected.
+func (r *ContentRepository) BulkDeleteCards(ctx context.Context, ids []string) (int64, error) {
+	res := r.db.WithContext(ctx).Delete(&domain.Card{}, "id IN ?", ids)
+	return res.RowsAffected, res.Error
+}
