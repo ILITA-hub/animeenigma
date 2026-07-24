@@ -13,7 +13,7 @@ import (
 // (watch_history × anime_list × animes) trust surface into the set of combos
 // the detector actually needs to ask the catalog about.
 //
-// NOTIF-DET-02 mandate (literal SQL), AUTO-608-updated:
+// NOTIF-DET-02 mandate (literal SQL), AUTO-608-updated, AUTO-612-guarded:
 //
 //	SELECT DISTINCT
 //	    wh.anime_id, a.shikimori_id, wh.player, wh.language,
@@ -23,9 +23,14 @@ import (
 //	JOIN animes a ON a.id = wh.anime_id
 //	WHERE al.status = 'watching'
 //	  AND a.status = 'ongoing'
-//	  AND (wh.translation_id != '' OR wh.player IN (
-//	    SELECT DISTINCT player_key FROM stream_providers
-//	    WHERE anime_level AND status <> 'disabled' AND player_key <> ''));
+//	  AND (wh.translation_id != '' OR (
+//	    wh.player IN (
+//	      SELECT DISTINCT player_key FROM stream_providers
+//	      WHERE anime_level AND status <> 'disabled' AND player_key <> '')
+//	    AND NOT EXISTS (
+//	      SELECT 1 FROM watch_history pinned
+//	      WHERE pinned.user_id = wh.user_id AND pinned.anime_id = wh.anime_id
+//	        AND pinned.player = wh.player AND pinned.translation_id != '')));
 //
 // Filtering on status='watching' (user-side) AND 'ongoing' (catalog-side)
 // keeps the result set bounded to "combos that could legitimately produce a
@@ -41,6 +46,17 @@ import (
 // automatically. Only hanime/18anime rows with an empty translation_id stay
 // excluded — no anime-level resolver exists for them (their roster rows
 // carry anime_level=false).
+// AUTO-612: the any-team (empty translation_id) row for a given (user,
+// anime, player) is admitted ONLY when that same user has NOT also pinned a
+// specific team for that (anime, player). Without this guard, a user who
+// both watched in any-team mode AND pinned a team for the same kodik/
+// animelib anime produces TWO independent domain.Combo keys (one per
+// translation_id granularity) that each run their own snapshot/diff and
+// fire their own new_episode notification for the same anime — visible to
+// the user as a duplicate notification (dedupe key is per-combo, not
+// per-anime, and the pinned combo's translation info doesn't distinguish
+// the cards when translation_title is empty). Pinned wins because it
+// reflects the user's explicit, current choice.
 type HotCombosCollector struct {
 	db  *gorm.DB
 	log *logger.Logger
@@ -66,9 +82,14 @@ func (c *HotCombosCollector) Collect(ctx context.Context) ([]domain.Combo, error
 		JOIN animes a ON a.id = wh.anime_id
 		WHERE al.status = 'watching'
 		  AND a.status = 'ongoing'
-		  AND (wh.translation_id != '' OR wh.player IN (
-		    SELECT DISTINCT player_key FROM stream_providers
-		    WHERE anime_level AND status <> 'disabled' AND player_key <> ''))
+		  AND (wh.translation_id != '' OR (
+		    wh.player IN (
+		      SELECT DISTINCT player_key FROM stream_providers
+		      WHERE anime_level AND status <> 'disabled' AND player_key <> '')
+		    AND NOT EXISTS (
+		      SELECT 1 FROM watch_history pinned
+		      WHERE pinned.user_id = wh.user_id AND pinned.anime_id = wh.anime_id
+		        AND pinned.player = wh.player AND pinned.translation_id != '')))
 	`
 
 	var rows []domain.Combo

@@ -144,3 +144,47 @@ func TestHotCombos_RosterDrivenAnimeLevelPlayers(t *testing.T) {
 		t.Fatalf("non-anime-level / disabled players with empty translation must be excluded, got %v", got)
 	}
 }
+
+// TestHotCombos_PinnedTeamSuppressesAnyTeamDuplicate is the AUTO-612
+// regression test. A user who both watched an anime in any-team mode
+// (translation_id="") AND pinned a specific team (translation_id!="") for
+// the SAME (anime, player) used to produce two independent domain.Combo
+// keys — each running its own snapshot/diff and firing its own
+// new_episode notification for the same anime (the observed "duplicate
+// notification" bug: 2026-07-24T06-30-24_tNeymik_telegram). Only the
+// pinned combo must survive; the any-team row for that (anime, player) is
+// suppressed. A genuinely different player (ae, any-team) for the same
+// anime is unaffected — the guard is scoped per (user, anime, player).
+func TestHotCombos_PinnedTeamSuppressesAnyTeamDuplicate(t *testing.T) {
+	db := testDB(t)
+	seedProvider(t, db, "kodik-noads", "kodik", true, "enabled")
+	seedProvider(t, db, "ae-firstparty", "ae", true, "enabled")
+
+	seedAnime(t, db, "a-tab", "tab-1")
+	seedList(t, db, "u1", "a-tab", "watching")
+
+	// Any-team kodik watch (older) + pinned-team kodik watch (later) for the
+	// SAME anime — the exact shape that produced the duplicate report.
+	seedWatch(t, db, "u1", "a-tab", "kodik", "ru", "sub", "", 2)
+	seedWatch(t, db, "u1", "a-tab", "kodik", "ru", "sub", "tr-9", 4)
+	// A genuinely different player, any-team, same anime — must stay admitted.
+	seedWatch(t, db, "u1", "a-tab", "ae", "ru", "sub", "", 1)
+
+	combos, err := NewHotCombosCollector(db, logger.Default()).Collect(context.Background())
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	got := map[string]bool{}
+	for _, c := range combos {
+		got[c.Player+"|"+c.TranslationID] = true
+	}
+	if got["kodik|"] {
+		t.Errorf("any-team kodik combo must be suppressed when a pinned kodik combo exists for the same anime, got %v", got)
+	}
+	if !got["kodik|tr-9"] {
+		t.Errorf("pinned kodik combo must be admitted, got %v", got)
+	}
+	if !got["ae|"] {
+		t.Errorf("any-team combo for a DIFFERENT player must stay admitted, got %v", got)
+	}
+}
