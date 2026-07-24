@@ -187,3 +187,20 @@ func TestRouter_Admin_RequiresAuth(t *testing.T) {
 		t.Errorf("admin cards route: expected 401 without token, got %d", rr.Code)
 	}
 }
+
+// TestRouter_AdminBulk_RequiresAuth asserts the bulk card routes exist and are
+// auth-gated (401 without token — NOT 404/405, which would mean a routing bug).
+func TestRouter_AdminBulk_RequiresAuth(t *testing.T) {
+	r := getTestRouter(t)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPatch, "/api/gacha/admin/cards/bulk"},
+		{http.MethodPost, "/api/gacha/admin/cards/bulk-delete"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s: expected 401 without token, got %d", tc.method, tc.path, rr.Code)
+		}
+	}
+}

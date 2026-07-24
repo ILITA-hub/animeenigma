@@ -125,6 +125,55 @@ func (h *AdminHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]bool{"deleted": true})
 }
 
+// BulkUpdateCards handles PATCH /api/gacha/admin/cards/bulk — applies the
+// present fields of `set` to every card in `ids` (partial semantics).
+func (h *AdminHandler) BulkUpdateCards(w http.ResponseWriter, r *http.Request) {
+	var req service.BulkUpdateCardsRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	for _, id := range req.IDs {
+		if !isUUID(id) {
+			httputil.Error(w, apperrors.InvalidInput("invalid id: "+id))
+			return
+		}
+	}
+	n, err := h.content.BulkUpdateCards(r.Context(), req)
+	if err != nil {
+		h.log.Errorw("bulk update cards", "count", len(req.IDs), "error", err)
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]int64{"updated": n})
+}
+
+type bulkDeleteRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// BulkDeleteCards handles POST /api/gacha/admin/cards/bulk-delete.
+func (h *AdminHandler) BulkDeleteCards(w http.ResponseWriter, r *http.Request) {
+	var req bulkDeleteRequest
+	if err := httputil.Bind(r, &req); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	for _, id := range req.IDs {
+		if !isUUID(id) {
+			httputil.Error(w, apperrors.InvalidInput("invalid id: "+id))
+			return
+		}
+	}
+	n, err := h.content.BulkDeleteCards(r.Context(), req.IDs)
+	if err != nil {
+		h.log.Errorw("bulk delete cards", "count", len(req.IDs), "error", err)
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]int64{"deleted": n})
+}
+
 // ─── Groups ───────────────────────────────────────────────────────────────────
 
 type groupNameRequest struct {

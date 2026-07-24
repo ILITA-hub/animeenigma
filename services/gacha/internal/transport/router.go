@@ -108,6 +108,9 @@ func NewRouter(
 			// Cards
 			r.Post("/cards", adminHandler.CreateCard)
 			r.Get("/cards", adminHandler.ListCards)
+			// Bulk ops — static segments route before /cards/{id}.
+			r.Patch("/cards/bulk", adminHandler.BulkUpdateCards)
+			r.Post("/cards/bulk-delete", adminHandler.BulkDeleteCards)
 			r.Get("/cards/{id}", adminHandler.GetCard)
 			r.Patch("/cards/{id}", adminHandler.UpdateCard)
 			r.Delete("/cards/{id}", adminHandler.DeleteCard)
