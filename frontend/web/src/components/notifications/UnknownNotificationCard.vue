@@ -10,14 +10,7 @@
       <p class="text-white/70 text-sm">{{ $t('notifications.unknown.title') }}</p>
       <p class="text-white/40 text-[10px] mt-1">{{ relativeTime }}</p>
     </div>
-    <button
-      type="button"
-      class="text-white/40 hover:text-white text-lg leading-none p-1 -mr-1 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
-      :aria-label="$t('notifications.toast.dismissAria')"
-      @click.stop="onDismiss"
-    >
-      ×
-    </button>
+    <NotificationDismissButton :notification="notification" />
   </div>
 </template>
 
@@ -38,7 +31,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Info } from 'lucide-vue-next'
 
-import { useNotificationsStore } from '@/stores/notifications'
+import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification } from '@/types/notification'
 
@@ -51,7 +44,6 @@ defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
-const store = useNotificationsStore()
 
 const relativeTime = computed(() =>
   formatRelativeTime(
@@ -60,12 +52,4 @@ const relativeTime = computed(() =>
     t('notifications.time.justNow'),
   ),
 )
-
-async function onDismiss(): Promise<void> {
-  try {
-    await store.dismiss(props.notification.id)
-  } catch {
-    /* optimistic rollback handled inside store */
-  }
-}
 </script>

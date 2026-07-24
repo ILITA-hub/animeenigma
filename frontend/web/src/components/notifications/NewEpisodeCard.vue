@@ -30,15 +30,7 @@
       </div>
     </button>
 
-    <!-- Dismiss × -->
-    <button
-      type="button"
-      class="text-white/40 hover:text-white text-lg leading-none p-1 -mr-1 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
-      :aria-label="$t('notifications.toast.dismissAria')"
-      @click.stop="onDismiss"
-    >
-      ×
-    </button>
+    <NotificationDismissButton :notification="notification" />
   </div>
 </template>
 
@@ -56,6 +48,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 import PosterImage from '@/components/anime/PosterImage.vue'
+import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification, NewEpisodePayload } from '@/types/notification'
@@ -118,17 +111,5 @@ const relativeTime = computed(() => {
 function onClick(): void {
   store.handleClick(props.notification, router)
   emit('close')
-}
-
-async function onDismiss(): Promise<void> {
-  try {
-    await store.dismiss(props.notification.id)
-  } catch {
-    // Optimistic rollback already happened inside the store action; the
-    // user sees the row reappear. No further UI feedback needed for the
-    // common transient-network case.
-  }
-  // Don't close the parent dropdown on dismiss — user may want to
-  // dismiss more notifications in the same session.
 }
 </script>

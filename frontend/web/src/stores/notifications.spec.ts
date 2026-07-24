@@ -123,7 +123,7 @@ describe('notifications store — history pagination', () => {
     expect(store.historyOpen).toBe(true)
     await flush()
 
-    expect(listNotifications).toHaveBeenCalledWith('all', 30, 0)
+    expect(listNotifications).toHaveBeenCalledWith('history', 30, 0)
     expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
     expect(store.historyTotal).toBe(5)
     expect(store.hasMoreHistory).toBe(true)
@@ -139,7 +139,7 @@ describe('notifications store — history pagination', () => {
     vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('b')], 2))
     await store.fetchMoreHistory()
 
-    expect(listNotifications).toHaveBeenLastCalledWith('all', 30, 1)
+    expect(listNotifications).toHaveBeenLastCalledWith('history', 30, 1)
     expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
     expect(store.hasMoreHistory).toBe(false)
   })
@@ -209,7 +209,7 @@ describe('notifications store — history pagination', () => {
     expect(store.unreadCount).toBe(0)
   })
 
-  it('dismiss removes the row from both lists and decrements historyTotal', async () => {
+  it('dismiss removes the dropdown row but stamps (keeps) the history row', async () => {
     const store = useNotificationsStore()
     store.notifications = [notif('a')]
     store.historyItems = [notif('a'), notif('b')]
@@ -219,20 +219,52 @@ describe('notifications store — history pagination', () => {
     await store.dismiss('a')
 
     expect(store.notifications).toEqual([])
-    expect(store.historyItems.map((n) => n.id)).toEqual(['b'])
-    expect(store.historyTotal).toBe(1)
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
+    expect(store.historyItems[0].dismissed_at).not.toBeNull()
+    expect(store.historyTotal).toBe(2) // dismissed rows still count in history
     expect(store.unreadCount).toBe(0)
   })
 
-  it('markAllRead stamps history rows too', async () => {
+  it('dismiss restores the un-stamped history row on API failure', async () => {
+    vi.mocked(apiDismiss).mockRejectedValueOnce(new Error('boom'))
+    const store = useNotificationsStore()
+    store.historyItems = [notif('a')]
+    store.historyTotal = 1
+    store.unreadCount = 1
+
+    await expect(store.dismiss('a')).rejects.toThrow('boom')
+
+    expect(store.historyItems[0].dismissed_at).toBeNull()
+    expect(store.unreadCount).toBe(1)
+  })
+
+  it('dismiss and markRead are no-ops on an already-dismissed history row', async () => {
+    const dismissed = { ...notif('a'), dismissed_at: new Date().toISOString() }
+    const store = useNotificationsStore()
+    store.historyItems = [dismissed]
+    store.unreadCount = 3
+
+    await store.dismiss('a')
+    await store.markRead('a')
+
+    expect(apiDismiss).not.toHaveBeenCalled()
+    expect(apiMarkRead).not.toHaveBeenCalled()
+    expect(store.historyItems[0]).toEqual(dismissed)
+    expect(store.unreadCount).toBe(3) // dismissed rows never touch the badge
+  })
+
+  it('markAllRead stamps active history rows but skips dismissed ones', async () => {
+    const dismissed = { ...notif('gone'), dismissed_at: new Date().toISOString() }
     const store = useNotificationsStore()
     store.notifications = [notif('a')]
-    store.historyItems = [notif('a'), notif('old')]
+    store.historyItems = [notif('a'), notif('old'), dismissed]
     store.unreadCount = 2
 
     await store.markAllRead()
 
-    expect(store.historyItems.every((n) => n.read_at)).toBe(true)
+    expect(store.historyItems[0].read_at).not.toBeNull()
+    expect(store.historyItems[1].read_at).not.toBeNull()
+    expect(store.historyItems[2].read_at).toBeNull() // dismissed left untouched
     expect(store.unreadCount).toBe(0)
   })
 

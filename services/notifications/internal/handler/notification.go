@@ -44,7 +44,7 @@ type MarkAllReadResponse struct {
 	Updated int64 `json:"updated"`
 }
 
-// List handles GET /api/notifications?status=unread|all&limit=20&offset=0
+// List handles GET /api/notifications?status=unread|all|history&limit=20&offset=0
 func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := authz.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -52,11 +52,7 @@ func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := repo.ListStatus(r.URL.Query().Get("status"))
-	if status != repo.ListAll {
-		// Default to "unread" — matches the design-doc API contract.
-		status = repo.ListUnread
-	}
+	status := repo.ParseListStatus(r.URL.Query().Get("status"))
 
 	limit := parseIntQuery(r, "limit", 20)
 	offset := parseIntQuery(r, "offset", 0)

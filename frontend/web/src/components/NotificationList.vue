@@ -5,15 +5,18 @@
     {{ $t('notifications.dropdown.empty') }}
   </EmptyState>
 
-  <!-- Notification list. Read rows stay visible but tinted — the single
-       point of control for the read/unread visual split across every
-       surface (bell dropdown + history modal), so the card renderers
-       stay presentation-agnostic. -->
+  <!-- Notification list. Read rows stay visible but tinted; dismissed rows
+       (history modal only — the dropdown never receives them) are dimmed
+       harder + desaturated. This is the single point of control for the
+       read/unread/dismissed visual split across every surface (bell
+       dropdown + history modal), so the card renderers stay
+       presentation-agnostic. -->
   <ul v-else class="divide-y divide-white/5">
     <li
       v-for="n in notifications"
       :key="n.id"
-      :class="{ 'opacity-70': n.read_at }"
+      :class="n.dismissed_at ? 'opacity-50 saturate-50' : n.read_at ? 'opacity-70' : undefined"
+      :title="n.dismissed_at ? $t('notifications.history.dismissed') : undefined"
     >
       <component
         :is="resolveRenderer(n.type)"

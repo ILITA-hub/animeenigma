@@ -2020,7 +2020,8 @@
       "viewOlder": "View older notifications",
       "title": "All notifications",
       "end": "That's everything — you're all caught up.",
-      "error": "Couldn't load more notifications."
+      "error": "Couldn't load more notifications.",
+      "dismissed": "Dismissed"
     },
     "newEpisode": {
       "singleEp": "Episode {n} is out",

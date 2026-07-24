@@ -24,15 +24,7 @@
       </div>
     </button>
 
-    <!-- Dismiss × -->
-    <button
-      type="button"
-      class="text-white/40 hover:text-white text-lg leading-none p-1 -mr-1 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded"
-      :aria-label="$t('notifications.toast.dismissAria')"
-      @click.stop="onDismiss"
-    >
-      ×
-    </button>
+    <NotificationDismissButton :notification="notification" />
   </div>
 </template>
 
@@ -49,6 +41,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Bot, CheckCheck, MessageSquarePlus, type LucideIcon } from 'lucide-vue-next'
 
+import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification, FeedbackStatusPayload } from '@/types/notification'
@@ -105,13 +98,5 @@ function onClick(): void {
   // new_episode payloads, so feedback cards just collapse the badge.
   store.handleClick(props.notification, router)
   emit('close')
-}
-
-async function onDismiss(): Promise<void> {
-  try {
-    await store.dismiss(props.notification.id)
-  } catch {
-    // Optimistic rollback already happened inside the store action.
-  }
 }
 </script>

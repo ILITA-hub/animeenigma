@@ -2,7 +2,7 @@
  * Typed API client for the notifications service.
  *
  * Routes (gateway-proxied, JWT-required):
- *   GET    /api/notifications?status=unread|all&limit=&offset=
+ *   GET    /api/notifications?status=unread|all|history&limit=&offset=
  *   POST   /api/notifications/{id}/read
  *   POST   /api/notifications/mark-all-read
  *   POST   /api/notifications/{id}/dismiss
@@ -22,7 +22,8 @@ import type {
   MarkAllReadResponse,
 } from '@/types/notification'
 
-export type ListStatus = 'unread' | 'all'
+/** `history` = active + dismissed rows (the "view older" modal). */
+export type ListStatus = 'unread' | 'all' | 'history'
 
 /**
  * Unwrap the standard `{success, data}` envelope. Backends sometimes

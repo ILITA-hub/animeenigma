@@ -32,9 +32,7 @@ func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
-// ListStatus filters the List response. Only "unread" and "all" are
-// supported in v1.0 — the design doc reserves "dismissed" for a future
-// "history" tab.
+// ListStatus filters the List response.
 type ListStatus string
 
 const (
@@ -42,7 +40,24 @@ const (
 	ListUnread ListStatus = "unread"
 	// ListAll returns active (not dismissed); read state is irrelevant.
 	ListAll ListStatus = "all"
+	// ListHistory returns active PLUS dismissed rows — the "view older
+	// notifications" modal. Dismissed rows bypass the relevance filter:
+	// they record a user action, are never invalidated (the invalidation
+	// job skips them), and must not vanish once the episode is watched.
+	ListHistory ListStatus = "history"
 )
+
+// ParseListStatus maps a raw query value to a supported ListStatus,
+// defaulting to ListUnread (the design-doc API contract) for anything
+// unrecognized.
+func ParseListStatus(raw string) ListStatus {
+	switch s := ListStatus(raw); s {
+	case ListAll, ListHistory:
+		return s
+	default:
+		return ListUnread
+	}
+}
 
 // List returns up to `limit` notifications for `userID`, filtered by
 // `status`, ordered by `created_at DESC`. Also returns the absolute counts
@@ -65,15 +80,28 @@ func (r *NotificationRepository) List(
 		offset = 0
 	}
 
-	// Base query: active, non-invalidated rows for this user, filtered to
-	// still-relevant new_episode rows (other types pass through).
-	base := r.db.WithContext(ctx).
+	// Shared prefix: this user's non-invalidated rows. The user_id scoping
+	// lives here once — every derived query below inherits it.
+	scope := r.db.WithContext(ctx).
 		Model(&domain.UserNotification{}).
-		Where("user_id = ? AND dismissed_at IS NULL AND invalidated_at IS NULL", userID).
+		Where("user_id = ? AND invalidated_at IS NULL", userID)
+
+	// Active set: not dismissed, filtered to still-relevant new_episode
+	// rows (other types pass through).
+	base := scope.Session(&gorm.Session{}).
+		Where("dismissed_at IS NULL").
 		Where(relevanceReadClause())
 
-	// Branch on status — the predicate is additive on top of `base`.
-	rowsQuery := base.Session(&gorm.Session{})
+	// listBase drives rows + total. History widens the scope to include
+	// dismissed rows (which skip the relevance predicate — see ListHistory).
+	listBase := base
+	if status == ListHistory {
+		listBase = scope.Session(&gorm.Session{}).
+			Where("(dismissed_at IS NOT NULL OR " + relevanceReadClause() + ")")
+	}
+
+	// Branch on status — the predicate is additive on top of `listBase`.
+	rowsQuery := listBase.Session(&gorm.Session{})
 	if status == ListUnread {
 		rowsQuery = rowsQuery.Where("read_at IS NULL")
 	}
@@ -86,15 +114,16 @@ func (r *NotificationRepository) List(
 		return nil, 0, 0, apperrors.Wrap(err, apperrors.CodeInternal, "list notifications")
 	}
 
-	// Absolute "total active" — always counted off the un-filtered base
-	// so the UI can show "X total, Y unread" regardless of the current
-	// filter.
-	if err := base.Session(&gorm.Session{}).
+	// Absolute total for the listed scope — the read-state filter never
+	// applies, so the UI can show "X total, Y unread" and the history
+	// modal can page against a stable denominator.
+	if err := listBase.Session(&gorm.Session{}).
 		Count(&total).Error; err != nil {
 		return nil, 0, 0, apperrors.Wrap(err, apperrors.CodeInternal, "count notifications total")
 	}
 
-	// Unread count is also relative to the active set.
+	// Unread count is always relative to the ACTIVE set — it feeds the
+	// bell badge, where dismissed rows never count.
 	if err := base.Session(&gorm.Session{}).
 		Where("read_at IS NULL").
 		Count(&unreadCount).Error; err != nil {

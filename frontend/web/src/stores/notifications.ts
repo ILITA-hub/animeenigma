@@ -318,7 +318,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     const epoch = historyEpoch
     historyLoading.value = true
     try {
-      const data = await listNotifications('all', HISTORY_PAGE_SIZE, historyItems.value.length)
+      const data = await listNotifications('history', HISTORY_PAGE_SIZE, historyItems.value.length)
       if (epoch !== historyEpoch) return
       const page = Array.isArray(data.notifications) ? data.notifications : []
       const seen = new Set(historyItems.value.map((n) => n.id))
@@ -354,6 +354,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
     const prior = priorMain ?? priorHist
     if (!prior) return
     if (prior.read_at) return // already read — no-op
+    // Dismissed rows are outside the unread count (server excludes them);
+    // flipping one here would wrongly decrement the badge.
+    if (prior.dismissed_at) return
 
     const now = new Date().toISOString()
     if (priorMain) notifications.value[idx] = { ...priorMain, read_at: now }
@@ -373,21 +376,25 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   /**
-   * Optimistic dismiss: remove from local list(s), decrement count if it
-   * was unread. Rollback on error.
+   * Optimistic dismiss: remove from the dropdown list, stamp dismissed_at
+   * on the history copy (history keeps dismissed rows, rendered dimmed),
+   * decrement the badge if it was unread. Rollback on error.
    */
   async function dismissNotification(id: string): Promise<void> {
     const { idx, histIdx, priorMain, priorHist } = locate(id)
     const prior = priorMain ?? priorHist
     if (!prior) return
-    const wasUnread = !prior.read_at && !prior.dismissed_at
+    if (prior.dismissed_at) return // already dismissed — no-op
+    const wasUnread = !prior.read_at
 
     if (priorMain) {
       notifications.value = notifications.value.filter((n) => n.id !== id)
     }
     if (priorHist) {
-      historyItems.value = historyItems.value.filter((n) => n.id !== id)
-      historyTotal.value = Math.max(0, historyTotal.value - 1)
+      historyItems.value[histIdx] = {
+        ...priorHist,
+        dismissed_at: new Date().toISOString(),
+      }
     }
     if (wasUnread) {
       unreadCount.value = Math.max(0, unreadCount.value - 1)
@@ -396,18 +403,15 @@ export const useNotificationsStore = defineStore('notifications', () => {
     try {
       await apiDismiss(id)
     } catch (err) {
-      // Rollback — splice back at the original position so order is
-      // preserved.
+      // Rollback — splice the dropdown row back at its original position
+      // so order is preserved; restore the un-stamped history copy.
       if (priorMain) {
         const next = [...notifications.value]
         next.splice(idx, 0, priorMain)
         notifications.value = next
       }
       if (priorHist) {
-        const next = [...historyItems.value]
-        next.splice(histIdx, 0, priorHist)
-        historyItems.value = next
-        historyTotal.value = historyTotal.value + 1
+        historyItems.value[histIdx] = priorHist
       }
       if (wasUnread) {
         unreadCount.value = unreadCount.value + 1
@@ -427,7 +431,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
     const priorCount = unreadCount.value
     const now = new Date().toISOString()
     notifications.value = prior.map((n) => (n.read_at ? n : { ...n, read_at: now }))
-    historyItems.value = priorHist.map((n) => (n.read_at ? n : { ...n, read_at: now }))
+    // Dismissed history rows stay untouched — the server's mark-all-read
+    // only stamps active rows.
+    historyItems.value = priorHist.map((n) =>
+      n.read_at || n.dismissed_at ? n : { ...n, read_at: now },
+    )
     unreadCount.value = 0
 
     try {

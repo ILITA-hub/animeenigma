@@ -254,6 +254,70 @@ func Test_UnreadCount_ExcludesStale(t *testing.T) {
 	}
 }
 
+// Test_List_History_IncludesDismissed: `history` returns active + dismissed
+// rows (total counts both), while `all` keeps excluding dismissed and the
+// unread count stays active-only in both modes.
+func Test_List_History_IncludesDismissed(t *testing.T) {
+	db := relevanceTestDB(t)
+	r := NewNotificationRepository(db)
+
+	// Active + relevant.
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5)
+	seedNotif(t, db, "u1", "anime-1", 7)
+	// Dismissed — AND caught-up, so the relevance predicate would hide it;
+	// history must show it anyway (dismissed rows bypass relevance).
+	seedList(t, db, "u1", "anime-2", "watching")
+	seedWatch(t, db, "u1", "anime-2", "kodik", 9)
+	id2 := seedNotif(t, db, "u1", "anime-2", 9)
+	if err := db.Exec(`UPDATE user_notifications SET dismissed_at=? WHERE id=?`,
+		time.Now().UTC(), id2).Error; err != nil {
+		t.Fatalf("set dismissed: %v", err)
+	}
+
+	rows, unread, total, err := r.List(context.Background(), "u1", ListHistory, 20, 0)
+	if err != nil {
+		t.Fatalf("List history: %v", err)
+	}
+	if len(rows) != 2 || total != 2 {
+		t.Fatalf("history: want 2 rows / total 2, got %d / %d", len(rows), total)
+	}
+	if unread != 1 {
+		t.Fatalf("history: unread must stay active-only (1), got %d", unread)
+	}
+
+	rows, unread, total, err = r.List(context.Background(), "u1", ListAll, 20, 0)
+	if err != nil {
+		t.Fatalf("List all: %v", err)
+	}
+	if len(rows) != 1 || total != 1 || unread != 1 {
+		t.Fatalf("all: want (1,1,1) — dismissed excluded, got (%d,%d,%d)", len(rows), unread, total)
+	}
+}
+
+// Test_List_History_ExcludesInvalidated: invalidated rows stay hidden even
+// in history mode.
+func Test_List_History_ExcludesInvalidated(t *testing.T) {
+	db := relevanceTestDB(t)
+	r := NewNotificationRepository(db)
+
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5)
+	id := seedNotif(t, db, "u1", "anime-1", 7)
+	if err := db.Exec(`UPDATE user_notifications SET invalidated_at=? WHERE id=?`,
+		time.Now().UTC(), id).Error; err != nil {
+		t.Fatalf("set invalidated: %v", err)
+	}
+
+	rows, _, total, err := r.List(context.Background(), "u1", ListHistory, 20, 0)
+	if err != nil {
+		t.Fatalf("List history: %v", err)
+	}
+	if len(rows) != 0 || total != 0 {
+		t.Fatalf("want invalidated hidden from history, got %d rows / total %d", len(rows), total)
+	}
+}
+
 func Test_Upsert_RevivesInvalidatedRow(t *testing.T) {
 	db := relevanceTestDB(t)
 	r := NewNotificationRepository(db)
