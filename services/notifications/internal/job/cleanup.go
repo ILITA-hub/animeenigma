@@ -10,9 +10,10 @@ import (
 )
 
 // DismissedRetentionCleanupJob deletes user_notifications rows whose
-// dismissed_at or invalidated_at is older than `retentionDays`
-// (NOTIF-DET-09, default 30). Reaps rows retired either by the user
-// (dismissed_at) or by the hourly RelevanceInvalidationJob (invalidated_at).
+// dismissed_at, invalidated_at, or deleted_at is older than `retentionDays`
+// (NOTIF-DET-09, default 30). Reaps rows retired by the user (dismissed_at =
+// cleared from the bell; deleted_at = binned from history) or by the hourly
+// RelevanceInvalidationJob (invalidated_at).
 //
 // Single DELETE statement with a Go-computed cutoff timestamp (portable
 // across Postgres and SQLite; removes the old pgx INTERVAL-encoding
@@ -44,15 +45,17 @@ func NewDismissedRetentionCleanupJob(db *gorm.DB, retentionDays int, log *logger
 // (invalidated_at).
 func (j *DismissedRetentionCleanupJob) Run(ctx context.Context) (int64, error) {
 	// Go-computed cutoff (portable across Postgres + SQLite; also retires the
-	// old pgx INTERVAL-encoding workaround). Reaps rows retired either by the
-	// user (dismissed_at) or by the relevance invalidation job (invalidated_at).
+	// old pgx INTERVAL-encoding workaround). Reaps rows retired by the user
+	// (dismissed_at / deleted_at) or by the relevance invalidation job
+	// (invalidated_at).
 	cutoff := time.Now().UTC().AddDate(0, 0, -j.retentionDays)
 	const q = `
 		DELETE FROM user_notifications
 		WHERE (dismissed_at   IS NOT NULL AND dismissed_at   < ?)
 		   OR (invalidated_at IS NOT NULL AND invalidated_at < ?)
+		   OR (deleted_at      IS NOT NULL AND deleted_at      < ?)
 	`
-	res := j.db.WithContext(ctx).Exec(q, cutoff, cutoff)
+	res := j.db.WithContext(ctx).Exec(q, cutoff, cutoff, cutoff)
 	if res.Error != nil {
 		return 0, apperrors.Wrap(res.Error, apperrors.CodeInternal, "retention cleanup delete")
 	}

@@ -54,6 +54,7 @@ func testDB(t *testing.T) *gorm.DB {
 			read_at DATETIME,
 			dismissed_at DATETIME,
 			invalidated_at DATETIME,
+			deleted_at DATETIME,
 			clicked_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME

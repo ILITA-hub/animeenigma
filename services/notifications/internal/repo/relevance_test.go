@@ -32,12 +32,16 @@ func relevanceTestDB(t *testing.T) *gorm.DB {
 			read_at DATETIME,
 			dismissed_at DATETIME,
 			invalidated_at DATETIME,
+			deleted_at DATETIME,
 			clicked_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME
 		)`,
+		// Mirrors the production partial predicate (see repo.EnsureIndexes) so
+		// the Upsert ON CONFLICT ... WHERE dismissed_at IS NULL AND deleted_at
+		// IS NULL conflict target matches (revival + delete-dedupe tests).
 		`CREATE UNIQUE INDEX uk_user_dedupe ON user_notifications (user_id, dedupe_key)
-		 WHERE dismissed_at IS NULL`,
+		 WHERE dismissed_at IS NULL AND deleted_at IS NULL`,
 		`CREATE TABLE anime_list (
 			user_id TEXT, anime_id TEXT, status TEXT,
 			PRIMARY KEY (user_id, anime_id)
@@ -315,6 +319,89 @@ func Test_List_History_ExcludesInvalidated(t *testing.T) {
 	}
 	if len(rows) != 0 || total != 0 {
 		t.Fatalf("want invalidated hidden from history, got %d rows / total %d", len(rows), total)
+	}
+}
+
+// Test_List_Deleted_Hidden: a user-deleted row (bin from the history modal)
+// disappears from EVERY surface — unread, all, and history — and drops out of
+// the unread count, even though it would otherwise be active + relevant.
+func Test_List_Deleted_Hidden(t *testing.T) {
+	db := relevanceTestDB(t)
+	r := NewNotificationRepository(db)
+
+	seedList(t, db, "u1", "anime-1", "watching")
+	seedWatch(t, db, "u1", "anime-1", "kodik", 5) // watched 5, latest 7 -> would show
+	id := seedNotif(t, db, "u1", "anime-1", 7)
+
+	// User bins it from the All-notifications modal.
+	if err := r.Delete(context.Background(), "u1", id); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	for _, st := range []ListStatus{ListUnread, ListAll, ListHistory} {
+		rows, unread, total, err := r.List(context.Background(), "u1", st, 20, 0)
+		if err != nil {
+			t.Fatalf("List(%s): %v", st, err)
+		}
+		if len(rows) != 0 || total != 0 || unread != 0 {
+			t.Fatalf("%s: deleted row must be hidden (0,0,0), got (%d,%d,%d)",
+				st, len(rows), unread, total)
+		}
+	}
+
+	n, err := r.UnreadCount(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("UnreadCount: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("UnreadCount must exclude deleted row, got %d", n)
+	}
+}
+
+// Test_Delete_FreesDedupeForFreshInsert: like a dismissed row, a deleted row
+// sits OUTSIDE the partial uk_user_dedupe index, so a later Upsert for the
+// same dedupe_key inserts a FRESH notification (new id) rather than reviving
+// the binned one.
+func Test_Delete_FreesDedupeForFreshInsert(t *testing.T) {
+	db := relevanceTestDB(t)
+	r := NewNotificationRepository(db)
+
+	userID := "u1"
+	dedupe := "new_episode:anime-1:kodik:ru:sub:1"
+	p7 := []byte(`{"anime_id":"anime-1","anime_title":"X","first_unwatched_episode":1,` +
+		`"latest_available_episode":7,"player":"kodik","language":"ru",` +
+		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`)
+
+	first, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p7)
+	if err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if err := r.Delete(context.Background(), userID, first.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Re-fire with ep8 (same dedupe) -> must be a FRESH INSERT, not a revival.
+	p8 := []byte(`{"anime_id":"anime-1","anime_title":"X","first_unwatched_episode":8,` +
+		`"latest_available_episode":8,"player":"kodik","language":"ru",` +
+		`"watch_type":"sub","translation_id":"1","watch_url":"/x"}`)
+	out, err := r.Upsert(context.Background(), userID, "new_episode", dedupe, p8)
+	if err != nil {
+		t.Fatalf("re-upsert after delete: %v", err)
+	}
+	if out.ID == first.ID {
+		t.Fatalf("expected a fresh row, but Upsert revived the deleted one (id %s)", out.ID)
+	}
+	if out.DeletedAt != nil {
+		t.Fatalf("fresh row must not be deleted, got deleted_at=%v", out.DeletedAt)
+	}
+	// Two rows total: the deleted tombstone + the fresh active one.
+	var count int64
+	if err := db.Raw(`SELECT COUNT(*) FROM user_notifications WHERE user_id=? AND dedupe_key=?`,
+		userID, dedupe).Scan(&count).Error; err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 rows (tombstone + fresh) after delete+reinsert, got %d", count)
 	}
 }
 

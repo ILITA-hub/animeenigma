@@ -53,16 +53,22 @@
  * Mounted once in App.vue (next to NotificationToast) so it survives both
  * trigger surfaces: the desktop bell dropdown and the mobile-drawer Modal.
  */
-import { ref, watch } from 'vue'
+import { provide, ref, watch } from 'vue'
 import { useInfiniteScroll } from '@vueuse/core'
 
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import NotificationList from '@/components/NotificationList.vue'
+import { notificationSurfaceKey } from '@/components/notifications/surface'
 import { useNotificationsStore } from '@/stores/notifications'
 
 const store = useNotificationsStore()
+
+// Every card rendered inside this modal is on the "history" surface, so its
+// trailing action is the delete bin (not the dismiss ×) — see
+// NotificationRowActions. Ambient, so it need not thread through NotificationList.
+provide(notificationSurfaceKey, 'history')
 
 const listRef = ref<HTMLElement | null>(null)
 

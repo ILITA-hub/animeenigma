@@ -2044,7 +2044,8 @@
       "title": "All notifications",
       "end": "That's everything — you're all caught up.",
       "error": "Couldn't load more notifications.",
-      "dismissed": "Dismissed"
+      "dismissed": "Dismissed",
+      "deleteAria": "Delete"
     },
     "newEpisode": {
       "singleEp": "Episode {n} is out",

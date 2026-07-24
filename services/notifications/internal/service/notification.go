@@ -109,6 +109,11 @@ func (s *NotificationService) Dismiss(ctx context.Context, userID, id string) er
 	return s.repo.Dismiss(ctx, userID, id)
 }
 
+// Delete delegates (bin from the history modal — soft-remove everywhere).
+func (s *NotificationService) Delete(ctx context.Context, userID, id string) error {
+	return s.repo.Delete(ctx, userID, id)
+}
+
 // Click delegates.
 func (s *NotificationService) Click(ctx context.Context, userID, id string) error {
 	return s.repo.Click(ctx, userID, id)

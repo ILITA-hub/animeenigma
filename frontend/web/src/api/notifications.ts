@@ -6,6 +6,7 @@
  *   POST   /api/notifications/{id}/read
  *   POST   /api/notifications/mark-all-read
  *   POST   /api/notifications/{id}/dismiss
+ *   POST   /api/notifications/{id}/delete
  *   POST   /api/notifications/{id}/click
  *
  * The notifications service uses `libs/httputil.JSON` for all responses,
@@ -74,6 +75,15 @@ export async function markAllRead(): Promise<number> {
 /** POST /api/notifications/{id}/dismiss */
 export async function dismiss(id: string): Promise<void> {
   await apiClient.post(`/notifications/${encodeURIComponent(id)}/dismiss`)
+}
+
+/**
+ * POST /api/notifications/{id}/delete — the "bin" action in the
+ * All-notifications history modal. Soft-removes the row from EVERY surface
+ * (unread, all, history); distinct from dismiss, which keeps it in history.
+ */
+export async function deleteNotification(id: string): Promise<void> {
+  await apiClient.post(`/notifications/${encodeURIComponent(id)}/delete`)
 }
 
 /**

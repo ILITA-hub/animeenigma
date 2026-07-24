@@ -24,7 +24,7 @@
       </div>
     </button>
 
-    <NotificationDismissButton :notification="notification" />
+    <NotificationRowActions :notification="notification" />
   </div>
 </template>
 
@@ -34,14 +34,14 @@
  * `feedback_created` / `feedback_in_progress` / `feedback_ai_done`.
  * One component for all three — the stage drives icon, accent color and
  * i18n strings. Click marks read (no navigation: there is no user-facing
- * report page). Dismiss × mirrors NewEpisodeCard.
+ * report page). Trailing action (dismiss × / delete bin) mirrors NewEpisodeCard.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Bot, CheckCheck, MessageSquarePlus, type LucideIcon } from 'lucide-vue-next'
 
-import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
+import NotificationRowActions from '@/components/notifications/NotificationRowActions.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification, FeedbackStatusPayload } from '@/types/notification'

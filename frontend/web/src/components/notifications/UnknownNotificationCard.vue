@@ -10,7 +10,7 @@
       <p class="text-white/70 text-sm">{{ $t('notifications.unknown.title') }}</p>
       <p class="text-white/40 text-[10px] mt-1">{{ relativeTime }}</p>
     </div>
-    <NotificationDismissButton :notification="notification" />
+    <NotificationRowActions :notification="notification" />
   </div>
 </template>
 
@@ -31,7 +31,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Info } from 'lucide-vue-next'
 
-import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
+import NotificationRowActions from '@/components/notifications/NotificationRowActions.vue'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification } from '@/types/notification'
 

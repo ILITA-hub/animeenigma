@@ -2044,7 +2044,8 @@
       "title": "すべての通知",
       "end": "以上です — すべての通知を確認しました。",
       "error": "通知を読み込めませんでした。",
-      "dismissed": "非表示にした通知"
+      "dismissed": "非表示にした通知",
+      "deleteAria": "削除"
     },
     "newEpisode": {
       "singleEp": "第 {n} 話が公開されました",

@@ -757,6 +757,7 @@ func NewRouterWithCleanup(
 				r.Post("/mark-all-read", proxyHandler.ProxyToNotifications)
 				r.Post("/{id}/read", proxyHandler.ProxyToNotifications)
 				r.Post("/{id}/dismiss", proxyHandler.ProxyToNotifications)
+				r.Post("/{id}/delete", proxyHandler.ProxyToNotifications)
 				r.Post("/{id}/click", proxyHandler.ProxyToNotifications)
 			})
 		})

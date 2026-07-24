@@ -26,6 +26,7 @@ import {
   markRead as apiMarkRead,
   markAllRead as apiMarkAllRead,
   dismiss as apiDismiss,
+  deleteNotification as apiDelete,
   click as apiClick,
 } from '@/api/notifications'
 import type { UserNotification, NewEpisodePayload } from '@/types/notification'
@@ -422,6 +423,56 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   /**
+   * Optimistic delete ("bin" in the history modal): remove the row from BOTH
+   * cached lists, shrink the history total (deleted rows leave the history
+   * scope server-side, unlike dismissed rows), and drop the badge if the row
+   * was still counting toward it. Rollback on error.
+   */
+  async function deleteNotification(id: string): Promise<void> {
+    const { idx, histIdx, priorMain, priorHist } = locate(id)
+    const prior = priorMain ?? priorHist
+    if (!prior) return
+    if (prior.deleted_at) return // already deleted — no-op
+    // A row feeds the badge only while unread AND not dismissed; deleting one
+    // in that state must drop the count, deleting any other must not.
+    const wasCountingUnread = !prior.read_at && !prior.dismissed_at
+
+    if (priorMain) {
+      notifications.value = notifications.value.filter((n) => n.id !== id)
+    }
+    if (priorHist) {
+      historyItems.value = historyItems.value.filter((n) => n.id !== id)
+      historyTotal.value = Math.max(0, historyTotal.value - 1)
+    }
+    if (wasCountingUnread) {
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    }
+
+    try {
+      await apiDelete(id)
+    } catch (err) {
+      // Rollback — splice both rows back at their original positions so order
+      // (and the history offset denominator) is preserved.
+      if (priorMain) {
+        const next = [...notifications.value]
+        next.splice(idx, 0, priorMain)
+        notifications.value = next
+      }
+      if (priorHist) {
+        const next = [...historyItems.value]
+        next.splice(histIdx, 0, priorHist)
+        historyItems.value = next
+        historyTotal.value = historyTotal.value + 1
+      }
+      if (wasCountingUnread) {
+        unreadCount.value = unreadCount.value + 1
+      }
+      error.value = err instanceof Error ? err.message : String(err)
+      throw err
+    }
+  }
+
+  /**
    * Optimistic mark-all-read: zero badge + stamp read_at on every cached
    * row. Rollback on error.
    */
@@ -604,6 +655,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     fetchNotifications,
     markRead,
     dismiss: dismissNotification,
+    delete: deleteNotification,
     markAllRead,
     handleClick,
     start,

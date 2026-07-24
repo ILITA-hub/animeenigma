@@ -65,9 +65,12 @@ export interface FeedbackStatusPayload {
 /**
  * UserNotification — per-user notification row.
  *
- * `read_at` / `dismissed_at` / `clicked_at` are nullable timestamps acting
- * as both state flags and lightweight telemetry. The bell badge counts
- * rows where `read_at === null && dismissed_at === null`.
+ * `read_at` / `dismissed_at` / `deleted_at` / `clicked_at` are nullable
+ * timestamps acting as both state flags and lightweight telemetry. The bell
+ * badge counts rows where `read_at === null && dismissed_at === null`.
+ * `dismissed_at` ("cleared from the bell, still shown in history") is distinct
+ * from `deleted_at` ("binned from the All-notifications modal — gone from
+ * history too").
  *
  * `payload` is typed `unknown` here because the engine carries every type
  * in the same table; downstream renderers cast to the concrete payload
@@ -81,6 +84,7 @@ export interface UserNotification {
   payload: unknown
   read_at: string | null
   dismissed_at: string | null
+  deleted_at: string | null
   clicked_at: string | null
   created_at: string
   updated_at: string

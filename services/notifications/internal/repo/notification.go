@@ -80,11 +80,14 @@ func (r *NotificationRepository) List(
 		offset = 0
 	}
 
-	// Shared prefix: this user's non-invalidated rows. The user_id scoping
-	// lives here once — every derived query below inherits it.
+	// Shared prefix: this user's non-invalidated, non-deleted rows. The
+	// user_id scoping lives here once — every derived query below inherits it.
+	// deleted_at filters out rows the user binned from the history modal, so
+	// they vanish from EVERY surface (unread, all, history) — unlike dismissed
+	// rows, which history deliberately keeps.
 	scope := r.db.WithContext(ctx).
 		Model(&domain.UserNotification{}).
-		Where("user_id = ? AND invalidated_at IS NULL", userID)
+		Where("user_id = ? AND invalidated_at IS NULL AND deleted_at IS NULL", userID)
 
 	// Active set: not dismissed, filtered to still-relevant new_episode
 	// rows (other types pass through).
@@ -165,7 +168,7 @@ func (r *NotificationRepository) UnreadCount(
 	var n int64
 	if err := r.db.WithContext(ctx).
 		Model(&domain.UserNotification{}).
-		Where("user_id = ? AND read_at IS NULL AND dismissed_at IS NULL AND invalidated_at IS NULL", userID).
+		Where("user_id = ? AND read_at IS NULL AND dismissed_at IS NULL AND invalidated_at IS NULL AND deleted_at IS NULL", userID).
 		Where(relevanceReadClause()).
 		Count(&n).Error; err != nil {
 		return 0, apperrors.Wrap(err, apperrors.CodeInternal, "count unread notifications")
@@ -241,6 +244,34 @@ func (r *NotificationRepository) Dismiss(
 	return nil
 }
 
+// Delete soft-removes a notification from EVERY user-facing surface by
+// stamping deleted_at — the "bin" action in the All-notifications history
+// modal. Distinct from Dismiss (dismissed rows stay visible in history);
+// deleted rows are gone from unread, all, AND history, and are reaped by the
+// retention cleanup job. Like a dismissed row, a deleted one no longer sits in
+// the partial uk_user_dedupe index, so a future Upsert with the same
+// dedupe_key is free to insert a fresh notification.
+func (r *NotificationRepository) Delete(
+	ctx context.Context,
+	userID, id string,
+) error {
+	res := r.db.WithContext(ctx).
+		Model(&domain.UserNotification{}).
+		Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).
+		Update("deleted_at", time.Now())
+	if res.Error != nil {
+		return apperrors.Wrap(res.Error, apperrors.CodeInternal, "delete notification")
+	}
+	if res.RowsAffected == 0 {
+		// Same disambiguation pattern as MarkRead/Dismiss — distinguishes
+		// truly missing rows from already-deleted ones (success no-op).
+		if _, err := r.Get(ctx, userID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Click sets clicked_at to NOW the first time a notification is clicked.
 // Subsequent clicks are no-ops (the WHERE clause filters them out).
 func (r *NotificationRepository) Click(
@@ -289,7 +320,8 @@ func (r *NotificationRepository) InvalidateUnreadByDedupeKeys(
 
 // Upsert is the producer path: insert a fresh notification, or update the
 // existing active one for the same (user_id, dedupe_key). Matches the
-// partial uk_user_dedupe index — dismissed rows do not block a new insert.
+// partial uk_user_dedupe index — dismissed OR deleted rows do not block a new
+// insert (both sit outside the index).
 //
 // On UPDATE the payload is replaced AND read_at is cleared so the user
 // sees a fresh unread notification when the underlying state changes
@@ -313,9 +345,10 @@ func (r *NotificationRepository) Upsert(
 		UpdatedAt: now,
 	}
 
-	// ON CONFLICT (user_id, dedupe_key) WHERE dismissed_at IS NULL DO UPDATE
-	// matches the partial uk_user_dedupe index. Postgres needs
-	// `TargetWhere` so the conflict resolver picks the same index.
+	// ON CONFLICT (user_id, dedupe_key) WHERE dismissed_at IS NULL AND
+	// deleted_at IS NULL DO UPDATE matches the partial uk_user_dedupe index.
+	// Postgres needs `TargetWhere` so the conflict resolver picks the same
+	// index (the two exprs AND together).
 	res := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "user_id"},
@@ -324,6 +357,7 @@ func (r *NotificationRepository) Upsert(
 		TargetWhere: clause.Where{
 			Exprs: []clause.Expression{
 				gorm.Expr("dismissed_at IS NULL"),
+				gorm.Expr("deleted_at IS NULL"),
 			},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
@@ -344,7 +378,7 @@ func (r *NotificationRepository) Upsert(
 	// updates across all driver versions).
 	var out domain.UserNotification
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND dedupe_key = ? AND dismissed_at IS NULL",
+		Where("user_id = ? AND dedupe_key = ? AND dismissed_at IS NULL AND deleted_at IS NULL",
 			userID, dedupeKey).
 		First(&out).Error; err != nil {
 		return nil, apperrors.Wrap(err, apperrors.CodeInternal, "fetch upserted notification")

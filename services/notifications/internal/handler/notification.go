@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// NotificationHandler serves the 6 public CRUD endpoints under
+// NotificationHandler serves the 7 public CRUD endpoints under
 // /api/notifications. All handlers extract user_id from JWT claims via
 // authz.UserIDFromContext — NOT from any X-User-ID header (D-03).
 type NotificationHandler struct {
@@ -144,6 +144,28 @@ func (h *NotificationHandler) Dismiss(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Dismiss(r.Context(), userID, id); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]string{"status": "ok"})
+}
+
+// Delete handles POST /api/notifications/{id}/delete — the "bin" action in
+// the All-notifications history modal. Unlike Dismiss, a deleted notification
+// disappears from every surface (unread, all, history).
+func (h *NotificationHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := authz.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Unauthorized(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		httputil.BadRequest(w, "missing notification id")
+		return
+	}
+
+	if err := h.svc.Delete(r.Context(), userID, id); err != nil {
 		httputil.Error(w, err)
 		return
 	}

@@ -40,14 +40,17 @@ const (
 //
 // Schema notes (design doc §Data Model):
 //   - payload is JSONB so the same table can carry every NotificationType.
-//   - read_at / dismissed_at / clicked_at are nullable timestamps acting as
-//     state flags AND telemetry.
+//   - read_at / dismissed_at / deleted_at / clicked_at are nullable timestamps
+//     acting as state flags AND telemetry. dismissed_at ("cleared from the
+//     bell, still visible in history") is distinct from deleted_at ("removed
+//     from history too — the user hit the bin in the All-notifications modal").
 //   - The two partial indexes GORM cannot express are created by
 //     repo.EnsureIndexes after AutoMigrate:
 //   - uk_user_dedupe UNIQUE (user_id, dedupe_key) WHERE dismissed_at IS NULL
-//     (lets a fresh new_episode re-fire after the user dismisses the previous)
+//     AND deleted_at IS NULL (lets a fresh new_episode re-fire after the user
+//     dismisses OR deletes the previous)
 //   - idx_user_unread (user_id, created_at DESC) WHERE dismissed_at IS NULL
-//     (powers the bell/dropdown query path)
+//     AND invalidated_at IS NULL AND deleted_at IS NULL (bell/dropdown path)
 type UserNotification struct {
 	ID            string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID        string         `gorm:"type:uuid;not null;index" json:"user_id"`
@@ -57,9 +60,14 @@ type UserNotification struct {
 	ReadAt        *time.Time     `json:"read_at"`
 	DismissedAt   *time.Time     `gorm:"index" json:"dismissed_at"`
 	InvalidatedAt *time.Time     `gorm:"index" json:"invalidated_at"`
-	ClickedAt     *time.Time     `json:"clicked_at"`
-	CreatedAt     time.Time      `gorm:"index" json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	// DeletedAt is a plain lifecycle stamp (NOT gorm.DeletedAt — this service
+	// manages every visibility filter explicitly, like dismissed_at, and must
+	// never let GORM auto-scope Upsert/Get/cleanup). Set when the user deletes
+	// a notification from the history modal; excluded from every list surface.
+	DeletedAt *time.Time `gorm:"index" json:"deleted_at"`
+	ClickedAt *time.Time `json:"clicked_at"`
+	CreatedAt time.Time  `gorm:"index" json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // TableName pins the table name so it does not depend on GORM's pluralization

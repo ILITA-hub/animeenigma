@@ -6,6 +6,7 @@ import {
   markRead as apiMarkRead,
   markAllRead as apiMarkAllRead,
   dismiss as apiDismiss,
+  deleteNotification as apiDelete,
 } from '@/api/notifications'
 import { useNotificationsStore, translateWatchUrl } from './notifications'
 import type { UserNotification } from '@/types/notification'
@@ -15,6 +16,7 @@ vi.mock('@/api/notifications', () => ({
   markRead: vi.fn(),
   markAllRead: vi.fn(),
   dismiss: vi.fn(),
+  deleteNotification: vi.fn(),
   click: vi.fn(),
 }))
 
@@ -113,6 +115,7 @@ describe('notifications store — history pagination', () => {
     vi.mocked(apiMarkRead).mockReset().mockResolvedValue(undefined)
     vi.mocked(apiMarkAllRead).mockReset().mockResolvedValue(0)
     vi.mocked(apiDismiss).mockReset().mockResolvedValue(undefined)
+    vi.mocked(apiDelete).mockReset().mockResolvedValue(undefined)
   })
 
   it('openHistory loads the first page from offset 0', async () => {
@@ -266,6 +269,65 @@ describe('notifications store — history pagination', () => {
     expect(store.historyItems[1].read_at).not.toBeNull()
     expect(store.historyItems[2].read_at).toBeNull() // dismissed left untouched
     expect(store.unreadCount).toBe(0)
+  })
+
+  it('delete removes the row from both lists, shrinks history total, drops the badge', async () => {
+    const store = useNotificationsStore()
+    store.notifications = [notif('a')]
+    store.historyItems = [notif('a'), notif('b')]
+    store.historyTotal = 2
+    store.unreadCount = 1
+
+    await store.delete('a')
+
+    expect(apiDelete).toHaveBeenCalledWith('a')
+    expect(store.notifications).toEqual([])
+    expect(store.historyItems.map((n) => n.id)).toEqual(['b'])
+    expect(store.historyTotal).toBe(1) // deleted rows leave the history scope
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('delete of a dismissed history row never touches the badge', async () => {
+    const dismissed = { ...notif('a'), dismissed_at: new Date().toISOString() }
+    const store = useNotificationsStore()
+    store.historyItems = [dismissed, notif('b')]
+    store.historyTotal = 2
+    store.unreadCount = 3
+
+    await store.delete('a')
+
+    expect(store.historyItems.map((n) => n.id)).toEqual(['b'])
+    expect(store.historyTotal).toBe(1)
+    expect(store.unreadCount).toBe(3) // dismissed row wasn't counting
+  })
+
+  it('delete rolls back both lists, total, and badge on API failure', async () => {
+    vi.mocked(apiDelete).mockRejectedValueOnce(new Error('boom'))
+    const store = useNotificationsStore()
+    store.notifications = [notif('a')]
+    store.historyItems = [notif('a'), notif('b')]
+    store.historyTotal = 2
+    store.unreadCount = 1
+
+    await expect(store.delete('a')).rejects.toThrow('boom')
+
+    expect(store.notifications.map((n) => n.id)).toEqual(['a'])
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
+    expect(store.historyTotal).toBe(2)
+    expect(store.unreadCount).toBe(1)
+  })
+
+  it('delete is a no-op on an already-deleted row', async () => {
+    const deleted = { ...notif('a'), deleted_at: new Date().toISOString() }
+    const store = useNotificationsStore()
+    store.historyItems = [deleted]
+    store.unreadCount = 2
+
+    await store.delete('a')
+
+    expect(apiDelete).not.toHaveBeenCalled()
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a'])
+    expect(store.unreadCount).toBe(2)
   })
 
   it('stop() clears history state and closes the modal', async () => {

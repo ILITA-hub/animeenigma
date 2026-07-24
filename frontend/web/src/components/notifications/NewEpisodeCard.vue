@@ -30,7 +30,7 @@
       </div>
     </button>
 
-    <NotificationDismissButton :notification="notification" />
+    <NotificationRowActions :notification="notification" />
   </div>
 </template>
 
@@ -38,8 +38,9 @@
 /**
  * Renderer for type === 'new_episode'. Layout: 52×72 poster, title,
  * "Episode N is out" or "Episodes N–M are out", source line, relative
- * timestamp, dismiss ×. Click anywhere except the × routes to the
- * /click handler + navigates to the watch URL.
+ * timestamp, trailing action (dismiss × in the dropdown, delete bin in the
+ * history modal). Click anywhere except that action routes to the /click
+ * handler + navigates to the watch URL.
  *
  * Phase 3 — workstream: notifications.
  */
@@ -48,7 +49,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 import PosterImage from '@/components/anime/PosterImage.vue'
-import NotificationDismissButton from '@/components/notifications/NotificationDismissButton.vue'
+import NotificationRowActions from '@/components/notifications/NotificationRowActions.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatRelativeTime, type SupportedLocale } from '@/lib/relativeTime'
 import type { UserNotification, NewEpisodePayload } from '@/types/notification'

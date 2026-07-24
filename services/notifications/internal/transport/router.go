@@ -25,6 +25,7 @@ import (
 //	POST   /api/notifications/mark-all-read(JWT)
 //	POST   /api/notifications/{id}/read    (JWT)
 //	POST   /api/notifications/{id}/dismiss (JWT)
+//	POST   /api/notifications/{id}/delete  (JWT)
 //	POST   /api/notifications/{id}/click   (JWT)
 //
 // Literal sub-paths (`mark-all-read`, `unread-count`) are registered BEFORE
@@ -91,6 +92,7 @@ func NewRouter(
 		// Param routes.
 		r.Post("/{id}/read", notifHandler.MarkRead)
 		r.Post("/{id}/dismiss", notifHandler.Dismiss)
+		r.Post("/{id}/delete", notifHandler.Delete)
 		r.Post("/{id}/click", notifHandler.Click)
 	})
 
