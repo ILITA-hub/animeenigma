@@ -177,9 +177,11 @@
           </div>
 
           <!-- Gacha balance chip — visibility resolved at runtime via the
-               policy feed (useFeatureVisible / policy-service), not a build flag -->
+               policy feed (useFeatureVisible / policy-service), not a build flag.
+               Balance is per-account, so it's also gated on auth: logged-out
+               users must not see a stale/zero balance. -->
           <router-link
-            v-if="gachaVisible"
+            v-if="gachaVisible && authStore.isAuthenticated"
             to="/gacha"
             class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-400/10 hover:bg-orange-400/20 transition-colors"
             :aria-label="$t('gacha.balance_chip_aria', { n: gachaBalance })"
@@ -297,7 +299,10 @@
             >
               <Gem class="size-4 text-orange-400" aria-hidden="true" />
               {{ $t('gacha.nav_item') }}
-              <span class="ml-auto text-orange-300 text-sm font-medium tabular-nums">{{ gachaBalance }}</span>
+              <span
+                v-if="authStore.isAuthenticated"
+                class="ml-auto text-orange-300 text-sm font-medium tabular-nums"
+              >{{ gachaBalance }}</span>
             </router-link>
 
             <!-- Divider -->
