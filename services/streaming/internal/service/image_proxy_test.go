@@ -198,7 +198,7 @@ func TestResizeOrShedUnderCriticalDegradation(t *testing.T) {
 // typed-nil *cache.DegradationWatcher (governor undeployed) reads level 0 via
 // its nil-receiver-safe Level(), so the proxy resizes normally.
 func TestNewImageProxyServiceNilWatcherFailOpen(t *testing.T) {
-	svc := NewImageProxyService(nil, (*cache.DegradationWatcher)(nil), logger.Default())
+	svc := NewImageProxyService(nil, (*cache.DegradationWatcher)(nil), logger.Default(), "http://gacha:8093")
 	src := encodeTestImage(t, 700, 1050, false)
 	full := &ImageResult{Data: src, ContentType: "image/jpeg", Source: SourceShikimori}
 

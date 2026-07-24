@@ -45,6 +45,14 @@ var (
 
 	shikimoriAnimeIDRe = regexp.MustCompile(`/uploads/poster/animes/(\d+)/`)
 
+	// gachaImagePattern matches the relative gacha art URLs the frontend sends
+	// for resizing. Mirrors the key validation in
+	// services/gacha/internal/handler/images.go's validKeyPattern. This is the
+	// ONLY gate for relative URLs in GetImage — it anchors ^...$, allows only
+	// the cards/ and banners/ prefixes, and restricts keys to
+	// [A-Za-z0-9._-]+ (no `/`, so no path traversal is expressible).
+	gachaImagePattern = regexp.MustCompile(`^/api/gacha/images/((?:cards|banners)/[A-Za-z0-9._-]+)$`)
+
 	// Allowed resize widths — a fixed bucket set bounds MinIO cache
 	// fragmentation to at most len(allowedWidths) variants per poster.
 	// Mirrored in frontend/web/src/composables/useImageProxy.ts.
@@ -81,15 +89,16 @@ type degradationLevelReader interface {
 }
 
 type ImageProxyService struct {
-	storage     *videoutils.Storage
-	httpClient  *http.Client
-	sfGroup     singleflight.Group
-	semaphore   chan struct{}
-	degradation degradationLevelReader
-	log         *logger.Logger
+	storage      *videoutils.Storage
+	httpClient   *http.Client
+	sfGroup      singleflight.Group
+	semaphore    chan struct{}
+	degradation  degradationLevelReader
+	log          *logger.Logger
+	gachaBaseURL string
 }
 
-func NewImageProxyService(storage *videoutils.Storage, degradation degradationLevelReader, log *logger.Logger) *ImageProxyService {
+func NewImageProxyService(storage *videoutils.Storage, degradation degradationLevelReader, log *logger.Logger, gachaBaseURL string) *ImageProxyService {
 	return &ImageProxyService{
 		storage: storage,
 		httpClient: &http.Client{
@@ -123,10 +132,22 @@ func NewImageProxyService(storage *videoutils.Storage, degradation degradationLe
 				return nil
 			},
 		},
-		semaphore:   make(chan struct{}, maxConcurrent),
-		degradation: degradation,
-		log:         log,
+		semaphore:    make(chan struct{}, maxConcurrent),
+		degradation:  degradation,
+		log:          log,
+		gachaBaseURL: gachaBaseURL,
 	}
+}
+
+// rewriteGachaURL maps a relative gacha image URL onto the internal gacha
+// service base. SSRF-safe: fixed base (from config only) + strict key regex
+// (no traversal chars) — the regex is the sole gate for relative URLs.
+func (s *ImageProxyService) rewriteGachaURL(rawURL string) (string, bool) {
+	m := gachaImagePattern.FindStringSubmatch(rawURL)
+	if m == nil {
+		return "", false
+	}
+	return s.gachaBaseURL + "/api/gacha/images/" + m[1], true
 }
 
 // GetImage returns the proxied image. width <= 0 serves the upstream
@@ -138,7 +159,9 @@ func (s *ImageProxyService) GetImage(ctx context.Context, rawURL string, width i
 		return s.placeholderResult(), nil
 	}
 
-	if !s.isDomainAllowed(rawURL) {
+	if rewritten, ok := s.rewriteGachaURL(rawURL); ok {
+		rawURL = rewritten
+	} else if !s.isDomainAllowed(rawURL) {
 		return nil, fmt.Errorf("domain not allowed")
 	}
 

@@ -25,6 +25,11 @@ type Config struct {
 	JWT       authz.JWTConfig
 	Stream    StreamConfig
 	Providers ProvidersConfig
+	// GachaInternalURL is the Docker-network base for the gacha service
+	// (services/gacha, port 8093), used by the image proxy to resolve
+	// relative /api/gacha/images/{cards,banners}/<key> URLs the frontend
+	// sends for card/banner art resizing.
+	GachaInternalURL string
 }
 
 // ProvidersConfig holds configuration for external video providers
@@ -142,6 +147,7 @@ func Load() (*Config, error) {
 				BaseURL: getEnv("ANIBOOM_BASE_URL", ""),
 			},
 		},
+		GachaInternalURL: getEnv("GACHA_INTERNAL_URL", "http://gacha:8093"),
 	}, nil
 }
 

@@ -118,7 +118,7 @@ func main() {
 	uploadHandler := handler.NewUploadHandler(streamingService, log)
 
 	// Initialize image proxy
-	imageProxyService := service.NewImageProxyService(storage, imgDegWatcher, log)
+	imageProxyService := service.NewImageProxyService(storage, imgDegWatcher, log, cfg.GachaInternalURL)
 	imageProxyHandler := handler.NewImageProxyHandler(imageProxyService, log)
 
 	// Initialize metrics collector
