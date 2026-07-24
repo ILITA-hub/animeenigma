@@ -24,6 +24,9 @@ function mountModal(cards: BannerCardView[]) {
       stubs: {
         Modal: { props: ['modelValue', 'title'], template: '<div><slot /><slot name="footer" /></div>' },
         Button: { template: '<button><slot /></button>' },
+        // Auto-stub: the real viewer runs rAF/pointer machinery jsdom can't;
+        // props stay inspectable on the stub.
+        CardViewer3D: true,
       },
     },
   })
@@ -79,5 +82,37 @@ describe('DropsModal', () => {
     const w = mountModal([card('r1', 'R', true)])
     const heads = w.findAll('.tier-name').map((e) => e.text())
     expect(heads).toEqual(['R'])
+  })
+
+  // ── Inspect viewer ─────────────────────────────────────────────────────────
+
+  it('clicking a card opens the 3D viewer in inspect mode at that card', async () => {
+    const w = mountModal(pool)
+    const viewer = () => w.findComponent({ name: 'CardViewer3D' })
+    expect(viewer().props('active')).toBe(false)
+
+    // r1 is the 3rd card in display order (SSR→SR→R→N): index 2.
+    await w.findAll('.pcard')[2].trigger('click')
+    expect(viewer().props('active')).toBe(true)
+    expect(viewer().props('mode')).toBe('inspect')
+    expect(viewer().props('startIndex')).toBe(2)
+    const cards = viewer().props('cards') as { card: { id: string } }[]
+    expect(cards.map((p) => p.card.id)).toEqual(['ssr1', 'sr1', 'r1', 'n1', 'n2'])
+  })
+
+  it('unowned cards are inspectable too (art is already visible in the grid)', async () => {
+    const w = mountModal(pool)
+    await w.find('[data-testid="drops-card-unowned"]').trigger('click')
+    expect(w.findComponent({ name: 'CardViewer3D' }).props('active')).toBe(true)
+  })
+
+  it('viewer done closes inspect without closing the drops modal', async () => {
+    const w = mountModal(pool)
+    await w.findAll('.pcard')[0].trigger('click')
+    const viewer = w.findComponent({ name: 'CardViewer3D' })
+    viewer.vm.$emit('done')
+    await w.vm.$nextTick()
+    expect(viewer.props('active')).toBe(false)
+    expect(w.emitted('update:modelValue')).toBeUndefined()
   })
 })

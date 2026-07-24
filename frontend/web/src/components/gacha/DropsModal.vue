@@ -24,6 +24,11 @@
               :data-testid="card.owned ? 'drops-card-owned' : 'drops-card-unowned'"
               class="pcard"
               :class="{ unowned: !card.owned }"
+              role="button"
+              tabindex="0"
+              :aria-label="card.name"
+              @click="openInspect(card)"
+              @keydown.enter.space.prevent="openInspect(card)"
             >
               <div class="img">
                 <img :src="cardPosterUrl(cardImageUrl(card.image_path), 256)" :alt="card.name" />
@@ -50,14 +55,31 @@
       </div>
     </template>
   </Modal>
+
+  <!-- 3D inspect viewer — whole pool in display order (SSR→N); starts at the
+       clicked card. Teleports to body (z-95) above the Modal overlay (z-50). -->
+  <CardViewer3D
+    :active="inspectActive"
+    :cards="inspectCards"
+    :start-index="inspectStartIndex"
+    mode="inspect"
+    @done="inspectActive = false"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
-import { cardImageUrl, type BannerCardView, type Rarity } from '@/api/gacha'
+import CardViewer3D from './CardViewer3D.vue'
+import {
+  cardImageUrl,
+  type BannerCardView,
+  type GachaCard,
+  type PulledCard,
+  type Rarity,
+} from '@/api/gacha'
 import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{
@@ -89,6 +111,37 @@ const cardsByTier = computed(() => {
 
 const ownedCount = computed(() => props.cards.filter((c) => c.owned).length)
 const totalCount = computed(() => props.cards.length)
+
+// ── Inspect viewer state ─────────────────────────────────────────────────────
+const inspectActive = ref(false)
+const inspectStartIndex = ref(0)
+
+/** Whole pool in display order (SSR→N) as PulledCard[] for the 3D viewer. */
+const inspectCards = computed<PulledCard[]>(() =>
+  TIER_ORDER.flatMap((tier) => (cardsByTier.value[tier] ?? []).map(dropToPulled)),
+)
+
+/** BannerCardView is a flat projection — rebuild the GachaCard shape the viewer reads. */
+function dropToPulled(v: BannerCardView): PulledCard {
+  const card: GachaCard = {
+    id: v.id,
+    name: v.name,
+    source_title: '',
+    image_path: v.image_path,
+    back_path: v.back_path,
+    rarity: v.rarity,
+    enabled: true,
+    created_at: '',
+    updated_at: '',
+  }
+  return { card, new: false, count: 0 }
+}
+
+function openInspect(v: BannerCardView) {
+  const idx = inspectCards.value.findIndex((p) => p.card.id === v.id)
+  inspectStartIndex.value = idx >= 0 ? idx : 0
+  inspectActive.value = true
+}
 
 function tierRateLabel(tier: Rarity): string {
   let label = t('gacha.drops_rate_label', { rate: TIER_RATE[tier] })
@@ -135,6 +188,7 @@ function rarityTextClass(rarity: Rarity): string {
   overflow: hidden;
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
+  cursor: pointer;
 }
 .pcard .img {
   aspect-ratio: 3 / 4;
