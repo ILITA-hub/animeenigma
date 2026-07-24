@@ -70,7 +70,7 @@ describe('tryCertAutoLogin', () => {
     expect(result).toBe(true)
   })
 
-  it('(d) also unwraps an envelope-wrapped {data:{token}} response', async () => {
+  it('(d2) also unwraps an envelope-wrapped {data:{token}} response', async () => {
     fetchMock.mockResolvedValue({
       status: 200,
       ok: true,

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { apiClient } from '@/api/client'
 import i18n from '@/i18n'
+import { CERT_SUPPRESS_KEY, clearCertSuppressionFlags } from '@/composables/certLoginFlags'
 
 export interface User {
   id: string
@@ -233,15 +234,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Explicit logout suppresses cert auto-login in THIS browser until the next
-  // manual login (spec: logout must not bounce straight back in).
-  function clearCertSuppressionFlags() {
-    try {
-      localStorage.removeItem('ae_cert_suppress')
-      localStorage.removeItem('ae_cert_nolgn_until')
-    } catch { /* privacy modes */ }
-  }
-
   // Phase 7 D-03 — wipe localStorage of cached preference resolutions and
   // the prefs_version stamp. Called on login/logout so a different user's
   // (or anonymous) cached combos don't leak across auth boundaries.
@@ -266,6 +258,9 @@ export const useAuthStore = defineStore('auth', () => {
       const respData = response.data?.data || response.data
       setToken(respData.access_token)
       setUser(respData.user)
+      // Spec 2026-07-24 — a fresh registration clears any TLS-cert auto-login
+      // suppression/negative-cache left over from a previous session.
+      clearCertSuppressionFlags()
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
@@ -346,7 +341,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Spec 2026-07-24 — an explicit logout must not bounce straight back in
     // via a TLS-cert auto-login on the next nav; suppressed until manual login.
     try {
-      localStorage.setItem('ae_cert_suppress', '1')
+      localStorage.setItem(CERT_SUPPRESS_KEY, '1')
     } catch { /* privacy modes */ }
     // Clickstream reset (Plan 2) — drop user id + rotate anon id.
     import('@/analytics').then(({ analytics }) => analytics.reset()).catch(() => undefined)

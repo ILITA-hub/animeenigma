@@ -441,13 +441,13 @@ router.beforeEach(async (to, _from, next) => {
     // TLS-cert auto-login (spec 2026-07-24): probe the mTLS vhost before
     // showing the login page. On success the login page never renders.
     const { tryCertAutoLogin } = await import('@/composables/useCertAutoLogin')
-    if (await tryCertAutoLogin()) {
-      next()
+    if (!(await tryCertAutoLogin())) {
+      sessionStorage.setItem('returnUrl', to.fullPath)
+      next({ name: 'auth' })
       return
     }
-    sessionStorage.setItem('returnUrl', to.fullPath)
-    next({ name: 'auth' })
-    return
+    // Silent cert login succeeded — the user is now authenticated; fall through
+    // so requiresAdmin / feature-gate checks still apply to this navigation.
   }
 
   // Phase 14: requiresAdmin gate. Non-admin users are sent home.

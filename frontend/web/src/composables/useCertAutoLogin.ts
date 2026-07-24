@@ -1,9 +1,18 @@
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import i18n from '@/i18n'
+import {
+  CERT_SUPPRESS_KEY,
+  CERT_NEG_CACHE_KEY,
+  clearCertSuppressionFlags,
+} from '@/composables/certLoginFlags'
 
-export const CERT_SUPPRESS_KEY = 'ae_cert_suppress'
-export const CERT_NEG_CACHE_KEY = 'ae_cert_nolgn_until'
+// Re-exported for backward-compat with the spec's expected exports from
+// this module; canonical definitions live in the leaf `certLoginFlags`
+// module (shared with stores/auth.ts to avoid a duplicated/circular pair).
+export { CERT_SUPPRESS_KEY, CERT_NEG_CACHE_KEY }
+export const clearCertSuppression = clearCertSuppressionFlags
+
 const NEG_CACHE_MS = 24 * 60 * 60 * 1000
 const PROBE_TIMEOUT_MS = 2500
 
@@ -12,20 +21,6 @@ function lsGet(key: string): string | null {
 }
 function lsSet(key: string, val: string) {
   try { localStorage.setItem(key, val) } catch { /* privacy modes */ }
-}
-
-/**
- * Clears the logout-suppression flag and the 24h negative probe cache. The
- * store's `clearCertSuppressionFlags` (called from login/checkDeepLink/
- * passkeyLogin) covers the in-app manual-login paths; this export exists for
- * any other caller (and the spec) that needs to reset auto-login state
- * without going through the store.
- */
-export function clearCertSuppression() {
-  try {
-    localStorage.removeItem(CERT_SUPPRESS_KEY)
-    localStorage.removeItem(CERT_NEG_CACHE_KEY)
-  } catch { /* privacy modes */ }
 }
 
 /**
