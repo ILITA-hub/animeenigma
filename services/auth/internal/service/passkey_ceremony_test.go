@@ -54,16 +54,24 @@ func newSoftwareAuthenticator(t *testing.T, flags byte) *softwareAuthenticator {
 	return &softwareAuthenticator{priv: priv, credID: credID, flags: flags}
 }
 
+// cborEncMode returns the CTAP2 canonical CBOR encoder shared by the
+// attestation object and COSE key encodings below.
+func cborEncMode(t *testing.T) cbor.EncMode {
+	t.Helper()
+	em, err := cbor.CTAP2EncOptions().EncMode()
+	if err != nil {
+		t.Fatalf("cbor enc mode: %v", err)
+	}
+	return em
+}
+
 func (a *softwareAuthenticator) coseKey(t *testing.T) []byte {
 	t.Helper()
 	xb := make([]byte, 32)
 	yb := make([]byte, 32)
 	a.priv.X.FillBytes(xb)
 	a.priv.Y.FillBytes(yb)
-	em, err := cbor.CTAP2EncOptions().EncMode()
-	if err != nil {
-		t.Fatalf("cbor enc mode: %v", err)
-	}
+	em := cborEncMode(t)
 	out, err := em.Marshal(map[int]any{
 		1:  2,  // kty: EC2
 		3:  -7, // alg: ES256
@@ -134,10 +142,7 @@ func b64u(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 // attestationRequest builds the register/finish body for the given challenge.
 func (a *softwareAuthenticator) attestationRequest(t *testing.T, challenge string) *http.Request {
 	t.Helper()
-	em, err := cbor.CTAP2EncOptions().EncMode()
-	if err != nil {
-		t.Fatalf("cbor enc mode: %v", err)
-	}
+	em := cborEncMode(t)
 	attObj, err := em.Marshal(map[string]any{
 		"fmt":      "none",
 		"attStmt":  map[string]any{},
