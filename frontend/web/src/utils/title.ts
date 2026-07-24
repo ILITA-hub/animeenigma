@@ -1,3 +1,15 @@
+import { interfaceLocale } from '@/composables/useInterfaceLocale'
+
+// Reading `.value` inside a computed/render context registers reactivity
+// tracking, same as useTitleLang's `titleLang.value` pattern below. Reading
+// `localStorage` directly here (as this used to) is NOT tracked by Vue, so
+// switching the Navbar language mid-session updated every $t() string
+// instantly but left anime titles/genres frozen in the old language until a
+// full reload re-ran these functions fresh.
+function currentInterfaceLocale(): string {
+  return interfaceLocale.value || 'ru'
+}
+
 /**
  * Returns the localized anime title.
  *
@@ -15,8 +27,7 @@ export function getLocalizedTitle(
   nameJp?: string | null,
   override?: 'auto' | 'ru' | 'en' | 'ja' | null,
 ): string {
-  const locale =
-    override && override !== 'auto' ? override : localStorage.getItem('locale') || 'ru'
+  const locale = override && override !== 'auto' ? override : currentInterfaceLocale()
   switch (locale) {
     case 'en':
       return name || nameRu || nameJp || ''
@@ -34,7 +45,7 @@ export function getLocalizedGenre(
   name?: string | null,
   nameRu?: string | null,
 ): string {
-  const locale = localStorage.getItem('locale') || 'ru'
+  const locale = currentInterfaceLocale()
   if (locale === 'ru') return nameRu || name || ''
   return name || nameRu || ''
 }

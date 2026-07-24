@@ -1,5 +1,6 @@
 import { createI18n } from 'vue-i18n'
 import { watch } from 'vue'
+import { setInterfaceLocale } from '@/composables/useInterfaceLocale'
 
 // Bundle-size optimization (2026-06-11): only the default locale ships in the
 // entry bundle. en/ja (~130KB raw JSON) used to be statically imported here,
@@ -96,6 +97,7 @@ export async function setLocale(code: string): Promise<void> {
   }
   const localeRef = i18n.global.locale as unknown as { value: string }
   localeRef.value = code
+  setInterfaceLocale(code)
 }
 
 if (initialLocale !== 'ru') {
