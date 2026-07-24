@@ -31,6 +31,17 @@ type Config struct {
 	// Generate redirects to this base; Login consumes the token here.
 	// Trailing slash is stripped at load time.
 	MagicLinkTargetBase string
+
+	// WebAuthn configures the passkey (FIDO2/WebAuthn) relying party.
+	WebAuthn WebAuthnConfig
+}
+
+// WebAuthnConfig configures the passkey relying party identity. RPID is the
+// effective domain authenticators bind credentials to; RPOrigins are the
+// fully-qualified origins the browser ceremony is allowed to complete from.
+type WebAuthnConfig struct {
+	RPID      string
+	RPOrigins []string
 }
 
 type TelegramConfig struct {
@@ -98,6 +109,10 @@ func Load() (*Config, error) {
 		},
 		GuestTokenTTL:       getEnvDuration("AUTH_GUEST_TOKEN_TTL", 6*time.Hour),
 		MagicLinkTargetBase: strings.TrimRight(getEnv("MAGIC_LINK_TARGET_BASE", "https://animeenigma.org"), "/"),
+		WebAuthn: WebAuthnConfig{
+			RPID:      getEnv("WEBAUTHN_RP_ID", "animeenigma.org"),
+			RPOrigins: strings.Split(getEnv("WEBAUTHN_RP_ORIGINS", "https://animeenigma.org"), ","),
+		},
 	}, nil
 }
 
