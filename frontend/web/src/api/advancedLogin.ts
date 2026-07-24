@@ -31,6 +31,13 @@ export interface CertIssueResult {
   password: string
 }
 
+/** Platform CA identity — shown so users can verify the OS trust prompt. */
+export interface CAInfo {
+  subject: string
+  fingerprint_sha256: string
+  fingerprint_sha1: string
+}
+
 /** Unwrap a `{data: T}` envelope, tolerating a bare `T` payload. */
 export function unwrap<T>(res: { data?: unknown }): T {
   const body = res.data as { data?: unknown } | undefined
@@ -67,6 +74,11 @@ export const advancedLoginApi = {
   async listCerts(): Promise<Cert[]> {
     const res = await apiClient.get('/auth/certs')
     return unwrap<Cert[]>(res) ?? []
+  },
+
+  async caInfo(): Promise<CAInfo> {
+    const res = await apiClient.get('/auth/certs/ca')
+    return unwrap<CAInfo>(res)
   },
 
   async issueCert(name: string): Promise<CertIssueResult> {

@@ -17,6 +17,7 @@ const passkeySupported = isPasskeySupported()
 const {
   passkeys,
   certs,
+  caInfo,
   passkeysLoading,
   certsLoading,
   passkeyBusy,
@@ -39,6 +40,11 @@ const {
 const passkeyName = ref('')
 const certName = ref('')
 const passwordCopied = ref(false)
+
+/** AA:BB:… presentation of a hex fingerprint (matches OS trust dialogs). */
+function fmtFingerprint(hex: string): string {
+  return hex.toUpperCase().match(/.{2}/g)?.join(':') ?? hex
+}
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—'
@@ -191,6 +197,17 @@ async function copyPassword(): Promise<void> {
             <p>{{ t('profile.advancedLogin.cert.instructionsAndroid') }}</p>
             <p>{{ t('profile.advancedLogin.cert.instructionsLinux') }}</p>
             <p>{{ t('profile.advancedLogin.cert.instructionsFirefox') }}</p>
+            <div v-if="caInfo" class="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+              <p class="text-white/70">{{ t('profile.advancedLogin.cert.caFingerprintGuide') }}</p>
+              <p>
+                <span class="text-white/40">SHA-256:</span>
+                <code class="font-mono text-cyan-300 break-all select-all">{{ fmtFingerprint(caInfo.fingerprint_sha256) }}</code>
+              </p>
+              <p>
+                <span class="text-white/40">SHA-1:</span>
+                <code class="font-mono text-cyan-300 break-all select-all">{{ fmtFingerprint(caInfo.fingerprint_sha1) }}</code>
+              </p>
+            </div>
           </div>
         </details>
 

@@ -38,6 +38,12 @@ func (h *CertHandler) CAPem(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(h.certs.CAPEM())
 }
 
+// CAInfo returns the platform CA subject + fingerprints (settings-modal
+// display, so users can verify the OS trust prompt when importing the .p12).
+func (h *CertHandler) CAInfo(w http.ResponseWriter, r *http.Request) {
+	httputil.OK(w, h.certs.CAInfo())
+}
+
 type issueCertRequest struct {
 	Name string `json:"name"`
 }

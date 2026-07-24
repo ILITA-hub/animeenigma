@@ -56,7 +56,11 @@ type User struct {
 	ApiKeyHash         *string `gorm:"size:64;uniqueIndex" json:"-"`
 	// CertAutoLogin: when true, a valid client-cert handshake on the mTLS
 	// vhost silently logs this user in (spec 2026-07-24). Server-side SSoT.
-	CertAutoLogin bool           `gorm:"default:false" json:"cert_auto_login"`
+	// Default ON (owner decision 2026-07-24): issuing a cert means the user
+	// wants silent login; the toggle exists to opt OUT. GORM omits zero-value
+	// fields that carry a default tag on insert, so new rows get the DB
+	// default (true). Existing rows were backfilled to true via SQL.
+	CertAutoLogin bool           `gorm:"default:true" json:"cert_auto_login"`
 	Role          authz.Role     `gorm:"size:20;default:'user'" json:"role"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`

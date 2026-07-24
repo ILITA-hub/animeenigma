@@ -102,6 +102,7 @@ func NewRouter(
 			r.Delete("/auth/passkeys/{id}", passkeyHandler.Delete)
 			r.Post("/auth/cert/issue", certHandler.Issue)
 			r.Get("/auth/certs", certHandler.List)
+			r.Get("/auth/certs/ca", certHandler.CAInfo)
 			r.Delete("/auth/certs/{id}", certHandler.Revoke)
 			r.Put("/auth/profile/cert-auto-login", certHandler.UpdateAutoLogin)
 		})

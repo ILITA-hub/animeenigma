@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha1" //nolint:gosec // SHA-1 only for the display thumbprint (matches Windows' trust prompt)
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -162,9 +163,32 @@ func (s *CertService) CAPEM() []byte {
 	return s.caPEM
 }
 
+// CAInfo returns the CA subject + fingerprints for user-facing display (the
+// settings modal shows them next to the .p12 install instructions so users
+// can verify the OS trust prompt).
+func (s *CertService) CAInfo() domain.CAInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return domain.CAInfo{
+		Subject:           s.caCert.Subject.String(),
+		FingerprintSHA256: certFingerprint(s.caCert),
+		FingerprintSHA1:   certFingerprintSHA1(s.caCert),
+	}
+}
+
 // certFingerprint returns the lowercase sha256-hex of the cert's DER bytes.
 func certFingerprint(cert *x509.Certificate) string {
 	sum := sha256.Sum256(cert.Raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// certFingerprintSHA1 returns the lowercase sha1-hex of the cert's DER bytes.
+// Display-only (Windows' trust prompt shows a SHA-1 thumbprint) — never used
+// for a security decision.
+//
+//nolint:gosec
+func certFingerprintSHA1(cert *x509.Certificate) string {
+	sum := sha1.Sum(cert.Raw)
 	return hex.EncodeToString(sum[:])
 }
 

@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"testing"
 
@@ -60,5 +63,31 @@ func TestEnsureCA_GeneratesAndReloads(t *testing.T) {
 	}
 	if string(svc2.CAPEM()) != firstPEM {
 		t.Fatal("CAPEM does not round-trip the stored PEM")
+	}
+}
+
+func TestCAInfo_Fingerprints(t *testing.T) {
+	svc := &CertService{caStore: &fakeCAStore{}, log: logger.Default()}
+	if err := svc.EnsureCA(context.Background()); err != nil {
+		t.Fatalf("EnsureCA: %v", err)
+	}
+
+	block, _ := pem.Decode(svc.CAPEM())
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse CA cert: %v", err)
+	}
+	want256 := sha256.Sum256(cert.Raw)
+	want1 := sha1.Sum(cert.Raw)
+
+	info := svc.CAInfo()
+	if info.FingerprintSHA256 != hex.EncodeToString(want256[:]) {
+		t.Errorf("sha256 fingerprint = %q, want %q", info.FingerprintSHA256, hex.EncodeToString(want256[:]))
+	}
+	if info.FingerprintSHA1 != hex.EncodeToString(want1[:]) {
+		t.Errorf("sha1 fingerprint = %q, want %q", info.FingerprintSHA1, hex.EncodeToString(want1[:]))
+	}
+	if info.Subject == "" {
+		t.Error("subject is empty")
 	}
 }

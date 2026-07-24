@@ -44,3 +44,13 @@ type IssueCertResponse struct {
 type UpdateCertAutoLoginRequest struct {
 	Enabled bool `json:"enabled"`
 }
+
+// CAInfo describes the platform user CA for user-facing display: the
+// settings modal shows these fingerprints so users can compare them against
+// the OS trust prompt raised when importing a .p12 that bundles this CA.
+// SHA-1 is included because Windows' prompt shows a SHA-1 thumbprint.
+type CAInfo struct {
+	Subject           string `json:"subject"`
+	FingerprintSHA256 string `json:"fingerprint_sha256"`
+	FingerprintSHA1   string `json:"fingerprint_sha1"`
+}

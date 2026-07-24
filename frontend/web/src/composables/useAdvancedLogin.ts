@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { advancedLoginApi, type Passkey, type Cert } from '@/api/advancedLogin'
+import { advancedLoginApi, type Passkey, type Cert, type CAInfo } from '@/api/advancedLogin'
 import { useAuthStore } from '@/stores/auth'
 import { clearCertSuppressionFlags } from '@/composables/certLoginFlags'
 
@@ -61,6 +61,9 @@ export function useAdvancedLogin() {
 
   /** Password from the most recent issue — shown ONCE; cleared on close. */
   const issuedPassword = ref<string | null>(null)
+
+  /** Platform CA identity (fingerprints for the OS trust-prompt check). */
+  const caInfo = ref<CAInfo | null>(null)
 
   const hasActiveCert = computed(() =>
     certs.value.some(c => !c.revoked_at),
@@ -128,7 +131,14 @@ export function useAdvancedLogin() {
     certsLoading.value = true
     error.value = null
     try {
-      certs.value = await advancedLoginApi.listCerts()
+      // CA identity is immutable per installation — fetch once per session,
+      // in parallel with the certs list (independent requests).
+      const [certsResult, caInfoResult] = await Promise.all([
+        advancedLoginApi.listCerts(),
+        caInfo.value ? Promise.resolve(caInfo.value) : advancedLoginApi.caInfo(),
+      ])
+      certs.value = certsResult
+      caInfo.value = caInfoResult
     } catch (e) {
       fail(e)
     } finally {
@@ -203,6 +213,7 @@ export function useAdvancedLogin() {
     autoLoginBusy,
     error,
     issuedPassword,
+    caInfo,
     hasActiveCert,
     certAutoLogin,
     refreshPasskeys,
