@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { cardImageUrl, type BannerView } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{
   banners: BannerView[]
@@ -76,7 +77,7 @@ const emit = defineEmits<{
 }>()
 
 function bannerBg(banner: BannerView): string {
-  return banner.backdrop_path ? cardImageUrl(banner.backdrop_path) : ''
+  return banner.backdrop_path ? cardPosterUrl(cardImageUrl(banner.backdrop_path), 640) : ''
 }
 
 function select(i: number) {

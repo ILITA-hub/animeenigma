@@ -66,6 +66,7 @@ function proxyUrl(originalUrl: string): string {
 }
 
 function isProxyableUrl(url: string): boolean {
+  if (url.startsWith('/api/gacha/images/')) return true
   try {
     const hostname = new URL(url).hostname.toLowerCase()
     return PROXYABLE_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d))

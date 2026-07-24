@@ -26,7 +26,7 @@
               :class="{ unowned: !card.owned }"
             >
               <div class="img">
-                <img :src="cardImageUrl(card.image_path)" :alt="card.name" />
+                <img :src="cardPosterUrl(cardImageUrl(card.image_path), 256)" :alt="card.name" />
               </div>
               <div class="nm">
                 <span class="truncate">{{ card.name }}</span>
@@ -58,6 +58,7 @@ import { useI18n } from 'vue-i18n'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import { cardImageUrl, type BannerCardView, type Rarity } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{
   modelValue: boolean

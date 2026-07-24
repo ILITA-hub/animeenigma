@@ -25,7 +25,7 @@
         <div class="flip">
           <div class="face">
             <div class="img">
-              <img :src="cardImageUrl(pulled.card.image_path)" :alt="pulled.card.name" />
+              <img :src="cardPosterUrl(cardImageUrl(pulled.card.image_path), 384)" :alt="pulled.card.name" />
             </div>
             <div class="nm">
               <span class="truncate">{{ pulled.card.name }}</span>
@@ -77,6 +77,7 @@ import { useI18n } from 'vue-i18n'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import { cardImageUrl, type PulledCard, type Rarity } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{
   modelValue: boolean

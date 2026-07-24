@@ -52,7 +52,9 @@ describe('GachaSlider', () => {
   it('uses backdrop_path as the slide background', () => {
     const w = mountSlider([makeBanner({ backdrop_path: 'banners/bd.webp' })])
     const art = w.find('.art')
-    expect(art.attributes('style')).toContain('banners/bd.webp')
+    // cardImageUrl → /api/gacha/images/banners/bd.webp, then routed through
+    // the image-proxy (relative gacha URL) and percent-encoded as the `url` param.
+    expect(art.attributes('style')).toContain(encodeURIComponent('banners/bd.webp'))
   })
 
   it('shows the gradient fallback when no backdrop is set', () => {

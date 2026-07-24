@@ -81,7 +81,7 @@
         @click="toggle(card.id)"
       >
         <img
-          :src="cardImageUrl(card.image_path)"
+          :src="cardPosterUrl(cardImageUrl(card.image_path), 128)"
           :alt="card.name"
           class="w-full aspect-[3/4] object-cover rounded-t-xl"
         />
@@ -115,6 +115,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Check, Eye, EyeOff } from 'lucide-vue-next'
 import { cardImageUrl, gachaAdminApi, type GachaCard, type GachaGroup, type Rarity } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
 

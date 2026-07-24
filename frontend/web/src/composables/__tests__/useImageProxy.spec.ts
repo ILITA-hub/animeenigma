@@ -30,8 +30,19 @@ describe('cardPosterUrl', () => {
     expect(cardPosterUrl(mal, 384)).toContain('/api/streaming/image-proxy?url=')
   })
 
+  it('routes relative gacha image URLs through the proxy', () => {
+    const gacha = '/api/gacha/images/cards/x.png'
+    expect(cardPosterUrl(gacha, 128)).toBe(
+      `/api/streaming/image-proxy?url=${encodeURIComponent(gacha)}&w=128`
+    )
+  })
+
   it('passes non-proxyable URLs through unchanged', () => {
     expect(cardPosterUrl('https://example.com/p.jpg', 128)).toBe('https://example.com/p.jpg')
     expect(cardPosterUrl('/placeholder.svg', 128)).toBe('/placeholder.svg')
+  })
+
+  it('passes non-proxyable absolute URLs through', () => {
+    expect(cardPosterUrl('https://example.com/a.png', 128)).toBe('https://example.com/a.png')
   })
 })

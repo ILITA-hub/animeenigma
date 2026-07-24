@@ -141,7 +141,7 @@
                   </td>
                   <td class="px-3 py-2">
                     <img
-                      :src="cardImageUrl(card.image_path)"
+                      :src="cardPosterUrl(cardImageUrl(card.image_path), 128)"
                       :alt="card.name"
                       class="w-8 h-10 object-cover rounded"
                     />
@@ -816,6 +816,7 @@ import {
   type Rarity,
   type BulkCardSet,
 } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import Tabs from '@/components/ui/Tabs.vue'
 import Modal from '@/components/ui/Modal.vue'
 import Input from '@/components/ui/Input.vue'

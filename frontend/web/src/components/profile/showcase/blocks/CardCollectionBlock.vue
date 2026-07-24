@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { CardCollectionConfig } from '@/types/showcase'
 import { defaultVariant } from '@/types/showcase'
 import { gachaApi, cardImageUrl, type GachaCard } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 
 const props = defineProps<{ config: CardCollectionConfig; variant?: string; userId?: string }>()
 
@@ -123,7 +124,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardImageUrl(c.image_path)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -146,7 +147,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardImageUrl(c.image_path)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -169,7 +170,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardImageUrl(c.image_path)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -193,7 +194,7 @@ const rarityGlow: Record<string, string> = {
         <div class="cc-frame" :class="rarityClass[cards[0].rarity]" />
         <img
           v-if="cards[0].image_path"
-          :src="cardImageUrl(cards[0].image_path)"
+          :src="cardPosterUrl(cardImageUrl(cards[0].image_path), 256)"
           :alt="cards[0].name"
           class="cc-img"
         />
@@ -235,7 +236,7 @@ const rarityGlow: Record<string, string> = {
             @click="openDialog(c)"
           >
             <div class="cc-frame" :class="rarityClass[c.rarity]" />
-            <img v-if="c.image_path" :src="cardImageUrl(c.image_path)" :alt="c.name" class="cc-img" />
+            <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
             <div class="cc-holo" />
             <div class="cc-cg" />
           </div>
@@ -259,7 +260,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardImageUrl(c.image_path)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-sheen" />
         <div class="cc-cg" />
@@ -313,7 +314,7 @@ const rarityGlow: Record<string, string> = {
             <div class="cc-frame" :class="rarityClass[dialogCard.rarity]" />
             <img
               v-if="dialogCard.image_path"
-              :src="cardImageUrl(dialogCard.image_path)"
+              :src="cardPosterUrl(cardImageUrl(dialogCard.image_path), 256)"
               :alt="dialogCard.name"
               class="cc-img"
             />

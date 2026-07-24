@@ -73,7 +73,7 @@
             @keydown.enter.space.prevent="openInspect(entry)"
           >
             <img
-              :src="cardImageUrl(entry.card.image_path)"
+              :src="cardPosterUrl(cardImageUrl(entry.card.image_path), 256)"
               :alt="entry.card.name"
               class="w-full h-full object-cover"
             />
@@ -110,6 +110,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGachaStore } from '@/stores/gacha'
 import { cardImageUrl, type Rarity, type CollectionCardView, type PulledCard } from '@/api/gacha'
+import { cardPosterUrl } from '@/composables/useImageProxy'
 import Spinner from '@/components/ui/Spinner.vue'
 import Alert from '@/components/ui/Alert.vue'
 import CardViewer3D from '@/components/gacha/CardViewer3D.vue'
