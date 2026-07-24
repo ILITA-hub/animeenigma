@@ -62,3 +62,58 @@ func TestUpdateTelegramProfile_PersistsAndSkipsEmpty(t *testing.T) {
 	require.NotNil(t, got.TelegramUsername)
 	require.Equal(t, "neo_tg", *got.TelegramUsername)
 }
+
+func TestListUsers_SearchPaginateAndRoleFilter(t *testing.T) {
+	db := usersDB(t)
+	r := repo.NewUserRepository(db)
+	ctx := context.Background()
+
+	tg := int64(556677)
+	u := &domain.User{Username: "neotokyo_zzz", Role: authz.RoleUser, TelegramID: &tg}
+	require.NoError(t, r.Create(ctx, u))
+	t.Cleanup(func() { db.Exec("DELETE FROM users WHERE id = ?", u.ID) })
+	require.NoError(t, r.UpdateTelegramProfile(ctx, u.ID, "neo_tg", "Neo"))
+
+	// by username substring
+	got, total, err := r.ListUsers(ctx, "neotokyo_zz", "", 10, 0)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, total, int64(1))
+	require.True(t, containsID(got, u.ID))
+
+	// by telegram_id exact
+	got, _, err = r.ListUsers(ctx, "556677", "", 10, 0)
+	require.NoError(t, err)
+	require.True(t, containsID(got, u.ID))
+
+	// by telegram name substring
+	got, _, err = r.ListUsers(ctx, "neo_t", "", 10, 0)
+	require.NoError(t, err)
+	require.True(t, containsID(got, u.ID))
+
+	// by exact UUID
+	got, _, err = r.ListUsers(ctx, u.ID, "", 10, 0)
+	require.NoError(t, err)
+	require.True(t, containsID(got, u.ID))
+
+	// role filter excludes a 'user' when filtering for 'admin'
+	_, total, err = r.ListUsers(ctx, "neotokyo_zz", "admin", 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), total)
+}
+
+func TestUpdateRole_SuccessAndNotFound(t *testing.T) {
+	db := usersDB(t)
+	r := repo.NewUserRepository(db)
+	ctx := context.Background()
+
+	u := &domain.User{Username: "roletest_zzz", Role: authz.RoleUser}
+	require.NoError(t, r.Create(ctx, u))
+	t.Cleanup(func() { db.Exec("DELETE FROM users WHERE id = ?", u.ID) })
+
+	require.NoError(t, r.UpdateRole(ctx, u.ID, string(authz.RoleAdmin)))
+	got, err := r.GetByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, authz.RoleAdmin, got.Role)
+
+	require.Error(t, r.UpdateRole(ctx, "00000000-0000-0000-0000-000000000000", string(authz.RoleUser)))
+}

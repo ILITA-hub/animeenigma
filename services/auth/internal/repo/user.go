@@ -225,6 +225,53 @@ func (r *UserRepository) UpdateTelegramProfile(ctx context.Context, userID, tgUs
 	return nil
 }
 
+// ListUsers returns a newest-first page of users, optionally filtered by a
+// free-text query and/or an exact role, plus the total count for that filter.
+// The query matches username / public_id / telegram_username / telegram_first_name
+// by ILIKE substring, and the UUID id / telegram_id by exact string equality.
+func (r *UserRepository) ListUsers(ctx context.Context, query, role string, limit, offset int) ([]domain.User, int64, error) {
+	applyFilters := func(db *gorm.DB) *gorm.DB {
+		if role != "" {
+			db = db.Where("role = ?", role)
+		}
+		if query != "" {
+			like := "%" + query + "%"
+			db = db.Where(
+				"username ILIKE ? OR public_id ILIKE ? OR telegram_username ILIKE ? OR telegram_first_name ILIKE ? OR id::text = ? OR CAST(telegram_id AS TEXT) = ?",
+				like, like, like, like, query, query,
+			)
+		}
+		return db
+	}
+
+	var total int64
+	if err := applyFilters(r.db.WithContext(ctx).Model(&domain.User{})).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count users: %w", err)
+	}
+
+	var users []domain.User
+	if err := applyFilters(r.db.WithContext(ctx).Model(&domain.User{})).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&users).Error; err != nil {
+		return nil, 0, fmt.Errorf("list users: %w", err)
+	}
+	return users, total, nil
+}
+
+// UpdateRole writes only the role column for the user.
+func (r *UserRepository) UpdateRole(ctx context.Context, userID, role string) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("role", role)
+	if result.Error != nil {
+		return fmt.Errorf("update role: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&domain.User{}).Where("username = ?", username).Count(&count).Error; err != nil {
