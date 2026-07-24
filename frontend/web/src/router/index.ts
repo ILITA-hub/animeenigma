@@ -314,6 +314,13 @@ const routes: RouteRecordRaw[] = [
     meta: { titleKey: 'admin.feedback.title', requiresAuth: true, requiresAdmin: true }
   },
   {
+    // Admin users — list, search and role management.
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('@/views/admin/AdminUsers.vue'),
+    meta: { titleKey: 'admin.users.title', requiresAuth: true, requiresAdmin: true }
+  },
+  {
     // Phase 17 (UX-33) — public editorial collection detail page.
     path: '/collections/:slug',
     name: 'collection-detail',

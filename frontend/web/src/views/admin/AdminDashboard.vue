@@ -88,6 +88,14 @@ const tools: AdminTool[] = [
     icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
   },
   {
+    key: 'users',
+    to: '/admin/users',
+    label: 'admin.users.title',
+    desc: 'admin.dashboard.usersDesc',
+    accent: 'cyan',
+    icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z',
+  },
+  {
     key: 'rawLibrary',
     to: '/admin/raw-library',
     label: 'player.adminLibrary.title',
