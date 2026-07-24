@@ -209,6 +209,8 @@ export interface BulkCardSet {
   source_title?: string
   rarity?: Rarity
   enabled?: boolean
+  /** Card-back image key; empty string resets to the branded default. */
+  back_path?: string
 }
 
 // ─── Image URL helper ──────────────────────────────────────────────────────

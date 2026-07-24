@@ -583,4 +583,58 @@ describe('AdminGacha', () => {
     await vm.runDelete()
     expect(gachaAdminApi.bulkDeleteCards).toHaveBeenCalledWith(['c1'])
   })
+
+  // ── Bulk card-back dialog ─────────────────────────────────────────────────
+
+  it('bulk card-back dialog: apply calls bulkUpdateCards with the uploaded back_path', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: { data: [makeCard({ id: 'c1' })] },
+    } as never)
+    vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({
+      data: { success: true, data: { image_path: 'cards/back.png', image_url: '/api/gacha/images/cards/back.png' } },
+    } as never)
+    vi.mocked(gachaAdminApi.bulkUpdateCards).mockResolvedValue({ data: { data: { updated: 1 } } } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="row-select-c1"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="bulk-back-btn"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    type Vm = { onBulkBackFile: (e: Event) => Promise<void> }
+    const vm = wrapper.vm as unknown as Vm
+    const file = new File(['x'], 'back.png', { type: 'image/png' })
+    const input = document.createElement('input')
+    input.type = 'file'
+    Object.defineProperty(input, 'files', { value: [file] })
+    await vm.onBulkBackFile({ target: input } as unknown as Event)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="bulk-back-apply"]').trigger('click')
+    await flushPromises()
+
+    expect(gachaAdminApi.bulkUpdateCards).toHaveBeenCalledWith(['c1'], { back_path: 'cards/back.png' })
+  })
+
+  it('bulk card-back dialog: reset calls bulkUpdateCards with an empty back_path', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: { data: [makeCard({ id: 'c1' })] },
+    } as never)
+    vi.mocked(gachaAdminApi.bulkUpdateCards).mockResolvedValue({ data: { data: { updated: 1 } } } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="row-select-c1"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="bulk-back-btn"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-testid="bulk-back-reset"]').trigger('click')
+    await flushPromises()
+
+    expect(gachaAdminApi.bulkUpdateCards).toHaveBeenCalledWith(['c1'], { back_path: '' })
+  })
 })

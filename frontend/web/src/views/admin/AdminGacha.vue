@@ -96,6 +96,9 @@
             <Button size="sm" variant="outline" :disabled="bulkBusy" data-testid="bulk-disable-btn" @click="applyBulk({ enabled: false })">
               {{ $t('gacha.admin.bulk_disable') }}
             </Button>
+            <Button size="sm" variant="outline" :disabled="bulkBusy" data-testid="bulk-back-btn" @click="showBulkBack = true">
+              {{ $t('gacha.admin.bulk_back_btn') }}
+            </Button>
             <Button size="sm" variant="destructive" :disabled="bulkBusy" data-testid="bulk-delete-btn" @click="confirmBulkDelete">
               {{ $t('gacha.admin.bulk_delete') }}
             </Button>
@@ -772,6 +775,32 @@
 
   <!-- ─── BULK UPLOAD DIALOG ────────────────────────────────────────────── -->
   <GachaBulkUpload v-model="showBulkUpload" />
+
+  <!-- ─── BULK CARD-BACK DIALOG ─────────────────────────────────────────── -->
+  <Modal v-model="showBulkBack" :title="$t('gacha.admin.bulk_back_title')" closable>
+    <p class="text-white/70 text-sm mb-3">{{ $t('gacha.admin.bulk_back_hint') }}</p>
+    <div class="flex items-start gap-3">
+      <img v-if="bulkBackPreview" :src="bulkBackPreview" alt="" class="w-16 h-20 object-cover rounded border border-white/20" />
+      <div class="flex-1 space-y-2">
+        <input ref="bulkBackFileInput" type="file" accept="image/*" class="hidden" @change="onBulkBackFile" />
+        <Button size="sm" variant="outline" :disabled="bulkBackUploading" @click="bulkBackFileInput?.click()">
+          <Upload class="size-4 mr-1" /> {{ $t('gacha.admin.card_image_or') }}
+        </Button>
+        <Input v-model="bulkBackUrl" :placeholder="$t('gacha.admin.card_image_url_placeholder')" @blur="onBulkBackUrl" />
+        <Alert v-if="bulkBackError" variant="destructive">{{ $t('gacha.admin.upload_error') }}</Alert>
+      </div>
+    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <Button variant="outline" :disabled="bulkBusy" data-testid="bulk-back-reset" @click="applyBulkBack('')">
+          {{ $t('gacha.admin.bulk_back_reset') }}
+        </Button>
+        <Button :disabled="!bulkBackPath || bulkBackUploading || bulkBusy" data-testid="bulk-back-apply" @click="applyBulkBack(bulkBackPath)">
+          {{ $t('gacha.admin.bulk_back_apply', { n: selectedIds.size }) }}
+        </Button>
+      </div>
+    </template>
+  </Modal>
 </template>
 
 <script setup lang="ts">
@@ -917,6 +946,65 @@ function confirmBulkDelete() {
     },
   }
   showDeleteDialog.value = true
+}
+
+// ── Bulk card-back dialog ──────────────────────────────────────────────────────
+const showBulkBack = ref(false)
+const bulkBackPath = ref('')
+const bulkBackUrl = ref('')
+const bulkBackPreview = ref<string | null>(null)
+const bulkBackUploading = ref(false)
+const bulkBackError = ref(false)
+const bulkBackFileInput = ref<HTMLInputElement | null>(null)
+
+watch(showBulkBack, open => {
+  if (open) {
+    bulkBackPath.value = ''
+    bulkBackUrl.value = ''
+    bulkBackPreview.value = null
+    bulkBackError.value = false
+  }
+})
+
+async function onBulkBackFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  bulkBackUploading.value = true
+  bulkBackError.value = false
+  try {
+    const res = await gachaAdminApi.uploadFile(file, 'cards')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    const path = data?.data?.image_path ?? ''
+    bulkBackPath.value = path
+    bulkBackPreview.value = path ? cardImageUrl(path) : null
+  } catch {
+    bulkBackError.value = true
+  } finally {
+    bulkBackUploading.value = false
+  }
+}
+
+async function onBulkBackUrl() {
+  const url = bulkBackUrl.value.trim()
+  if (!url) return
+  bulkBackUploading.value = true
+  bulkBackError.value = false
+  try {
+    const res = await gachaAdminApi.uploadUrl(url, 'cards')
+    const data = (res as { data?: { data?: { image_path?: string } } }).data
+    const path = data?.data?.image_path ?? ''
+    bulkBackPath.value = path
+    bulkBackPreview.value = path ? cardImageUrl(path) : url
+  } catch {
+    bulkBackError.value = true
+  } finally {
+    bulkBackUploading.value = false
+  }
+}
+
+async function applyBulkBack(path: string) {
+  await applyBulk({ back_path: path })
+  showBulkBack.value = false
 }
 
 // ── Inline cell editing ───────────────────────────────────────────────────────
