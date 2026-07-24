@@ -1170,7 +1170,10 @@
     "tgWebToggle": "Используете Telegram Web?",
     "tgWebInstructions": "Откройте {'@'}animeenigma_auth_bot в Telegram и отправьте это сообщение:",
     "tgWebCopy": "Копировать",
-    "tgWebCopied": "Скопировано"
+    "tgWebCopied": "Скопировано",
+    "passkeyLogin": "Войти с помощью ключа доступа",
+    "passkeyError": "Не удалось войти с ключом доступа",
+    "certAutoLoginSuccess": "Вход выполнен автоматически по сертификату устройства"
   },
   "notFound": {
     "code": "404",

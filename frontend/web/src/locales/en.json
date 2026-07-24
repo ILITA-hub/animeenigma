@@ -1170,7 +1170,10 @@
     "tgWebToggle": "Using Telegram Web?",
     "tgWebInstructions": "Open {'@'}animeenigma_auth_bot in Telegram and send this message:",
     "tgWebCopy": "Copy",
-    "tgWebCopied": "Copied"
+    "tgWebCopied": "Copied",
+    "passkeyLogin": "Sign in with a passkey",
+    "passkeyError": "Passkey login failed",
+    "certAutoLoginSuccess": "Signed in automatically with your device certificate"
   },
   "notFound": {
     "code": "404",

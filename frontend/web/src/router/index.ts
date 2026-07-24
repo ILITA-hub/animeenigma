@@ -438,6 +438,13 @@ router.beforeEach(async (to, _from, next) => {
 
   // Check authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated && !isDailyFanficDeepLink) {
+    // TLS-cert auto-login (spec 2026-07-24): probe the mTLS vhost before
+    // showing the login page. On success the login page never renders.
+    const { tryCertAutoLogin } = await import('@/composables/useCertAutoLogin')
+    if (await tryCertAutoLogin()) {
+      next()
+      return
+    }
     sessionStorage.setItem('returnUrl', to.fullPath)
     next({ name: 'auth' })
     return

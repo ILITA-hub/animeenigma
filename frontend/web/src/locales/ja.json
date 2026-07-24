@@ -1170,7 +1170,10 @@
     "tgWebToggle": "Telegram Webを使用中ですか？",
     "tgWebInstructions": "Telegramで {'@'}animeenigma_auth_bot を開き、次のメッセージを送信してください：",
     "tgWebCopy": "コピー",
-    "tgWebCopied": "コピー済み"
+    "tgWebCopied": "コピー済み",
+    "passkeyLogin": "パスキーでサインイン",
+    "passkeyError": "パスキーでのログインに失敗しました",
+    "certAutoLoginSuccess": "デバイス証明書で自動的にサインインしました"
   },
   "notFound": {
     "code": "404",

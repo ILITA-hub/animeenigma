@@ -15,6 +15,8 @@ export interface User {
   activity_visibility?: 'all' | 'non_hentai' | 'none'
   created_at?: string
   timezone?: string
+  /** TLS-client-cert auto-login toggle (spec 2026-07-24). */
+  cert_auto_login?: boolean
 }
 
 export interface LoginCredentials {
@@ -175,6 +177,9 @@ export const useAuthStore = defineStore('auth', () => {
       // combos must NOT survive into this user's session even if the prefs
       // version happens to match.
       clearPreferenceCache()
+      // Spec 2026-07-24 — a manual login clears any TLS-cert auto-login
+      // suppression/negative-cache left over from a previous session.
+      clearCertSuppressionFlags()
       return true
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string }; message?: string } } }
@@ -183,6 +188,58 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // ── Passkey (WebAuthn) login ──
+  // Usernameless: empty allowCredentials; the authenticator picks a
+  // discoverable credential and the server resolves the user by userHandle.
+  const passkeyLogin = async (): Promise<boolean> => {
+    error.value = null
+    try {
+      const { startAuthentication } = await import('@simplewebauthn/browser')
+      const begin = await apiClient.post('/auth/passkey/login/begin')
+      const beginData = begin.data?.data || begin.data
+      const assertion = await startAuthentication({ optionsJSON: beginData.options.publicKey })
+      const finish = await apiClient.post(
+        `/auth/passkey/login/finish?ceremony=${encodeURIComponent(beginData.ceremony_id)}`,
+        assertion,
+      )
+      const data = finish.data?.data || finish.data
+      setToken(data.access_token)
+      setUser(data.user)
+      clearPreferenceCache()
+      clearCertSuppressionFlags()
+      return true
+    } catch (err: unknown) {
+      // NotAllowedError = user dismissed the browser prompt — not an error banner.
+      if ((err as { name?: string })?.name === 'NotAllowedError') return false
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      error.value = e.response?.data?.error?.message || i18n.global.t('auth.passkeyError')
+      return false
+    }
+  }
+
+  // ── TLS-cert auto-login: token exchange half (probe lives in the composable) ──
+  const consumeCertToken = async (certToken: string): Promise<boolean> => {
+    try {
+      const response = await apiClient.post('/auth/cert/consume', { token: certToken })
+      const data = response.data?.data || response.data
+      setToken(data.access_token)
+      setUser(data.user)
+      clearPreferenceCache()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Explicit logout suppresses cert auto-login in THIS browser until the next
+  // manual login (spec: logout must not bounce straight back in).
+  function clearCertSuppressionFlags() {
+    try {
+      localStorage.removeItem('ae_cert_suppress')
+      localStorage.removeItem('ae_cert_nolgn_until')
+    } catch { /* privacy modes */ }
   }
 
   // Phase 7 D-03 — wipe localStorage of cached preference resolutions and
@@ -266,6 +323,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (data.status === 'confirmed' && data.access_token) {
         setToken(data.access_token)
         setUser(data.user)
+        clearCertSuppressionFlags()
       }
       return data
     } catch {
@@ -285,6 +343,11 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
     // Phase 7 D-03 — wipe pref:* + prefs_version on logout
     clearPreferenceCache()
+    // Spec 2026-07-24 — an explicit logout must not bounce straight back in
+    // via a TLS-cert auto-login on the next nav; suppressed until manual login.
+    try {
+      localStorage.setItem('ae_cert_suppress', '1')
+    } catch { /* privacy modes */ }
     // Clickstream reset (Plan 2) — drop user id + rotate anon id.
     import('@/analytics').then(({ analytics }) => analytics.reset()).catch(() => undefined)
   }
@@ -401,6 +464,8 @@ export const useAuthStore = defineStore('auth', () => {
     ensureGuestToken,
     login,
     register,
+    passkeyLogin,
+    consumeCertToken,
     requestDeepLink,
     checkDeepLink,
     logout,

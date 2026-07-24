@@ -114,6 +114,17 @@
               </div>
             </div>
           </details>
+
+          <!-- Passkey login (spec 2026-07-24): small secondary action -->
+          <button
+            v-if="passkeySupported"
+            type="button"
+            class="inline-flex items-center gap-2 text-white/60 hover:text-white text-sm transition-colors"
+            @click="loginWithPasskey"
+          >
+            <KeyRound class="w-4 h-4" aria-hidden="true" />
+            {{ $t('auth.passkeyLogin') }}
+          </button>
         </div>
       </div>
 
@@ -135,6 +146,7 @@ import { useAuthStore } from '@/stores/auth'
 import Button from '@/components/ui/Button.vue'
 import { Spinner } from '@/components/ui'
 import QRCode from 'qrcode'
+import { KeyRound } from 'lucide-vue-next'
 
 useI18n()
 
@@ -269,13 +281,25 @@ function trackClicked() {
   // Placeholder for future analytics (tg:// click-through rate vs https://t.me/ fallback).
 }
 
+const passkeySupported = typeof window !== 'undefined' && !!window.PublicKeyCredential
+
+async function loginWithPasskey() {
+  const ok = await authStore.passkeyLogin()
+  if (ok) {
+    cleanup()
+    const returnUrl = sessionStorage.getItem('returnUrl')
+    sessionStorage.removeItem('returnUrl')
+    router.push(returnUrl || '/')
+  }
+}
+
 function cleanup() {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null }
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
   if (troubleshootingTimeout) { clearTimeout(troubleshootingTimeout); troubleshootingTimeout = null }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // UA-027: if user is already authed, bounce them out rather than show a fresh QR.
   if (authStore.isAuthenticated) {
     const returnUrl = sessionStorage.getItem('returnUrl')
@@ -283,6 +307,16 @@ onMounted(() => {
     router.replace(returnUrl || '/')
     return
   }
+
+  // TLS-cert auto-login (spec 2026-07-24): benefits direct navigation to /auth too.
+  const { tryCertAutoLogin } = await import('@/composables/useCertAutoLogin')
+  if (await tryCertAutoLogin()) {
+    const returnUrl = sessionStorage.getItem('returnUrl')
+    sessionStorage.removeItem('returnUrl')
+    router.replace(returnUrl || '/')
+    return
+  }
+
   startAuth()
 })
 
