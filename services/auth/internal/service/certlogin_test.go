@@ -6,6 +6,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	pkcs12 "software.sslmate.com/src/go-pkcs12"
@@ -64,6 +66,61 @@ func TestHandshakeCertLogin_HappyPath(t *testing.T) {
 
 	if _, err := auth.ConsumeCertLoginToken(context.Background(), token, SessionContext{}); err == nil {
 		t.Fatalf("second consume must fail (single-use)")
+	}
+}
+
+// TestHandshakeCertLogin_NilCADoesNotPanic guards against a nil CA cert
+// reaching pool.AddCert (which panics on a nil *x509.Certificate) — e.g. a
+// deployment where EnsureCA hasn't run yet. It must fail cleanly with
+// Unauthorized instead of crashing the handler goroutine.
+func TestHandshakeCertLogin_NilCADoesNotPanic(t *testing.T) {
+	auth, wellFormedCerts, users := newTestAuthServiceWithCerts(t)
+	user := &domain.User{ID: "u-nilca", Username: "frank", CertAutoLogin: true}
+	users.users[user.ID] = user
+	// A validly-parseable leaf PEM, so the handler reaches the caCert nil
+	// check instead of bailing out earlier on a PEM-decode failure.
+	escapedPEM, _ := issueTestClientCert(t, wellFormedCerts, user)
+
+	certs := &CertService{caStore: &fakeCAStore{}, certStore: newFakeCertStore()} // caCert left nil: CA never loaded
+
+	_, err := auth.HandshakeCertLogin(context.Background(), "SUCCESS", escapedPEM, certs)
+	if appErr, ok := liberrors.IsAppError(err); !ok || appErr.Code != liberrors.CodeUnauthorized {
+		t.Fatalf("want Unauthorized for nil CA; got %v", err)
+	}
+}
+
+// TestConsumeCertLoginToken_ConcurrentSingleUse fires many concurrent
+// consumes of the same one-time token and asserts exactly one wins — the
+// finding this guards against is a non-atomic Get-then-Delete letting two
+// racing consumers both read the token before either deletes it.
+func TestConsumeCertLoginToken_ConcurrentSingleUse(t *testing.T) {
+	auth, certs, users := newTestAuthServiceWithCerts(t)
+	user := &domain.User{ID: "u-race", Username: "eve", CertAutoLogin: true}
+	users.users[user.ID] = user
+
+	escapedPEM, _ := issueTestClientCert(t, certs, user)
+	token, err := auth.HandshakeCertLogin(context.Background(), "SUCCESS", escapedPEM, certs)
+	if err != nil || token == "" {
+		t.Fatalf("HandshakeCertLogin: token=%q err=%v", token, err)
+	}
+
+	const workers = 20
+	var successes int32
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			resp, err := auth.ConsumeCertLoginToken(context.Background(), token, SessionContext{})
+			if err == nil && resp != nil {
+				atomic.AddInt32(&successes, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if successes != 1 {
+		t.Fatalf("single-use token must be consumed exactly once under concurrency; got %d successes", successes)
 	}
 }
 

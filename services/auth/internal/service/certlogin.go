@@ -60,6 +60,9 @@ func (s *AuthService) HandshakeCertLogin(ctx context.Context, verify, escapedPEM
 	certs.mu.RLock()
 	caCert := certs.caCert
 	certs.mu.RUnlock()
+	if caCert == nil {
+		return "", errors.Unauthorized("client certificate required")
+	}
 	pool := x509.NewCertPool()
 	pool.AddCert(caCert)
 	if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool,
@@ -102,12 +105,13 @@ func (s *AuthService) ConsumeCertLoginToken(ctx context.Context, token string, s
 	if token == "" {
 		return nil, errors.Unauthorized("invalid token")
 	}
+	// GetDel reads and deletes the token atomically (single Redis round
+	// trip) so two concurrent consumes of the same token can't both
+	// observe it — the loser sees ErrNotFound / Unauthorized.
 	var val certLoginSession
-	if err := s.cache.Get(ctx, cache.KeyCertLogin(token), &val); err != nil {
+	if err := s.cache.GetDel(ctx, cache.KeyCertLogin(token), &val); err != nil {
 		return nil, errors.Unauthorized("token not found or expired")
 	}
-	// Single-use: delete before minting so a replay finds nothing.
-	_ = s.cache.Delete(ctx, cache.KeyCertLogin(token))
 
 	user, err := s.magicUserGetter.GetByID(ctx, val.UserID)
 	if err != nil {

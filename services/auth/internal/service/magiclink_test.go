@@ -85,6 +85,20 @@ func (f *fakeCacheStore) GetOrSet(_ context.Context, key string, dest interface{
 	return f.Set(context.Background(), key, val, ttl)
 }
 
+// GetDel is the atomic get-and-delete counterpart to Get+Delete: the whole
+// lookup-and-remove happens under a single mutex hold, so two goroutines
+// racing on the same key can never both observe it (mirrors Redis GETDEL).
+func (f *fakeCacheStore) GetDel(_ context.Context, key string, dest interface{}) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	e, ok := f.entries[key]
+	if !ok || time.Now().After(e.expires) {
+		return fmt.Errorf("cache: key not found")
+	}
+	delete(f.entries, key)
+	return json.Unmarshal(e.raw, dest)
+}
+
 func (f *fakeCacheStore) Invalidate(_ context.Context, _ string) error { return nil }
 func (f *fakeCacheStore) SetNX(_ context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
 	f.mu.Lock()

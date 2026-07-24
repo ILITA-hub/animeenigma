@@ -22,6 +22,11 @@ type Cache interface {
 	// if it already existed. Used as a distributed lock primitive (e.g.
 	// the recs:debounce:{user_id} debounce lock from REC-INFRA-02).
 	SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
+	// GetDel atomically reads key into dest and deletes it in a single
+	// round trip, so two concurrent callers can never both observe the
+	// value — the second sees ErrNotFound. Used for one-time tokens (e.g.
+	// the cert-login handshake token) where Get-then-Delete would race.
+	GetDel(ctx context.Context, key string, dest interface{}) error
 }
 
 type Config struct {
@@ -96,6 +101,46 @@ func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) erro
 
 	metrics.CacheOperationDuration.WithLabelValues("get").Observe(time.Since(start).Seconds())
 	metrics.CacheOperationsTotal.WithLabelValues("get", "hit").Inc()
+	if c.agg != nil {
+		c.agg.Observe(ctx, KeyClass(key), "hit")
+	}
+	return nil
+}
+
+// GetDel implements the Cache interface — atomic read-and-delete via Redis
+// GETDEL. It mirrors Get's unmarshal/metrics/error shaping exactly, so
+// callers can swap a Get+Delete pair for a single race-free call.
+func (c *RedisCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	start := time.Now()
+	data, err := c.client.GetDel(ctx, key).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
+			metrics.CacheOperationsTotal.WithLabelValues("getdel", "miss").Inc()
+			if c.agg != nil {
+				c.agg.Observe(ctx, KeyClass(key), "miss")
+			}
+			return ErrNotFound
+		}
+		metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("getdel", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
+		return fmt.Errorf("cache getdel: %w", err)
+	}
+
+	if err := json.Unmarshal(data, dest); err != nil {
+		metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
+		metrics.CacheOperationsTotal.WithLabelValues("getdel", "error").Inc()
+		if c.agg != nil {
+			c.agg.Observe(ctx, KeyClass(key), "error")
+		}
+		return fmt.Errorf("cache unmarshal: %w", err)
+	}
+
+	metrics.CacheOperationDuration.WithLabelValues("getdel").Observe(time.Since(start).Seconds())
+	metrics.CacheOperationsTotal.WithLabelValues("getdel", "hit").Inc()
 	if c.agg != nil {
 		c.agg.Observe(ctx, KeyClass(key), "hit")
 	}
