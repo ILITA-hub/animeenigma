@@ -15,6 +15,11 @@ const dialogOpen = computed(() => dialogCard.value !== null)
 
 const v = computed(() => props.variant || defaultVariant('card_collection'))
 
+// Proxied, resized card art — used by every variant's <img> below.
+function posterUrl(path: string | undefined | null) {
+  return cardPosterUrl(cardImageUrl(path), 256)
+}
+
 // Reduced-motion preference
 const prefersReducedMotion =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -124,7 +129,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="posterUrl(c.image_path)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -147,7 +152,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="posterUrl(c.image_path)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -170,7 +175,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="posterUrl(c.image_path)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-cg" />
         <span class="cc-rar" :class="rarityBadgeClass[c.rarity]">{{ c.rarity }}</span>
@@ -194,7 +199,7 @@ const rarityGlow: Record<string, string> = {
         <div class="cc-frame" :class="rarityClass[cards[0].rarity]" />
         <img
           v-if="cards[0].image_path"
-          :src="cardPosterUrl(cardImageUrl(cards[0].image_path), 256)"
+          :src="posterUrl(cards[0].image_path)"
           :alt="cards[0].name"
           class="cc-img"
         />
@@ -236,7 +241,7 @@ const rarityGlow: Record<string, string> = {
             @click="openDialog(c)"
           >
             <div class="cc-frame" :class="rarityClass[c.rarity]" />
-            <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
+            <img v-if="c.image_path" :src="posterUrl(c.image_path)" :alt="c.name" class="cc-img" />
             <div class="cc-holo" />
             <div class="cc-cg" />
           </div>
@@ -260,7 +265,7 @@ const rarityGlow: Record<string, string> = {
         @click="openDialog(c)"
       >
         <div class="cc-frame" :class="rarityClass[c.rarity]" />
-        <img v-if="c.image_path" :src="cardPosterUrl(cardImageUrl(c.image_path), 256)" :alt="c.name" class="cc-img" />
+        <img v-if="c.image_path" :src="posterUrl(c.image_path)" :alt="c.name" class="cc-img" />
         <div class="cc-holo" />
         <div class="cc-sheen" />
         <div class="cc-cg" />
@@ -314,7 +319,7 @@ const rarityGlow: Record<string, string> = {
             <div class="cc-frame" :class="rarityClass[dialogCard.rarity]" />
             <img
               v-if="dialogCard.image_path"
-              :src="cardPosterUrl(cardImageUrl(dialogCard.image_path), 256)"
+              :src="posterUrl(dialogCard.image_path)"
               :alt="dialogCard.name"
               class="cc-img"
             />
