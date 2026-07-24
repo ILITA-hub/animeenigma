@@ -82,10 +82,16 @@ type ItemStatus = 'pending' | 'uploading' | 'done' | 'error'
 interface UploadItem {
   file: File
   status: ItemStatus
+  imagePath?: string
 }
 
 const items = ref<UploadItem[]>([])
-const running = ref(false)
+// Count of live worker loops rather than a single boolean: `addFiles()` on an
+// overlapping batch needs to top up back to 3 workers, not just check "is a
+// batch already running" — a boolean can't tell "1 of 3 workers is still
+// alive" from "all 3 are alive".
+const liveWorkers = ref(0)
+const running = computed(() => liveWorkers.value > 0)
 const dragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -99,7 +105,7 @@ watch(() => props.modelValue, open => {
 
 function onPick(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files) addFiles(Array.from(input.files))
+  if (input.files) addFiles(Array.from(input.files).filter(f => f.type.startsWith('image/')))
   input.value = ''
 }
 
@@ -112,7 +118,7 @@ function onDrop(e: DragEvent) {
 function addFiles(files: File[]) {
   if (files.length === 0) return
   items.value.push(...files.map(file => ({ file, status: 'pending' as ItemStatus })))
-  void run()
+  topUpWorkers()
 }
 
 /** Card name = file stem; backend rejects empty names, so fall back. */
@@ -127,10 +133,16 @@ async function processItem(item: UploadItem) {
   // between a worker's find() and this line).
   item.status = 'uploading'
   try {
-    const res = await gachaAdminApi.uploadFile(item.file, 'cards')
-    const data = (res as { data?: { data?: { image_path?: string } } }).data
-    const imagePath = data?.data?.image_path ?? ''
-    if (!imagePath) throw new Error('empty image_path')
+    // A retry after a createCard failure already has imagePath from the
+    // earlier successful upload — skip re-uploading the blob to MinIO.
+    let imagePath = item.imagePath
+    if (!imagePath) {
+      const res = await gachaAdminApi.uploadFile(item.file, 'cards')
+      const data = (res as { data?: { data?: { image_path?: string } } }).data
+      imagePath = data?.data?.image_path ?? ''
+      if (!imagePath) throw new Error('empty image_path')
+      item.imagePath = imagePath
+    }
     await gachaAdminApi.createCard({
       name: nameFromFile(item.file),
       source_title: '',
@@ -146,21 +158,28 @@ async function processItem(item: UploadItem) {
   }
 }
 
-/** Drain all pending items with at most 3 concurrent workers. */
-async function run() {
-  if (running.value) return
-  running.value = true
-  try {
-    const workers = Array.from({ length: 3 }, async () => {
-      for (;;) {
-        const next = items.value.find(i => i.status === 'pending')
-        if (!next) return
-        await processItem(next)
+/**
+ * Top up live workers to (at most) 3 so overlapping `addFiles()` batches
+ * don't drain through however many workers happened to still be alive.
+ * Each worker keeps draining pending items until none remain, then
+ * decrements `liveWorkers` on its way out — so a later top-up call can
+ * revive it instead of the queue being stuck on whatever survived.
+ */
+function topUpWorkers() {
+  const want = Math.min(3, items.value.filter(i => i.status === 'pending').length)
+  while (liveWorkers.value < want) {
+    liveWorkers.value++
+    void (async () => {
+      try {
+        for (;;) {
+          const next = items.value.find(i => i.status === 'pending')
+          if (!next) return
+          await processItem(next)
+        }
+      } finally {
+        liveWorkers.value--
       }
-    })
-    await Promise.all(workers)
-  } finally {
-    running.value = false
+    })()
   }
 }
 
@@ -168,6 +187,6 @@ function retryFailed() {
   for (const item of items.value) {
     if (item.status === 'error') item.status = 'pending'
   }
-  void run()
+  topUpWorkers()
 }
 </script>

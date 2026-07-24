@@ -115,6 +115,62 @@ describe('GachaBulkUpload', () => {
     expect(gachaAdminApi.createCard).toHaveBeenCalledTimes(1)
   })
 
+  it('tops up workers so a second overlapping batch is not stuck behind a single busy worker', async () => {
+    let resolveFirstUpload!: (v: unknown) => void
+    vi.mocked(gachaAdminApi.uploadFile).mockImplementationOnce(
+      () => new Promise(resolve => { resolveFirstUpload = resolve as (v: unknown) => void })
+    )
+    vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({
+      data: { data: { image_path: 'cards/x.png', image_url: '' } },
+    } as never)
+    vi.mocked(gachaAdminApi.createCard).mockResolvedValue({ data: { data: {} } } as never)
+
+    const wrapper = mountDialog()
+
+    // First pick: 1 file whose upload promise stays open — this alone used to
+    // permanently exhaust 2 of the 3 workers under the old `running` boolean.
+    await pickFiles(wrapper, [new File(['a'], 'Slow.png', { type: 'image/png' })])
+
+    // Second, overlapping pick: 3 more files with instantly-resolving mocks.
+    await pickFiles(wrapper, [
+      new File(['b'], 'B.png', { type: 'image/png' }),
+      new File(['c'], 'C.png', { type: 'image/png' }),
+      new File(['d'], 'D.png', { type: 'image/png' }),
+    ])
+
+    // The top-up must have revived workers to pick up the new batch even
+    // though the first worker is still stuck on the held-open upload —
+    // proven by the call count reaching all 4 files before it is released.
+    expect(gachaAdminApi.uploadFile).toHaveBeenCalledTimes(4)
+
+    resolveFirstUpload({ data: { data: { image_path: 'cards/slow.png', image_url: '' } } })
+    await flushPromises()
+
+    const statuses = wrapper.findAll('li').map(li => li.text())
+    expect(statuses.every(s => s.startsWith('✓'))).toBe(true)
+  })
+
+  it('does not re-upload an already-uploaded blob when retrying a createCard failure', async () => {
+    vi.mocked(gachaAdminApi.uploadFile).mockResolvedValue({
+      data: { data: { image_path: 'cards/x.png', image_url: '' } },
+    } as never)
+    vi.mocked(gachaAdminApi.createCard).mockRejectedValueOnce(new Error('boom'))
+
+    const wrapper = mountDialog()
+    await pickFiles(wrapper, [new File(['a'], 'Emilia.png', { type: 'image/png' })])
+
+    expect(gachaAdminApi.uploadFile).toHaveBeenCalledTimes(1)
+    expect(gachaAdminApi.createCard).toHaveBeenCalledTimes(1)
+
+    vi.mocked(gachaAdminApi.createCard).mockResolvedValue({ data: { data: {} } } as never)
+    const retry = wrapper.find('[data-testid="bulk-retry-btn"]')
+    await retry.trigger('click')
+    await flushPromises()
+
+    expect(gachaAdminApi.uploadFile).toHaveBeenCalledTimes(1)
+    expect(gachaAdminApi.createCard).toHaveBeenCalledTimes(2)
+  })
+
   it('blocks a Modal close (Escape/backdrop/X) while a batch is running, and allows it once finished', async () => {
     let resolveUpload!: (v: unknown) => void
     vi.mocked(gachaAdminApi.uploadFile).mockImplementation(
