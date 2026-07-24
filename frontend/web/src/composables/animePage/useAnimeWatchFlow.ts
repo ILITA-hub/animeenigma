@@ -7,6 +7,7 @@ import { useWatchState } from '@/composables/useWatchState'
 import type { WatchCta } from '@/composables/watchState'
 import { useToast } from '@/composables/useToast'
 import { userApi } from '@/api/client'
+import { isReloadOntoCurrentUrl } from '@/utils/reloadDetection'
 
 export interface AnimeWatchFlowDeps {
   anime: Ref<Anime | null>
@@ -50,9 +51,9 @@ export function useAnimeWatchFlow(deps: AnimeWatchFlowDeps) {
     playerSectionRef.value?.scrollIntoView({ behavior, block: 'start' })
   }
 
-  async function activatePlayer() {
+  async function activatePlayer({ scroll = true }: { scroll?: boolean } = {}) {
     playerActivated.value = true
-    await scrollToPlayerSection()
+    if (scroll) await scrollToPlayerSection()
   }
 
   const resumeAnimeId = computed(() => anime.value?.id ?? '')
@@ -108,7 +109,10 @@ export function useAnimeWatchFlow(deps: AnimeWatchFlowDeps) {
         // Defer to onMounted's anime-load path so the player has its data.
         // activatePlayer() is idempotent; calling it here is safe even before
         // the anime resolves because the template gates on `v-if="anime"`.
-        activatePlayer()
+        // A genuine mid-watch reload (the URL already carries ?episode from the
+        // player's url-sync) mounts the player in place instead of jumping the
+        // page down to it (2026-07-24) — fresh / in-app deep-links still scroll.
+        activatePlayer({ scroll: !isReloadOntoCurrentUrl() })
       }
     },
     { immediate: true },

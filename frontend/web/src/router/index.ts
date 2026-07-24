@@ -378,6 +378,14 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
+    // Initial load / full page reload always lands at the top. On reload
+    // vue-router repopulates `savedPosition` from history.state.scroll (its
+    // `beforeunload` listener snapshots the live scroll), so restoring it here
+    // was the "random scroll-down on reload" bug on the home and anime pages.
+    // Genuine in-app back/forward (from !== START_LOCATION) still restores.
+    if (from === START_LOCATION) {
+      return { top: 0 }
+    }
     if (savedPosition) {
       return savedPosition
     }
