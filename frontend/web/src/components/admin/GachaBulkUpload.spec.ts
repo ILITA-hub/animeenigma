@@ -114,4 +114,38 @@ describe('GachaBulkUpload', () => {
 
     expect(gachaAdminApi.createCard).toHaveBeenCalledTimes(1)
   })
+
+  it('blocks a Modal close (Escape/backdrop/X) while a batch is running, and allows it once finished', async () => {
+    let resolveUpload!: (v: unknown) => void
+    vi.mocked(gachaAdminApi.uploadFile).mockImplementation(
+      () => new Promise(resolve => { resolveUpload = resolve as (v: unknown) => void })
+    )
+
+    const wrapper = mountDialog()
+    const input = wrapper.find('[data-testid="bulk-file-input"]')
+    Object.defineProperty(input.element, 'files', {
+      value: [new File(['a'], 'Slow.png', { type: 'image/png' })],
+      configurable: true,
+    })
+    await input.trigger('change')
+    await flushPromises()
+
+    // Upload is still pending -> the run is active. Simulate Modal forwarding
+    // an Escape/backdrop/X close the same way it forwards a real one: emitting
+    // update:modelValue(false) on the Modal stub.
+    const modal = wrapper.findComponent(ModalStub)
+    await modal.vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+    // Let the run finish.
+    vi.mocked(gachaAdminApi.createCard).mockResolvedValue({ data: { data: {} } } as never)
+    resolveUpload({ data: { data: { image_path: 'cards/slow.png', image_url: '' } } })
+    await flushPromises()
+
+    // Now a close request should propagate normally.
+    await modal.vm.$emit('update:modelValue', false)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+  })
 })

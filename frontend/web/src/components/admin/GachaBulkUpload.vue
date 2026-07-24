@@ -4,8 +4,10 @@
   <Modal
     :model-value="modelValue"
     :title="$t('gacha.admin.bulk_upload_title')"
-    closable
-    @update:model-value="v => emit('update:modelValue', v)"
+    :closable="!running"
+    :close-on-backdrop="!running"
+    :close-on-esc="!running"
+    @update:model-value="v => { if (v || !running) emit('update:modelValue', v) }"
   >
     <div
       class="border-2 border-dashed border-white/20 rounded-lg p-6 text-center cursor-pointer transition-colors"
