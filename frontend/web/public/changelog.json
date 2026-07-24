@@ -1,5 +1,18 @@
 [
   {
+    "date": "2026-07-24",
+    "entries": [
+      {
+        "type": "fix",
+        "message": "🔒 БОЛЬШОЕ УКРЕПЛЕНИЕ безопасности — аккаунты, стримы и вход теперь под ЖОСКОЙ защитой. МЫ закрыли дыры, которые никто даже не искал. Поверьте мне."
+      },
+      {
+        "type": "fix",
+        "message": "🔧 Сменил пароль — и ВСЕ чужие сессии вылетают мгновенно. Увели доступ? Один новый пароль ВЫШВЫРИВАЕТ вора со всех устройств. ЖОСКО. ВЕЛИКОЛЕПНО."
+      }
+    ]
+  },
+  {
     "date": "2026-07-23",
     "entries": [
       {
@@ -123,14 +136,6 @@
       {
         "type": "feature",
         "message": "🎬 ВТОРАЯ ЧАСТЬ секретного гайда теперь стартует СРАЗУ: AnimeEnigma сама открывает текущую рекомендацию куратора (или топ популярного), а на каждом шаге плеер раскрывает нужное меню — серии, источники, субтитры и настройки. Из первой части теперь можно перейти напрямую!"
-      },
-      {
-        "type": "fix",
-        "message": "Maintenance policy switches now actually pause the maintenance bot, daily provider recovery, and disk cleanup jobs."
-      },
-      {
-        "type": "fix",
-        "message": "Schedule no longer invents weekly episodes before a show's confirmed next-airing date during broadcast breaks."
       }
     ]
   }

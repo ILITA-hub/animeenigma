@@ -70,14 +70,21 @@ func NewAuthHandler(authService *service.AuthService, cookieConfig config.Cookie
 	}
 }
 
-func (h *AuthHandler) setRefreshTokenCookie(w http.ResponseWriter, token string) {
-	sameSite := http.SameSiteLaxMode
+// sameSiteMode resolves the configured SameSite policy string to its
+// http.SameSite value (defaulting to Lax). Shared by every Set-Cookie helper
+// below so the policy is defined in exactly one place.
+func (h *AuthHandler) sameSiteMode() http.SameSite {
 	switch h.cookieConfig.SameSite {
 	case "Strict":
-		sameSite = http.SameSiteStrictMode
+		return http.SameSiteStrictMode
 	case "None":
-		sameSite = http.SameSiteNoneMode
+		return http.SameSiteNoneMode
 	}
+	return http.SameSiteLaxMode
+}
+
+func (h *AuthHandler) setRefreshTokenCookie(w http.ResponseWriter, token string) {
+	sameSite := h.sameSiteMode()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:  refreshTokenCookieName,
@@ -119,13 +126,7 @@ func (h *AuthHandler) clearRefreshTokenCookie(w http.ResponseWriter) {
 }
 
 func (h *AuthHandler) setAccessTokenCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
-	sameSite := http.SameSiteLaxMode
-	switch h.cookieConfig.SameSite {
-	case "Strict":
-		sameSite = http.SameSiteStrictMode
-	case "None":
-		sameSite = http.SameSiteNoneMode
-	}
+	sameSite := h.sameSiteMode()
 
 	// Calculate MaxAge from expiration time
 	maxAge := int(time.Until(expiresAt).Seconds())
@@ -158,13 +159,7 @@ func (h *AuthHandler) clearAccessTokenCookie(w http.ResponseWriter) {
 }
 
 func (h *AuthHandler) setTelegramNonceCookie(w http.ResponseWriter, nonce string) {
-	sameSite := http.SameSiteLaxMode
-	switch h.cookieConfig.SameSite {
-	case "Strict":
-		sameSite = http.SameSiteStrictMode
-	case "None":
-		sameSite = http.SameSiteNoneMode
-	}
+	sameSite := h.sameSiteMode()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:  telegramNonceCookieName,
