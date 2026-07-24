@@ -2015,6 +2015,12 @@
       "loading": "Loading…",
       "title": "Notifications"
     },
+    "history": {
+      "viewOlder": "View older notifications",
+      "title": "All notifications",
+      "end": "That's everything — you're all caught up.",
+      "error": "Couldn't load more notifications."
+    },
     "newEpisode": {
       "singleEp": "Episode {n} is out",
       "rangeEp": "Episodes {n}–{m} are out",

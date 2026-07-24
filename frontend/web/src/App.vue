@@ -101,6 +101,11 @@
          false fully disables the surface. -->
     <NotificationToast v-if="notifEnabled" />
 
+    <!-- "View older notifications" history modal — App-root host so it
+         survives both trigger surfaces (bell dropdown, mobile-drawer Modal),
+         which unmount on close. Opens via store.openHistory(). -->
+    <NotificationHistoryModal v-if="notifEnabled" />
+
     <!-- Footer -->
     <footer v-if="!appError" class="py-8 px-4 text-center border-t border-white/10" :class="{ 'pb-24': tabBarVisible }">
       <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
@@ -189,6 +194,7 @@ import FeedbackButton from '@/components/layout/FeedbackButton.vue'
 import Toaster from '@/components/ui/Toaster.vue'
 import ConfirmDialogHost from '@/components/ui/ConfirmDialogHost.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
+import NotificationHistoryModal from '@/components/NotificationHistoryModal.vue'
 import MobileTabBar from '@/components/layout/MobileTabBar.vue'
 import SeasonDownloadHost from '@/components/SeasonDownloadHost.vue'
 import SiteGuide, { type SiteGuideMode } from '@/components/guide/SiteGuide.vue'

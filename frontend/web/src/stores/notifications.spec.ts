@@ -1,8 +1,25 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
+import {
+  listNotifications,
+  markRead as apiMarkRead,
+  markAllRead as apiMarkAllRead,
+  dismiss as apiDismiss,
+} from '@/api/notifications'
 import { useNotificationsStore, translateWatchUrl } from './notifications'
 import type { UserNotification } from '@/types/notification'
+
+vi.mock('@/api/notifications', () => ({
+  listNotifications: vi.fn(),
+  markRead: vi.fn(),
+  markAllRead: vi.fn(),
+  dismiss: vi.fn(),
+  click: vi.fn(),
+}))
+
+/** Flush the fire-and-forget fetch chains (mocked promises settle in a tick). */
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve))
 
 const STORAGE_KEY = 'notif:shownToasts'
 
@@ -80,5 +97,156 @@ describe('translateWatchUrl — notification deep-link params', () => {
       path: '/anime/abc',
       query: { provider: 'kodik', team: 'Studio Band', episode: '3' },
     })
+  })
+})
+
+describe('notifications store — history pagination', () => {
+  /** Page response builder matching the backend ListResponse shape. */
+  function page(items: UserNotification[], total: number, unread = 0) {
+    return { notifications: items, unread_count: unread, total }
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    vi.mocked(listNotifications).mockReset()
+    vi.mocked(apiMarkRead).mockReset().mockResolvedValue(undefined)
+    vi.mocked(apiMarkAllRead).mockReset().mockResolvedValue(0)
+    vi.mocked(apiDismiss).mockReset().mockResolvedValue(undefined)
+  })
+
+  it('openHistory loads the first page from offset 0', async () => {
+    vi.mocked(listNotifications).mockResolvedValue(page([notif('a'), notif('b')], 5, 2))
+    const store = useNotificationsStore()
+
+    store.openHistory()
+    expect(store.historyOpen).toBe(true)
+    await flush()
+
+    expect(listNotifications).toHaveBeenCalledWith('all', 30, 0)
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
+    expect(store.historyTotal).toBe(5)
+    expect(store.hasMoreHistory).toBe(true)
+    expect(store.unreadCount).toBe(2)
+  })
+
+  it('fetchMoreHistory appends the next page at offset = loaded rows', async () => {
+    vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('a')], 2))
+    const store = useNotificationsStore()
+    store.openHistory()
+    await flush()
+
+    vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('b')], 2))
+    await store.fetchMoreHistory()
+
+    expect(listNotifications).toHaveBeenLastCalledWith('all', 30, 1)
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a', 'b'])
+    expect(store.hasMoreHistory).toBe(false)
+  })
+
+  it('does not fetch again once every row is loaded', async () => {
+    vi.mocked(listNotifications).mockResolvedValue(page([notif('a')], 1))
+    const store = useNotificationsStore()
+    store.openHistory()
+    await flush()
+
+    await store.fetchMoreHistory()
+    expect(listNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  it('clamps total when an offset-drifted page is all duplicates', async () => {
+    vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('a')], 10))
+    const store = useNotificationsStore()
+    store.openHistory()
+    await flush()
+
+    // Same row again (new notifications shifted the offset window).
+    vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('a')], 10))
+    await store.fetchMoreHistory()
+
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a'])
+    expect(store.hasMoreHistory).toBe(false) // stops instead of spinning
+  })
+
+  it('records an error and recovers on retry', async () => {
+    vi.mocked(listNotifications).mockRejectedValueOnce(new Error('boom'))
+    const store = useNotificationsStore()
+    store.openHistory()
+    await flush()
+
+    expect(store.historyError).toBe('boom')
+    expect(store.historyItems).toEqual([])
+
+    vi.mocked(listNotifications).mockResolvedValueOnce(page([notif('a')], 1))
+    await store.fetchMoreHistory()
+    expect(store.historyError).toBeNull()
+    expect(store.historyItems.map((n) => n.id)).toEqual(['a'])
+  })
+
+  it('markRead flips the same id in both the dropdown and history lists', async () => {
+    const store = useNotificationsStore()
+    store.notifications = [notif('a')]
+    store.historyItems = [notif('a'), notif('old')]
+    store.unreadCount = 2
+
+    await store.markRead('a')
+
+    expect(store.notifications[0].read_at).not.toBeNull()
+    expect(store.historyItems[0].read_at).not.toBeNull()
+    expect(store.historyItems[1].read_at).toBeNull()
+    expect(store.unreadCount).toBe(1)
+  })
+
+  it('markRead works for a history-only (older) row', async () => {
+    const store = useNotificationsStore()
+    store.notifications = []
+    store.historyItems = [notif('old')]
+    store.unreadCount = 1
+
+    await store.markRead('old')
+
+    expect(store.historyItems[0].read_at).not.toBeNull()
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('dismiss removes the row from both lists and decrements historyTotal', async () => {
+    const store = useNotificationsStore()
+    store.notifications = [notif('a')]
+    store.historyItems = [notif('a'), notif('b')]
+    store.historyTotal = 2
+    store.unreadCount = 1
+
+    await store.dismiss('a')
+
+    expect(store.notifications).toEqual([])
+    expect(store.historyItems.map((n) => n.id)).toEqual(['b'])
+    expect(store.historyTotal).toBe(1)
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('markAllRead stamps history rows too', async () => {
+    const store = useNotificationsStore()
+    store.notifications = [notif('a')]
+    store.historyItems = [notif('a'), notif('old')]
+    store.unreadCount = 2
+
+    await store.markAllRead()
+
+    expect(store.historyItems.every((n) => n.read_at)).toBe(true)
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('stop() clears history state and closes the modal', async () => {
+    vi.mocked(listNotifications).mockResolvedValue(page([notif('a')], 1))
+    const store = useNotificationsStore()
+    store.openHistory()
+    await flush()
+
+    store.stop()
+
+    expect(store.historyOpen).toBe(false)
+    expect(store.historyItems).toEqual([])
+    expect(store.historyTotal).toBe(0)
+    expect(store.historyError).toBeNull()
   })
 })

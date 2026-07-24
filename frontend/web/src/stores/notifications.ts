@@ -32,6 +32,9 @@ import type { UserNotification, NewEpisodePayload } from '@/types/notification'
 
 const POLL_INTERVAL_MS = 60_000
 
+/** Page size for the "older notifications" history modal (backend caps at 100). */
+const HISTORY_PAGE_SIZE = 30
+
 /**
  * Minimum gap between "immediate" fetches (start(), tab-visible). Rapid
  * visibility flaps and auth-watcher restarts used to fire several unread
@@ -159,6 +162,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const lastFetchAt = ref<number>(0)
   const error = ref<string | null>(null)
 
+  // History modal ("view older notifications") — offset-paged over the same
+  // /notifications endpoint. Kept in the store (not the modal component) so
+  // markRead/dismiss/markAllRead can keep both cached lists consistent: the
+  // first page of history overlaps the dropdown's 20 rows as separate objects.
+  const historyOpen = ref<boolean>(false)
+  const historyItems = ref<UserNotification[]>([])
+  const historyTotal = ref<number>(0)
+  const historyLoading = ref<boolean>(false)
+  const historyError = ref<string | null>(null)
+
   // ---------------------------------------------------------------------------
   // Internal (non-reactive) bookkeeping
   // ---------------------------------------------------------------------------
@@ -168,6 +181,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
   let authListenerAttached = false
   let inFlight: Promise<void> | null = null
   let started = false
+  /** Bumped on every openHistory() so a page response that lands after a
+   *  reopen (or logout) can't append stale rows into the fresh session. */
+  let historyEpoch = 0
 
   // ---------------------------------------------------------------------------
   // Getters
@@ -191,6 +207,11 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
     return null
   })
+
+  /** More history pages exist beyond what's loaded. */
+  const hasMoreHistory = computed<boolean>(
+    () => historyItems.value.length < historyTotal.value,
+  )
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -247,25 +268,104 @@ export const useNotificationsStore = defineStore('notifications', () => {
     return inFlight
   }
 
+  /** Blank the history session; a stale in-flight page no longer owns any
+   *  of this state (the epoch bump orphans it). */
+  function resetHistoryState(): void {
+    historyEpoch += 1
+    historyItems.value = []
+    historyTotal.value = 0
+    historyLoading.value = false
+    historyError.value = null
+  }
+
+  /** Locate a notification in both cached lists (dropdown + history) —
+   *  the same id lives in each as a separate object. */
+  function locate(id: string) {
+    const idx = notifications.value.findIndex((n) => n.id === id)
+    const histIdx = historyItems.value.findIndex((n) => n.id === id)
+    return {
+      idx,
+      histIdx,
+      priorMain: idx >= 0 ? notifications.value[idx] : null,
+      priorHist: histIdx >= 0 ? historyItems.value[histIdx] : null,
+    }
+  }
+
+  /**
+   * Open the history modal and load its first page. Always restarts from a
+   * blank list — reopening must surface anything that arrived since.
+   */
+  function openHistory(): void {
+    if (!isFeatureEnabled()) return
+    resetHistoryState()
+    historyOpen.value = true
+    void fetchMoreHistory()
+  }
+
+  function closeHistory(): void {
+    historyOpen.value = false
+  }
+
+  /**
+   * Append the next history page (offset = rows already loaded). Deduped by
+   * id because new notifications arriving mid-scroll shift offset pages.
+   */
+  async function fetchMoreHistory(): Promise<void> {
+    if (!isFeatureEnabled()) return
+    if (historyLoading.value) return
+    if (historyItems.value.length > 0 && !hasMoreHistory.value) return
+
+    const epoch = historyEpoch
+    historyLoading.value = true
+    try {
+      const data = await listNotifications('all', HISTORY_PAGE_SIZE, historyItems.value.length)
+      if (epoch !== historyEpoch) return
+      const page = Array.isArray(data.notifications) ? data.notifications : []
+      const seen = new Set(historyItems.value.map((n) => n.id))
+      const fresh = page.filter((n) => !seen.has(n.id))
+      historyItems.value = [...historyItems.value, ...fresh]
+      historyTotal.value =
+        fresh.length === 0
+          ? // Empty page (the end) or all-duplicates (offset drift): stop
+            // paging rather than spin on identical requests.
+            historyItems.value.length
+          : typeof data.total === 'number'
+            ? data.total
+            : historyItems.value.length
+      if (typeof data.unread_count === 'number') {
+        unreadCount.value = data.unread_count
+      }
+      historyError.value = null
+    } catch (err) {
+      if (epoch !== historyEpoch) return
+      historyError.value = err instanceof Error ? err.message : String(err)
+    } finally {
+      if (epoch === historyEpoch) historyLoading.value = false
+    }
+  }
+
   /**
    * Optimistic mark-read: flip the local read_at + decrement count,
-   * then fire the API call. Rollback on error.
+   * then fire the API call. Rollback on error. Flips the row in BOTH the
+   * dropdown list and the history list (separate objects for the same id).
    */
   async function markRead(id: string): Promise<void> {
-    const idx = notifications.value.findIndex((n) => n.id === id)
-    if (idx < 0) return
-    const prior = notifications.value[idx]
+    const { idx, histIdx, priorMain, priorHist } = locate(id)
+    const prior = priorMain ?? priorHist
+    if (!prior) return
     if (prior.read_at) return // already read — no-op
 
     const now = new Date().toISOString()
-    notifications.value[idx] = { ...prior, read_at: now }
+    if (priorMain) notifications.value[idx] = { ...priorMain, read_at: now }
+    if (priorHist) historyItems.value[histIdx] = { ...priorHist, read_at: now }
     unreadCount.value = Math.max(0, unreadCount.value - 1)
 
     try {
       await apiMarkRead(id)
     } catch (err) {
       // Rollback
-      notifications.value[idx] = prior
+      if (priorMain) notifications.value[idx] = priorMain
+      if (priorHist) historyItems.value[histIdx] = priorHist
       unreadCount.value = unreadCount.value + 1
       error.value = err instanceof Error ? err.message : String(err)
       throw err
@@ -273,16 +373,22 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   /**
-   * Optimistic dismiss: remove from local list, decrement count if it
+   * Optimistic dismiss: remove from local list(s), decrement count if it
    * was unread. Rollback on error.
    */
   async function dismissNotification(id: string): Promise<void> {
-    const idx = notifications.value.findIndex((n) => n.id === id)
-    if (idx < 0) return
-    const prior = notifications.value[idx]
+    const { idx, histIdx, priorMain, priorHist } = locate(id)
+    const prior = priorMain ?? priorHist
+    if (!prior) return
     const wasUnread = !prior.read_at && !prior.dismissed_at
 
-    notifications.value = notifications.value.filter((n) => n.id !== id)
+    if (priorMain) {
+      notifications.value = notifications.value.filter((n) => n.id !== id)
+    }
+    if (priorHist) {
+      historyItems.value = historyItems.value.filter((n) => n.id !== id)
+      historyTotal.value = Math.max(0, historyTotal.value - 1)
+    }
     if (wasUnread) {
       unreadCount.value = Math.max(0, unreadCount.value - 1)
     }
@@ -292,9 +398,17 @@ export const useNotificationsStore = defineStore('notifications', () => {
     } catch (err) {
       // Rollback — splice back at the original position so order is
       // preserved.
-      const next = [...notifications.value]
-      next.splice(idx, 0, prior)
-      notifications.value = next
+      if (priorMain) {
+        const next = [...notifications.value]
+        next.splice(idx, 0, priorMain)
+        notifications.value = next
+      }
+      if (priorHist) {
+        const next = [...historyItems.value]
+        next.splice(histIdx, 0, priorHist)
+        historyItems.value = next
+        historyTotal.value = historyTotal.value + 1
+      }
       if (wasUnread) {
         unreadCount.value = unreadCount.value + 1
       }
@@ -309,15 +423,18 @@ export const useNotificationsStore = defineStore('notifications', () => {
    */
   async function markAllRead(): Promise<void> {
     const prior = notifications.value
+    const priorHist = historyItems.value
     const priorCount = unreadCount.value
     const now = new Date().toISOString()
     notifications.value = prior.map((n) => (n.read_at ? n : { ...n, read_at: now }))
+    historyItems.value = priorHist.map((n) => (n.read_at ? n : { ...n, read_at: now }))
     unreadCount.value = 0
 
     try {
       await apiMarkAllRead()
     } catch (err) {
       notifications.value = prior
+      historyItems.value = priorHist
       unreadCount.value = priorCount
       error.value = err instanceof Error ? err.message : String(err)
       throw err
@@ -448,6 +565,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
     inFlight = null
     error.value = null
     lastFetchAt.value = 0
+
+    resetHistoryState()
+    historyOpen.value = false
   }
 
   /** Mark a toast as shown (persisted) without server state changes. */
@@ -464,8 +584,14 @@ export const useNotificationsStore = defineStore('notifications', () => {
     polling,
     lastFetchAt,
     error,
+    historyOpen,
+    historyItems,
+    historyTotal,
+    historyLoading,
+    historyError,
     // getters
     latestUndismissedToast,
+    hasMoreHistory,
     // actions
     fetchNotifications,
     markRead,
@@ -475,5 +601,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
     start,
     stop,
     markToastShown,
+    openHistory,
+    closeHistory,
+    fetchMoreHistory,
   }
 })

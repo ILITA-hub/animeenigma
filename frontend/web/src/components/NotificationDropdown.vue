@@ -16,41 +16,31 @@
       :class="flat ? 'max-h-[min(420px,60svh)]' : 'max-h-[420px]'"
       role="region"
     >
-      <!-- Empty state -->
-      <EmptyState v-if="store.notifications.length === 0" size="sm" class="text-sm">
-        <template #icon><Bell class="size-10" /></template>
-        {{ $t('notifications.dropdown.empty') }}
-      </EmptyState>
-
-      <!-- Notification list. Read rows stay visible but tinted — the
-           single point of control for the read/unread visual split, so
-           the card renderers stay presentation-agnostic. -->
-      <ul v-else class="divide-y divide-white/5">
-        <li
-          v-for="n in store.notifications"
-          :key="n.id"
-          :class="{ 'opacity-70': n.read_at }"
-        >
-          <component
-            :is="resolveRenderer(n.type)"
-            :notification="n"
-            @close="$emit('close')"
-          />
-        </li>
-      </ul>
+      <NotificationList
+        :notifications="store.notifications"
+        @close="$emit('close')"
+      />
     </div>
 
-    <!-- Footer: mark-all-read (hidden when nothing unread) -->
-    <div
-      v-if="store.unreadCount > 0"
-      class="border-t border-white/10 bg-white/[0.02] px-3 py-2 flex items-center justify-end"
-    >
+    <!-- Footer: view-older (always) + mark-all-read (hidden when nothing unread) -->
+    <div class="border-t border-white/10 bg-white/[0.02] px-3 py-2 flex flex-col gap-2">
       <Button
+        v-if="store.unreadCount > 0"
         variant="link"
         size="xs"
+        class="self-end"
         @click="onMarkAllRead"
       >
         {{ $t('notifications.dropdown.markAllRead') }}
+      </Button>
+      <Button
+        variant="soft"
+        size="sm"
+        full-width
+        @click="onViewOlder"
+      >
+        <History aria-hidden="true" />
+        {{ $t('notifications.history.viewOlder') }}
       </Button>
     </div>
   </div>
@@ -74,10 +64,9 @@
  *
  * Phase 3 — workstream: notifications.
  */
-import { Bell } from 'lucide-vue-next'
-import EmptyState from '@/components/ui/EmptyState.vue'
+import { History } from 'lucide-vue-next'
+import NotificationList from '@/components/NotificationList.vue'
 import { useNotificationsStore } from '@/stores/notifications'
-import { resolveRenderer } from '@/lib/notification-renderers'
 import Button from '@/components/ui/Button.vue'
 
 defineProps<{ flat?: boolean }>()
@@ -95,5 +84,13 @@ async function onMarkAllRead(): Promise<void> {
     /* optimistic rollback handled in store */
   }
   emit('close')
+}
+
+/** Close whichever surface hosts the dropdown, then open the history modal
+ *  (hosted in App.vue so it outlives both the bell dropdown and the
+ *  mobile-drawer Modal). */
+function onViewOlder(): void {
+  emit('close')
+  store.openHistory()
 }
 </script>
