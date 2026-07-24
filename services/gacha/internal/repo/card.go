@@ -154,6 +154,7 @@ func (r *ContentRepository) GroupCardIDs(ctx context.Context, groupID string) ([
 type CardBulkSet struct {
 	Name        *string
 	SourceTitle *string
+	BackPath    *string
 	Rarity      *domain.Rarity
 	Enabled     *bool
 }
@@ -167,6 +168,9 @@ func (r *ContentRepository) BulkUpdateCards(ctx context.Context, ids []string, s
 	}
 	if set.SourceTitle != nil {
 		updates["source_title"] = *set.SourceTitle
+	}
+	if set.BackPath != nil {
+		updates["back_path"] = *set.BackPath
 	}
 	if set.Rarity != nil {
 		updates["rarity"] = *set.Rarity

@@ -227,6 +227,34 @@ func TestBulkUpdateCards_ValidationAndApply(t *testing.T) {
 	if got.Name != "A" {
 		t.Errorf("untouched field must survive: name = %q, want A", got.Name)
 	}
+
+	// back_path: set on both, then reset to "" (empty = default branded back).
+	back := "cards/back.webp"
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{
+		IDs: []string{c1.ID}, Set: BulkCardSet{BackPath: &back},
+	}); err != nil {
+		t.Fatalf("set back_path: %v", err)
+	}
+	got, err = svc.GetCard(ctx, c1.ID)
+	if err != nil {
+		t.Fatalf("get c1 after back_path: %v", err)
+	}
+	if got.BackPath != back {
+		t.Errorf("back_path not applied: %q", got.BackPath)
+	}
+	blank2 := ""
+	if _, err := svc.BulkUpdateCards(ctx, BulkUpdateCardsRequest{
+		IDs: []string{c1.ID}, Set: BulkCardSet{BackPath: &blank2},
+	}); err != nil {
+		t.Fatalf("reset back_path: %v", err)
+	}
+	got, err = svc.GetCard(ctx, c1.ID)
+	if err != nil {
+		t.Fatalf("get c1 after reset: %v", err)
+	}
+	if got.BackPath != "" {
+		t.Errorf("back_path must reset to empty, got %q", got.BackPath)
+	}
 }
 
 func TestBulkDeleteCards(t *testing.T) {

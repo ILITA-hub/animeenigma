@@ -125,6 +125,7 @@ func (s *ContentService) ListCards(ctx context.Context, f repo.CardFilter) ([]do
 type BulkCardSet struct {
 	Name        *string        `json:"name"`
 	SourceTitle *string        `json:"source_title"`
+	BackPath    *string        `json:"back_path"`
 	Rarity      *domain.Rarity `json:"rarity"`
 	Enabled     *bool          `json:"enabled"`
 }
@@ -143,7 +144,7 @@ func (s *ContentService) BulkUpdateCards(ctx context.Context, req BulkUpdateCard
 		return 0, apperrors.InvalidInput("ids is required")
 	}
 	set := req.Set
-	if set.Name == nil && set.SourceTitle == nil && set.Rarity == nil && set.Enabled == nil {
+	if set.Name == nil && set.SourceTitle == nil && set.BackPath == nil && set.Rarity == nil && set.Enabled == nil {
 		return 0, apperrors.InvalidInput("set must contain at least one field")
 	}
 	if set.Name != nil && *set.Name == "" {
@@ -155,6 +156,7 @@ func (s *ContentService) BulkUpdateCards(ctx context.Context, req BulkUpdateCard
 	return s.cards.BulkUpdateCards(ctx, req.IDs, repo.CardBulkSet{
 		Name:        set.Name,
 		SourceTitle: set.SourceTitle,
+		BackPath:    set.BackPath,
 		Rarity:      set.Rarity,
 		Enabled:     set.Enabled,
 	})
