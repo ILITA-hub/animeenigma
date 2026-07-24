@@ -9,7 +9,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -187,16 +186,66 @@ func encodePNG(t *testing.T, img image.Image) []byte {
 	return b.Bytes()
 }
 
+// noisyOpaqueImage builds a deterministic, non-flat opaque image: real card
+// art has photographic detail that makes JPEG q85 genuinely smaller than
+// PNG. A flat/solid fill does NOT have this property (see
+// TestOptimize_KeepsSmallerOriginal). Note a smooth *linear* per-pixel
+// pattern doesn't work either — e.g. R,G,B derived directly from x*7, x*3,
+// y*5 wrapping mod 256 is deflate-friendly (constant pixel-to-pixel delta,
+// so PNG's predictor crushes it) while its periodic wraparound edges are
+// adversarial for JPEG's block DCT (high-frequency ringing), making JPEG
+// *bigger* than PNG — empirically verified: 3000x1500 of that pattern is
+// ~99KB as PNG vs. ~1.7MB as JPEG. What actually reproduces "JPEG wins" is
+// a smooth low-frequency base (gradient) with genuinely uncorrelated
+// per-pixel noise layered on top, mimicking real sensor/compression noise:
+// deflate can't predict the noise (kills PNG), while JPEG's lossy
+// quantization discards it cheaply. The noise here is a deterministic
+// integer hash of (x, y) — no math/rand — so pixels are uncorrelated but
+// the image is still fully reproducible.
+func noisyOpaqueImage(w, h int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			h32 := uint32(x)*374761393 + uint32(y)*668265263
+			h32 = (h32 ^ (h32 >> 13)) * 1274126177
+			noise := uint8((h32 ^ (h32 >> 16)) & 0x3F) // 0..63
+			img.Set(x, y, color.RGBA{
+				R: uint8(x*255/w) + noise,
+				G: uint8(y*255/h) + noise,
+				B: 128 + noise,
+				A: 255,
+			})
+		}
+	}
+	return img
+}
+
 func TestOptimize_OpaquePNGBecomesJPEG(t *testing.T) {
-	// 100x100 solid color, fully opaque
-	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{200, 30, 30, 255}}, image.Point{}, draw.Src)
-	out, ct, ext := optimize(encodePNG(t, img), "image/png")
+	// Noisy (non-flat) fixture: see noisyOpaqueImage doc comment for why a
+	// flat fill can't be used here.
+	out, ct, ext := optimize(encodePNG(t, noisyOpaqueImage(100, 100)), "image/png")
 	if ct != "image/jpeg" || ext != ".jpg" {
 		t.Errorf("opaque png must become jpeg, got ct=%q ext=%q", ct, ext)
 	}
 	if _, err := jpeg.Decode(bytes.NewReader(out)); err != nil {
 		t.Errorf("output not decodable jpeg: %v", err)
+	}
+}
+
+func TestOptimize_KeepsSmallerOriginal(t *testing.T) {
+	// Flat solid color: PNG deflate crushes this far smaller than any JPEG
+	// q85 re-encode (fixed header + DCT block overhead loses to a trivial
+	// flat signal). optimize must keep the smaller original rather than
+	// force a re-encode that grows the file.
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{200, 30, 30, 255}}, image.Point{}, draw.Src)
+	in := encodePNG(t, img)
+	out, ct, ext := optimize(in, "image/png")
+	if ct != "image/png" || ext != ".png" {
+		t.Errorf("flat opaque png whose jpeg re-encode is bigger must stay png, got ct=%q ext=%q", ct, ext)
+	}
+	if !bytes.Equal(out, in) {
+		t.Errorf("flat opaque png must pass through byte-identical when jpeg would be bigger")
 	}
 }
 
@@ -213,9 +262,9 @@ func TestOptimize_AlphaPNGStaysPNG(t *testing.T) {
 }
 
 func TestOptimize_DownscalesOversized(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 3000, 1500))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{10, 20, 30, 255}}, image.Point{}, draw.Src)
-	out, ct, _ := optimize(encodePNG(t, img), "image/png")
+	// Noisy (non-flat) fixture so the downscaled JPEG genuinely wins on size
+	// (a flat 3000x1500 fill's PNG can still beat its downscaled JPEG).
+	out, ct, _ := optimize(encodePNG(t, noisyOpaqueImage(3000, 1500)), "image/png")
 	if ct != "image/jpeg" {
 		t.Fatalf("expected jpeg, got %q", ct)
 	}
@@ -248,25 +297,9 @@ func TestOptimize_PassthroughGifWebpGarbage(t *testing.T) {
 // optimize() directly) and must come out the other side as a much smaller
 // JPEG in the fake store.
 func TestIngestUpload_RecompressesOversizedOpaquePNG(t *testing.T) {
-	// A flat solid-color fill would defeat this test: PNG's deflate crushes
-	// constant color into a few hundred bytes, so JPEG q85 can't win. Real
-	// card art has photographic detail, so simulate that with a noisy
-	// gradient (still opaque) — this is what actually makes JPEG smaller.
-	w, h := 3000, 1500
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	rnd := rand.New(rand.NewSource(42))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			noise := uint8(rnd.Intn(40))
-			img.Set(x, y, color.RGBA{
-				R: uint8(x*255/w) + noise,
-				G: uint8(y*255/h) + noise,
-				B: 128 + noise,
-				A: 255,
-			})
-		}
-	}
-	pngBytes := encodePNG(t, img)
+	// Noisy (non-flat) fixture: see noisyOpaqueImage doc comment for why a
+	// flat fill can't be used to prove "jpeg is much smaller".
+	pngBytes := encodePNG(t, noisyOpaqueImage(3000, 1500))
 
 	store := &fakeStore{}
 	svc := NewImageService(store)

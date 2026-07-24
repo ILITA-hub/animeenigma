@@ -155,14 +155,15 @@ func optimize(buf []byte, ct string) ([]byte, string, string) {
 		scaled = true
 	}
 
-	// Opaque images always normalize to JPEG: anime art PNGs are typically
-	// 8-10x smaller as JPEG, and format normalization (one predictable
-	// content-type for all opaque art) is worth it even on the rare
-	// synthetic/flat-color input where JPEG's fixed block overhead loses to
-	// PNG's deflate.
+	// Opaque images normalize to JPEG q85 (anime art PNGs are typically
+	// 8-10x smaller as JPEG) — but only when the re-encode actually shrinks
+	// the file. A flat-color/near-solid PNG can deflate smaller than any
+	// JPEG re-encode of it (JPEG has fixed header + DCT block overhead);
+	// keeping the smaller original in that case is strictly better: fewer
+	// bytes AND (when unscaled) full original resolution.
 	if isOpaque(img) {
 		var out bytes.Buffer
-		if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: jpegQuality}); err == nil {
+		if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: jpegQuality}); err == nil && out.Len() < len(buf) {
 			return out.Bytes(), "image/jpeg", ".jpg"
 		}
 		return buf, ct, extForCT(ct)
