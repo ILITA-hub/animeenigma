@@ -136,6 +136,87 @@ func TestProxyService_Forward_PreservesAuthorization(t *testing.T) {
 	}
 }
 
+// TestProxyService_Forward_StripsForgedClientIPProvenance — F31 (CWE-290)
+// regression. An unauthenticated client MUST NOT be able to choose the IP
+// identity a backend's chi middleware.RealIP observes. Every client-supplied
+// IP-provenance header (True-Client-IP, X-Forwarded-For, X-Real-IP,
+// CF-Connecting-IP, Forwarded) must be stripped from the upstream request and
+// exactly one — X-Real-IP — re-asserted from the gateway's validated
+// r.RemoteAddr, so the backend keys its scraper quota / session / audit records
+// on the gateway-attested address, not the attacker's.
+func TestProxyService_Forward_StripsForgedClientIPProvenance(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	// Attacker forges every IP-provenance header with the same bogus address.
+	const forged = "6.6.6.6"
+	req.Header.Set("True-Client-IP", forged)
+	req.Header.Set("X-Forwarded-For", forged+", 10.0.0.2")
+	req.Header.Set("X-Real-IP", forged)
+	req.Header.Set("CF-Connecting-IP", forged)
+	req.Header.Set("Forwarded", "for="+forged)
+	// The gateway's RealClientIP middleware already put the validated peer here
+	// (bare IP, no port — the post-middleware shape).
+	req.RemoteAddr = "203.0.113.7"
+
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	// The two headers chi RealIP prefers over X-Real-IP, plus the CDN/RFC ones,
+	// must not carry the attacker value at all.
+	for _, h := range []string{"True-Client-IP", "X-Forwarded-For", "CF-Connecting-IP", "Forwarded"} {
+		if got := headers.Get(h); strings.Contains(got, forged) {
+			t.Errorf("backend received forged %s = %q; attacker IP must be stripped", h, got)
+		}
+	}
+	// Exactly one attested address is asserted, and it is the gateway's
+	// validated r.RemoteAddr — never the attacker's forged value.
+	if got := headers.Get("X-Real-IP"); got != "203.0.113.7" {
+		t.Errorf("backend received X-Real-IP = %q; want the gateway-attested 203.0.113.7 (not the forged %s)", got, forged)
+	}
+}
+
+// TestProxyService_Forward_ConveysRealClientIPToBackend — F31 companion. The
+// fix must not blind the backend: a normal request still conveys the real
+// client IP. The gateway derives it from r.RemoteAddr (here the fail-safe
+// host:port TCP-peer form) and re-asserts it as X-Real-IP for the backend's
+// chi middleware.RealIP.
+func TestProxyService_Forward_ConveysRealClientIPToBackend(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	p := newTestProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/scraper/health", nil)
+	req.RemoteAddr = "198.51.100.23:5555"
+
+	resp, err := p.Forward(req, "scraper")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	headers := <-gotHeaders
+	if got := headers.Get("X-Real-IP"); got != "198.51.100.23" {
+		t.Errorf("backend received X-Real-IP = %q; want the real client 198.51.100.23 (host of r.RemoteAddr)", got)
+	}
+}
+
 // newTestProxy constructs a ProxyService wired to a config with the given
 // scraper URL. The other service URLs are left as zero-value strings — tests
 // in this file only exercise the scraper case.
@@ -713,5 +794,151 @@ func TestProxyService_Upscaler_StripsAdminIDWhenNoClaims(t *testing.T) {
 	headers := <-gotHeaders
 	if got := headers.Get("X-Admin-ID"); got != "" {
 		t.Errorf("upscaler backend received X-Admin-ID = %q; want empty (forged header must be stripped when no claims)", got)
+	}
+}
+
+// newTestPlayerProxy points the player service URL at a test backend.
+func newTestPlayerProxy(playerURL string) *ProxyService {
+	return NewProxyService(config.ServiceURLs{
+		PlayerService: playerURL,
+	}, logger.Default())
+}
+
+// upstreamTarget captures what a backend actually receives on the wire: the
+// escaped path, the decoded path, the query, and the raw request-target line.
+type upstreamTarget struct {
+	escapedPath string
+	path        string
+	rawQuery    string
+	requestURI  string
+}
+
+// recordUpstream spins up a backend that records the inbound request target and
+// returns it over a channel — this is exactly what the upstream service sees.
+func recordUpstream(t *testing.T) (*httptest.Server, <-chan upstreamTarget) {
+	t.Helper()
+	got := make(chan upstreamTarget, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- upstreamTarget{
+			escapedPath: r.URL.EscapedPath(),
+			path:        r.URL.Path,
+			rawQuery:    r.URL.RawQuery,
+			requestURI:  r.RequestURI,
+		}
+		w.WriteHeader(http.StatusOK)
+	})) //nolint:bodyclose
+	return srv, got
+}
+
+// TestProxyService_Forward_PreservesEscapedPath is the CWE-436 regression
+// (route/authorization confusion). chi authorizes on the ESCAPED path, so a
+// percent-encoded '/', '?' or '#' inside a matched {param}/* segment stays a
+// single opaque segment for the gateway's route+middleware decision. The
+// upstream request MUST carry that same escaping — forwarding the DECODED path
+// let http.NewRequestWithContext re-split the URL on the injected special (an
+// encoded '?' truncated the path to a DIFFERENT upstream route than chi
+// authorized), sidestepping FeatureGate/JWT/guest-block/rate-limit middleware.
+//
+// The attacker segment "VICTIM%2Fshowcase%3Fz" matches the unauthenticated
+// /users/{userId}/watchlist/public route (no literal '/' in the raw segment),
+// but the OLD decoded-path forward emitted GET /api/users/VICTIM/showcase to
+// player, serving the public-showcase handler FeatureGate was meant to withhold.
+func TestProxyService_Forward_PreservesEscapedPath(t *testing.T) {
+	t.Parallel()
+	backend, got := recordUpstream(t)
+	defer backend.Close()
+
+	const target = "/api/users/VICTIM%2Fshowcase%3Fz/watchlist/public"
+	p := newTestPlayerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	// Sanity: chi would have matched on this escaped form (RawPath set).
+	if req.URL.EscapedPath() != target {
+		t.Fatalf("test setup: inbound EscapedPath = %q; want %q", req.URL.EscapedPath(), target)
+	}
+
+	resp, err := p.Forward(req, "player")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	up := <-got
+	// The backend must receive the SAME opaque segment chi matched — the
+	// %2F/%3F stay encoded, not split into extra path segments or a query.
+	if up.escapedPath != target {
+		t.Errorf("backend escaped path = %q; want %q (encoded specials must survive end-to-end)", up.escapedPath, target)
+	}
+	if up.requestURI != target {
+		t.Errorf("backend request-target = %q; want %q (chi-authorized route must equal served route)", up.requestURI, target)
+	}
+	// The injected '?' MUST NOT have become a real query string.
+	if up.rawQuery != "" {
+		t.Errorf("backend raw query = %q; want empty (an encoded '?' must not truncate the path into a query)", up.rawQuery)
+	}
+	// Decoded, the backend sees the single opaque segment (literal '/'+'?' from
+	// %2F/%3F), NOT the truncated /api/users/VICTIM/showcase the old code served.
+	const wantDecoded = "/api/users/VICTIM/showcase?z/watchlist/public"
+	if up.path != wantDecoded {
+		t.Errorf("backend decoded path = %q; want %q", up.path, wantDecoded)
+	}
+}
+
+// TestProxyService_Forward_NormalPathByteIdentical pins the no-regression half:
+// a request with NO percent-encoded specials in its path (plus a real query)
+// must forward a byte-identical upstream request-target to what the old
+// targetURL+r.URL.Path+"?"+RawQuery concatenation produced — routing for the
+// normal 99% case is unchanged by the escaping-preservation fix.
+func TestProxyService_Forward_NormalPathByteIdentical(t *testing.T) {
+	t.Parallel()
+	backend, got := recordUpstream(t)
+	defer backend.Close()
+
+	const target = "/api/users/abc123/watchlist/public?foo=bar&baz=1"
+	p := newTestPlayerProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+
+	resp, err := p.Forward(req, "player")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	up := <-got
+	if up.requestURI != target {
+		t.Errorf("backend request-target = %q; want %q (normal path must forward byte-identically)", up.requestURI, target)
+	}
+	if up.escapedPath != "/api/users/abc123/watchlist/public" {
+		t.Errorf("backend escaped path = %q; want /api/users/abc123/watchlist/public", up.escapedPath)
+	}
+	if up.rawQuery != "foo=bar&baz=1" {
+		t.Errorf("backend raw query = %q; want foo=bar&baz=1 (query must still forward)", up.rawQuery)
+	}
+}
+
+// TestProxyService_Forward_PreservesEscapedPathThroughRewrite asserts the
+// escaping-preservation survives a prefix-rewrite service too: the fixed
+// /api/streaming/ prefix is rewritten to /api/v1/ while an encoded special in
+// the trailing (param/wildcard) segment stays encoded end-to-end.
+func TestProxyService_Forward_PreservesEscapedPathThroughRewrite(t *testing.T) {
+	t.Parallel()
+	backend, got := recordUpstream(t)
+	defer backend.Close()
+
+	p := newTestStreamingProxy(backend.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/streaming/hls-proxy/a%2Fb%3Fc", nil)
+
+	resp, err := p.Forward(req, "streaming")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer resp.Body.Close()
+
+	up := <-got
+	const want = "/api/v1/hls-proxy/a%2Fb%3Fc"
+	if up.escapedPath != want {
+		t.Errorf("backend escaped path = %q; want %q (prefix rewritten AND encoded specials preserved)", up.escapedPath, want)
+	}
+	if up.rawQuery != "" {
+		t.Errorf("backend raw query = %q; want empty", up.rawQuery)
 	}
 }

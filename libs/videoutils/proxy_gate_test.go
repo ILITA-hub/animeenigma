@@ -16,11 +16,11 @@ import (
 // These tests lock the HLS proxy's trust gate after the 2026-07-14 allowlist
 // retirement (docs/stream-security.md):
 //
-//	admit ⇔ preauth (sealed stream token) OR first-party internal host OR
-//	        valid provenance signature
+//	admit ⇔ preauth (sealed stream token) OR valid provenance signature
 //
-// No static external-domain list exists anymore — an unsigned external host
-// must be rejected with *DomainNotAllowedError BEFORE any upstream dial.
+// No static external-domain list exists anymore, and no host — internal ones
+// included — is admitted on its name alone: an unauthorized URL must be
+// rejected with *DomainNotAllowedError BEFORE any upstream dial.
 
 // gateFixture serves a tiny payload and returns the server plus its sourceURL.
 func gateFixture(t *testing.T) (*httptest.Server, string) {
@@ -82,13 +82,15 @@ func TestTrustGate_SignedPasses(t *testing.T) {
 	assert.True(t, errors.As(err, &dna), "a forged signature must fail the gate, got %v", err)
 }
 
-// TestTrustGate_FirstPartyUnsignedPasses: a host in the configured
-// FirstPartyHosts set (stealth-scraper, minio in production) passes the gate
-// with NO signature — it resolves Docker-private, so SignStreamURL's
-// netguard.ValidatePublicURL rejects it by design and it can never be
-// publicly signed. Matching mirrors firstPartyAddr: exact host,
-// case-insensitive, port-stripped.
-func TestTrustGate_FirstPartyUnsignedPasses(t *testing.T) {
+// TestTrustGate_FirstPartyRequiresAuthorization: a host in the configured
+// FirstPartyHosts set (stealth-scraper, minio in production) gets NO free pass
+// at the trust gate. The proxy endpoint is public and unauthenticated, and it
+// presigns self-hosted MinIO reads on the way out, so admitting an
+// attacker-supplied `url=` just because it names an internal host handed out
+// unauthenticated reads of the private object store. Those hosts are hostnames,
+// not private IP literals, so catalog signs their URLs like any other emitter —
+// the signed (and the sealed-token preauth) forms still pass.
+func TestTrustGate_FirstPartyRequiresAuthorization(t *testing.T) {
 	_, sourceURL := gateFixture(t) // http://127.0.0.1:<port>/seg-1.ts
 	parsed, err := url.Parse(sourceURL)
 	require.NoError(t, err)
@@ -97,22 +99,34 @@ func TestTrustGate_FirstPartyUnsignedPasses(t *testing.T) {
 		UserAgent:       "test-agent",
 		FirstPartyHosts: []string{parsed.Hostname()}, // "127.0.0.1", port-stripped like "minio" vs minio:9000
 	})
+
+	// Unsigned — rejected, even though the host IS configured first-party.
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/hls-proxy?url="+url.QueryEscape(sourceURL), nil)
-
 	_, _, err = proxy.ProxyWithRefererCounted(context.Background(), sourceURL, "", rec, req)
-	assert.NoError(t, err, "unsigned first-party host must pass the trust gate")
-	assert.Equal(t, "segment-bytes", rec.Body.String())
-
-	// The same unsigned URL WITHOUT the first-party config is rejected — the
-	// exemption is the configured set, not the host's dialability.
-	bare := NewVideoProxy(ProxyConfig{UserAgent: "test-agent"})
-	rec2 := httptest.NewRecorder()
-	_, _, err = bare.ProxyWithRefererCounted(context.Background(), sourceURL, "", rec2, req)
 	var dna *DomainNotAllowedError
-	assert.True(t, errors.As(err, &dna),
-		"unsigned host outside FirstPartyHosts must fail the gate, got %v", err)
+	require.True(t, errors.As(err, &dna),
+		"unsigned first-party host must fail the trust gate, got %v", err)
+	assert.Empty(t, rec.Body.String(), "a rejected fetch must not relay upstream bytes")
+
+	// Signed — the shape catalog emits for library playlists and the sidecar's
+	// /hls URLs (raw_resolver.newLibraryStream / streamsign) — passes.
+	exp, sig := signProvenance(sourceURL, time.Now())
+	require.NotEmpty(t, sig, "test secret must mint a provenance token")
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet,
+		"/api/v1/hls-proxy?url="+url.QueryEscape(sourceURL)+"&exp="+exp+"&sig="+sig, nil)
+	_, _, err = proxy.ProxyWithRefererCounted(context.Background(), sourceURL, "", rec2, req2)
+	assert.NoError(t, err, "signed first-party URL must pass the trust gate")
+	assert.Equal(t, "segment-bytes", rec2.Body.String())
+
+	// Sealed masked token (the frontend's preferred form for these URLs) —
+	// preauth skips the gate, so first-party playback keeps working there too.
+	rec3 := httptest.NewRecorder()
+	_, _, err = proxy.ProxyPreauthCounted(context.Background(), sourceURL, "", rec3, req)
+	assert.NoError(t, err, "preauth first-party fetch must pass")
+	assert.Equal(t, "segment-bytes", rec3.Body.String())
 }
 
 // TestTrustGate_PreauthPasses: ProxyPreauthCounted skips the gate entirely —

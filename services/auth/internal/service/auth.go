@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -164,6 +165,14 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest,
 }
 
 func (s *AuthService) Login(ctx context.Context, req *domain.LoginRequest, sc SessionContext) (*domain.AuthResponse, error) {
+	// Reject over-long usernames before any DB or cache work. Registration
+	// caps usernames at 32 chars, so anything longer can never match a real
+	// account — treat it as an unknown user with the same generic error, and
+	// never let it reach the throttle store (audit F13).
+	if len(req.Username) > maxLoginUsernameLen {
+		return nil, errors.Unauthorized("invalid credentials")
+	}
+
 	// Brute-force throttle (audit medium #6): reject before doing any work
 	// once the per-account failure threshold is hit.
 	if s.loginLocked(ctx, req.Username) {
@@ -313,17 +322,35 @@ func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.Tele
 	return s.createSessionAndAuthResponse(ctx, user, sc)
 }
 
-// CreateDeepLinkToken generates a unique token and stores an empty auth session in Redis.
+// CreateDeepLinkToken generates a unique token and stores a pending auth session in Redis.
 // The returned deep link URL opens the Telegram bot with /start <token>.
-func (s *AuthService) CreateDeepLinkToken(ctx context.Context, botName string) (*domain.DeepLinkResponse, error) {
+//
+// It also mints a one-time browser-binding nonce: only the nonce's hash is
+// stored in the session, and the raw nonce is returned to the caller so the
+// HTTP layer can set it as an HttpOnly cookie in the minting browser. A later
+// /check poll must present the matching cookie (see CheckDeepLinkToken), which
+// stops a leaked token from being redeemed by a different browser (vector A).
+//
+// sc captures the requesting client (IP + User-Agent) so the bot's
+// Confirm-login prompt can show where the login was requested from — letting a
+// victim decline an attacker-initiated login they did not start (vector B).
+func (s *AuthService) CreateDeepLinkToken(ctx context.Context, botName string, sc SessionContext) (*domain.DeepLinkResponse, string, error) {
 	token := uuid.New().String()
 
+	nonce, err := generateBindingNonce()
+	if err != nil {
+		return nil, "", fmt.Errorf("generate binding nonce: %w", err)
+	}
+
 	session := &domain.TelegramAuthSession{
-		Status: "pending",
+		Status:    "pending",
+		NonceHash: hashBindingNonce(nonce),
+		RequestIP: sc.IP,
+		RequestUA: truncateUA(sc.UserAgent),
 	}
 
 	if err := s.cache.Set(ctx, cache.KeyTelegramAuth(token), session, cache.TTLTelegramAuth); err != nil {
-		return nil, fmt.Errorf("store telegram auth session: %w", err)
+		return nil, "", fmt.Errorf("store telegram auth session: %w", err)
 	}
 
 	deepLinkURL := fmt.Sprintf("https://t.me/%s?start=%s", botName, token)
@@ -332,15 +359,31 @@ func (s *AuthService) CreateDeepLinkToken(ctx context.Context, botName string) (
 		Token:       token,
 		DeepLinkURL: deepLinkURL,
 		ExpiresIn:   int(cache.TTLTelegramAuth.Seconds()),
-	}, nil
+	}, nonce, nil
 }
 
 // CheckDeepLinkToken polls the status of a deep link auth session.
 // Returns the session status and, if confirmed, completes login and returns auth tokens.
-func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string, sc SessionContext) (*domain.DeepLinkCheckResponse, *domain.AuthResponse, error) {
+//
+// bindingNonce is the raw one-time nonce presented by the polling browser (read
+// from the HttpOnly cookie set at mint time), or "" if absent. The pending
+// session is bound to the browser that minted it: unless the presented nonce
+// hashes to the stored NonceHash, we refuse to advance the flow — a token
+// leaked in a URL/referer cannot be redeemed by a browser that never held the
+// cookie (vector A). Sessions minted before browser-binding existed carry an
+// empty NonceHash and are treated as unbound (fail-open) so an in-flight login
+// survives a rolling deploy.
+func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token, bindingNonce string, sc SessionContext) (*domain.DeepLinkCheckResponse, *domain.AuthResponse, error) {
 	var session domain.TelegramAuthSession
 	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
 	if err != nil {
+		return nil, nil, errors.NotFound("token not found or expired")
+	}
+
+	// Browser-binding gate. On mismatch, return the same NotFound as an
+	// unknown/expired token so a caller without the cookie cannot even tell the
+	// token exists.
+	if session.NonceHash != "" && !bindingNonceMatches(bindingNonce, session.NonceHash) {
 		return nil, nil, errors.NotFound("token not found or expired")
 	}
 
@@ -378,26 +421,31 @@ func (s *AuthService) CheckDeepLinkToken(ctx context.Context, token string, sc S
 }
 
 // HandleTelegramStart is called when a user sends /start <token> to the bot.
-// It validates the token exists in Redis and records the Telegram user who started the flow.
-func (s *AuthService) HandleTelegramStart(ctx context.Context, token string, tgUser *domain.TelegramWebhookUser) error {
+// It validates the token exists in Redis and records the Telegram user who
+// started the flow. It returns a human-readable summary of the client that
+// requested the login (device + IP captured at mint time), which the bot shows
+// in the Confirm-login prompt so a victim asked to confirm a login they did not
+// start can spot the unfamiliar origin and decline (vector B). The summary is
+// "" when no request context was captured.
+func (s *AuthService) HandleTelegramStart(ctx context.Context, token string, tgUser *domain.TelegramWebhookUser) (string, error) {
 	var session domain.TelegramAuthSession
 	err := s.cache.Get(ctx, cache.KeyTelegramAuth(token), &session)
 	if err != nil {
-		return errors.NotFound("token not found or expired")
+		return "", errors.NotFound("token not found or expired")
 	}
 
 	if session.Status != "pending" {
-		return errors.InvalidInput("token already used")
+		return "", errors.InvalidInput("token already used")
 	}
 
 	session.Status = "started"
 	session.TelegramID = tgUser.ID
 
 	if err := s.cache.Set(ctx, cache.KeyTelegramAuth(token), &session, cache.TTLTelegramAuth); err != nil {
-		return fmt.Errorf("update telegram auth session: %w", err)
+		return "", fmt.Errorf("update telegram auth session: %w", err)
 	}
 
-	return nil
+	return loginRequestOrigin(session.RequestIP, session.RequestUA), nil
 }
 
 // HandleTelegramCallback is called when the user clicks the "Confirm" button in the bot.
@@ -563,6 +611,55 @@ func generateRefreshToken() (string, error) {
 func hashRefreshToken(rt string) string {
 	sum := sha256.Sum256([]byte(rt))
 	return hex.EncodeToString(sum[:])
+}
+
+// generateBindingNonce returns a fresh opaque one-time nonce (32 random bytes,
+// hex-encoded) used to bind a deep-link token to the browser that minted it.
+func generateBindingNonce() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("rand: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// hashBindingNonce returns the sha256-hex of a binding nonce. Only the hash is
+// stored in Redis; the raw nonce lives solely in the browser's HttpOnly cookie.
+func hashBindingNonce(nonce string) string {
+	sum := sha256.Sum256([]byte(nonce))
+	return hex.EncodeToString(sum[:])
+}
+
+// bindingNonceMatches reports whether the presented raw nonce hashes to the
+// stored hash, using a constant-time comparison. An empty presented nonce never
+// matches a non-empty stored hash.
+func bindingNonceMatches(nonce, storedHash string) bool {
+	if nonce == "" || storedHash == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(hashBindingNonce(nonce)), []byte(storedHash)) == 1
+}
+
+// loginRequestOrigin renders a short, plain-text summary of the client that
+// requested a deep-link login, for display in the bot's Confirm-login prompt.
+// Returns "" when neither field was captured. The text is sent with no Telegram
+// parse_mode, so the (attacker-influenced) User-Agent cannot inject markup.
+func loginRequestOrigin(ip, ua string) string {
+	if ip == "" && ua == "" {
+		return ""
+	}
+	device := ua
+	if device == "" {
+		device = "unknown device"
+	}
+	const maxDisplayUA = 200
+	if len(device) > maxDisplayUA {
+		device = device[:maxDisplayUA] + "…"
+	}
+	if ip == "" {
+		ip = "unknown"
+	}
+	return fmt.Sprintf("Device: %s\nIP address: %s", device, ip)
 }
 
 // createSessionAndAuthResponse mints a fresh session row + tokens.

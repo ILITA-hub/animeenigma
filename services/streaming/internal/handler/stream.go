@@ -388,7 +388,7 @@ func (h *StreamHandler) serveProxy(w http.ResponseWriter, r *http.Request, sourc
 		if errors.As(err, &upstreamErr) {
 			metrics.ProxyUpstreamErrors.WithLabelValues(
 				strconv.Itoa(upstreamErr.StatusCode),
-				upstreamErr.Domain,
+				h.boundUpstreamDomain(sourceURL, upstreamErr.Domain),
 			).Inc()
 			h.log.Warnw("upstream CDN error",
 				"status", upstreamErr.StatusCode,
@@ -407,7 +407,14 @@ func (h *StreamHandler) serveProxy(w http.ResponseWriter, r *http.Request, sourc
 		// canary all rely on this becoming an observable failure.
 		var domainErr *videoutils.DomainNotAllowedError
 		if errors.As(err, &domainErr) {
-			metrics.ProxyUpstreamErrors.WithLabelValues("403", domainErr.Domain).Inc()
+			// Bound the metric label: this host failed the trust gate, so it is
+			// never first-party/own-storage (those pass the gate) and is taken
+			// straight from the attacker-controlled ?url= parameter. Using it
+			// raw would let one distinct host per request mint an unbounded
+			// number of proxy_upstream_errors_total series (CWE-770), so it
+			// collapses to a single fixed bucket. The real host is preserved in
+			// the WARN log line below for debuggability.
+			metrics.ProxyUpstreamErrors.WithLabelValues("403", "not_allowed").Inc()
 			h.log.Warnw("HLS proxy rejected non-allowlisted domain",
 				"domain", domainErr.Domain,
 				"url", sourceURL,
@@ -436,6 +443,26 @@ func (h *StreamHandler) serveProxy(w http.ResponseWriter, r *http.Request, sourc
 		// headers are already committed, so this is safe in both states.
 		http.Error(w, "internal proxy error", http.StatusBadGateway)
 	}
+}
+
+// boundUpstreamDomain maps an upstream host onto a bounded set of
+// proxy_upstream_errors_total `domain` label values. The host originates in the
+// public, unauthenticated ?url= parameter, so using it raw lets a single client
+// mint an unbounded number of Prometheus series — one child per distinct host,
+// kept forever — exhausting both the streaming process and the /metrics scrape
+// (CWE-770). Our own storage backends (local MinIO + optional external S3) are a
+// small, closed, startup-config set, so their real host is kept — this preserves
+// the operator-relevant "our own storage is erroring" vs "an external CDN is
+// erroring" signal, and matches the hls/hls_minio split used above. Every other
+// host — the deliberately open-ended provenance-signed external-CDN space, whose
+// per-edge health already has its own dedicated proxy_edge_* metrics — collapses
+// to a single "other" bucket. The real host is always retained in the WARN log
+// line the caller emits, so debuggability is unaffected.
+func (h *StreamHandler) boundUpstreamDomain(sourceURL, host string) string {
+	if h.ownStorages != nil && h.ownStorages.IsOwnHost(sourceURL) {
+		return host
+	}
+	return "other"
 }
 
 // observeEgress folds one proxied HLS request into the per-session egress

@@ -57,7 +57,7 @@ func (h *UserHandler) UpdateCurrentUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	user, err := h.userService.Update(r.Context(), claims.UserID, &req)
+	user, err := h.userService.Update(r.Context(), claims.UserID, claims.SessionID, &req)
 	if err != nil {
 		httputil.Error(w, err)
 		return

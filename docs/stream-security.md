@@ -7,16 +7,26 @@ replaces the completed 2026-07-14 allowlist/blocklist retirement plan.
 
 The HLS proxy admits a request only when one of these conditions holds:
 
-1. a masked, authenticated stream token authorizes it;
-2. the host belongs to the configured first-party set (currently internal
-   services such as `stealth-scraper` and `minio`); or
-3. the URL carries a valid provenance signature minted by AnimeEnigma.
+1. a masked, authenticated stream token authorizes it; or
+2. the URL carries a valid provenance signature minted by AnimeEnigma.
 
-There is no external CDN allowlist. Every catalog or scraper path that emits an
-external stream/subtitle URL must stamp it at the source with `streamsign` /
-`videoutils.SignStreamURL` and return the resulting `exp`/`sig` or masked URL
-through its API shape. Frontend adapters must preserve that authorization when
-building proxy URLs.
+There is no external CDN allowlist, and there is no host exemption. Naming a
+first-party internal host (`minio`, `stealth-scraper`) in the client-supplied
+`url` does NOT authorize a request: the proxy endpoint is public and
+unauthenticated and it presigns self-hosted MinIO reads with the streaming
+service's own credentials, so a host-name exemption would have been an
+unauthenticated read of the private object store. Those hosts are ordinary
+hostnames, so they sign and seal exactly like every other emitter.
+
+Every catalog or scraper path that emits a stream/subtitle URL — external CDN
+*and* first-party MinIO/sidecar alike — must stamp it at the source with
+`streamsign` / `videoutils.SignStreamURL` and return the resulting `exp`/`sig`
+or masked URL through its API shape. Frontend adapters must preserve that
+authorization when building proxy URLs.
+
+`ProxyConfig.FirstPartyHosts` remains, but only as the dial-time exemption from
+the private-IP SSRF guard (internal services legitimately resolve to
+Docker-private addresses). It is not an admission rule.
 
 The proxy rewrites playlists relative to the final post-redirect URL and mints
 provenance tokens for redirect targets and child playlists/segments. Redirects

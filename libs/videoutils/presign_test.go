@@ -48,6 +48,9 @@ func TestPresignURL_HostScope(t *testing.T) {
 		SecretAccessKey: "minioadmin",
 		BucketName:      "animeenigma",
 		Region:          "us-east-1",
+		// Mirrors the streaming wiring: library HLS lives in raw-library on
+		// this host, so that is the only bucket this credential may presign.
+		PresignBuckets: []string{"raw-library"},
 	})
 	if err != nil {
 		t.Fatalf("NewStorage: %v", err)
@@ -68,6 +71,11 @@ func TestPresignURL_HostScope(t *testing.T) {
 	// Path without an object → not claimed.
 	if _, ok := s.PresignURL("http://minio:9000/raw-library/"); ok {
 		t.Error("bucket-only path must not be claimed")
+	}
+	// Own host but a bucket outside the presign scope → not claimed, so the
+	// credential never signs a read of an unrelated bucket.
+	if _, ok := s.PresignURL("http://minio:9000/gacha-cards/secret.png"); ok {
+		t.Error("bucket outside PresignBuckets must not be claimed")
 	}
 
 	// Own host + bucket/object → claimed + presigned (signature params present).

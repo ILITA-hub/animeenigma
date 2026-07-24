@@ -103,6 +103,16 @@ func Load() (*Config, error) {
 			UseSSL:          getEnvBool("MINIO_USE_SSL", false),
 			BucketName:      getEnv("MINIO_BUCKET", "animeenigma"),
 			Region:          getEnv("MINIO_REGION", "us-east-1"),
+			// The HLS proxy presigns upstream reads on this host through this
+			// Storage, and the only objects it legitimately reads are the
+			// self-hosted library (`ae` provider) HLS the storage service
+			// writes to MINIO_LIBRARY_BUCKET (its STORAGE_MINIO_BUCKET,
+			// default "raw-library") — NOT MINIO_BUCKET, which holds admin
+			// uploads + the image cache and is served through stream tokens
+			// instead. Bounding the presign scope to that one bucket keeps the
+			// MinIO root credential from signing a read of any other bucket on
+			// the same server (gacha-cards, upscaler-output, backups, ...).
+			PresignBuckets: []string{getEnv("MINIO_LIBRARY_BUCKET", "raw-library")},
 		},
 		S3Storage: s3Storage,
 		Proxy: videoutils.ProxyConfig{

@@ -248,6 +248,127 @@ func TestWSProxy_BackendDown_Returns502(t *testing.T) {
 	}
 }
 
+// TestRedactWSQuery — the ErrorHandler must never log the ?token=<JWT>
+// access credential (CWE-532) while keeping non-secret params like room
+// visible for debugging.
+func TestRedactWSQuery(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		in         string
+		wantNoJWT  string // substring that must NOT appear
+		wantParams []string
+	}{
+		{
+			name:       "token masked, room kept",
+			in:         "token=abc.def.ghi&room=room-xyz",
+			wantNoJWT:  "abc.def.ghi",
+			wantParams: []string{"room=room-xyz", "token=REDACTED"},
+		},
+		{
+			name:       "token only",
+			in:         "token=abc.def.ghi",
+			wantNoJWT:  "abc.def.ghi",
+			wantParams: []string{"token=REDACTED"},
+		},
+		{
+			name:       "no token untouched",
+			in:         "room=room-xyz",
+			wantNoJWT:  "REDACTED",
+			wantParams: []string{"room=room-xyz"},
+		},
+		{
+			name:       "empty",
+			in:         "",
+			wantNoJWT:  "REDACTED",
+			wantParams: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := redactWSQuery(tc.in)
+			if tc.wantNoJWT != "" && strings.Contains(got, tc.wantNoJWT) {
+				t.Errorf("redactWSQuery(%q) = %q; must not contain %q", tc.in, got, tc.wantNoJWT)
+			}
+			for _, p := range tc.wantParams {
+				if !strings.Contains(got, p) {
+					t.Errorf("redactWSQuery(%q) = %q; want to contain %q", tc.in, got, p)
+				}
+			}
+		})
+	}
+}
+
+// TestRedactWSQuery_UnparseableDroppedNoLeak — a malformed query that still
+// embeds a token value must not leak that value; drop the whole query.
+func TestRedactWSQuery_UnparseableDroppedNoLeak(t *testing.T) {
+	t.Parallel()
+	// %zz is an invalid percent-encoding, so url.ParseQuery returns an error.
+	got := redactWSQuery("token=abc.def.ghi&bad=%zz")
+	if strings.Contains(got, "abc.def.ghi") {
+		t.Errorf("redactWSQuery leaked token on unparseable query: %q", got)
+	}
+}
+
+// TestWSProxy_StripsClientIPProvenanceHeaders — F31 (CWE-290). watch-together
+// mounts chi middleware.RealIP, so a client-supplied True-Client-IP /
+// X-Forwarded-For / X-Real-IP forwarded verbatim by this reverse proxy would let
+// the client choose the IP its backend keys access logs on. The Director must
+// strip them and re-assert a single gateway-attested X-Real-IP. Exercised with a
+// plain HTTP probe — the Director runs for every forwarded request, WS or not.
+func TestWSProxy_StripsClientIPProvenanceHeaders(t *testing.T) {
+	t.Parallel()
+	gotHeaders := make(chan http.Header, 1)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	wsHandler, err := newWSProxy(backend.URL, logger.Default())
+	if err != nil {
+		t.Fatalf("newWSProxy: %v", err)
+	}
+	proxy := httptest.NewServer(wsHandler)
+	defer proxy.Close()
+
+	req, err := http.NewRequest(http.MethodGet, proxy.URL+"/api/watch-together/ws", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	const forged = "6.6.6.6"
+	req.Header.Set("True-Client-IP", forged)
+	req.Header.Set("X-Forwarded-For", forged)
+	req.Header.Set("X-Real-IP", forged)
+	req.Header.Set("CF-Connecting-IP", forged)
+	req.Header.Set("Forwarded", "for="+forged)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	defer resp.Body.Close()
+
+	select {
+	case headers := <-gotHeaders:
+		for _, h := range []string{"True-Client-IP", "CF-Connecting-IP", "Forwarded"} {
+			if got := headers.Get(h); strings.Contains(got, forged) {
+				t.Errorf("backend received forged %s = %q; attacker IP must be stripped", h, got)
+			}
+		}
+		// chi RealIP prefers X-Real-IP over X-Forwarded-For; it must carry the
+		// gateway-attested peer, never the attacker's forged value.
+		if got := headers.Get("X-Real-IP"); got == forged {
+			t.Errorf("backend received attacker X-Real-IP = %q; must be the gateway-attested peer", got)
+		}
+		if got := headers.Get("X-Forwarded-For"); strings.Contains(got, forged) {
+			t.Errorf("backend received forged X-Forwarded-For = %q; attacker IP must be stripped", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for backend to receive request")
+	}
+}
+
 // TestWSProxy_PathForwardedVerbatim — defensive: the watch-together service
 // mounts at /api/watch-together/ws natively (no path rewrite). The proxy
 // must forward whatever path it receives to the backend untouched so we

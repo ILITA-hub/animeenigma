@@ -42,6 +42,15 @@ spec:
                 secretKeyRef:
                   name: animeenigma-secrets
                   key: jwt-secret
+            # Authenticates POST /api/auth/telegram/webhook (public route).
+            # Absent/empty = the webhook rejects every update (fail closed), so
+            # Telegram deep-link login stays off until this is set.
+            - name: TELEGRAM_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: animeenigma-secrets
+                  key: telegram-webhook-secret
+                  optional: true
           livenessProbe:
             httpGet:
               path: /health

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -84,6 +85,50 @@ func isInConnectionList(src http.Header, canon string) bool {
 		}
 	}
 	return false
+}
+
+// ipProvenanceHeaders are the client-supplied IP-attestation headers a
+// downstream chi middleware.RealIP trusts to rewrite r.RemoteAddr. chi RealIP
+// reads them in the order True-Client-IP, X-Real-IP, then the first
+// X-Forwarded-For entry; catalog, auth, player, streaming, themes, analytics
+// (and others) all mount it. The gateway distrusts these headers for itself
+// (transport.RealClientIP) but copyForwardHeaders relayed them verbatim, so an
+// unauthenticated client could choose the IP identity every backend keys its
+// anonymous scraper quota, session rows, and access logs on (CWE-290).
+var ipProvenanceHeaders = []string{
+	"True-Client-IP",
+	"X-Forwarded-For",
+	"X-Real-IP",
+	"CF-Connecting-IP",
+	"Forwarded",
+}
+
+// AttestForwardedClientIP strips every client-supplied IP-provenance header
+// from an outbound (upstream) request and re-asserts exactly one — X-Real-IP —
+// from the gateway's already-validated client address (remoteAddr, i.e.
+// r.RemoteAddr, which transport.RealClientIP set from the edge-injected
+// X-Real-IP, falling back to the real TCP peer). Backends' chi middleware.RealIP
+// then observes a single gateway-attested IP instead of one the client chose.
+//
+// MUST be called AFTER the verbatim header copy (copyForwardHeaders, or the
+// reverse-proxy Director) so no smuggled client value survives. It only mutates
+// the OUTBOUND request's IP-provenance headers; the inbound request the
+// gateway's own per-IP limiter reads (keyed on the nginx-set X-Real-IP /
+// r.RemoteAddr) is untouched.
+func AttestForwardedClientIP(dst http.Header, remoteAddr string) {
+	for _, h := range ipProvenanceHeaders {
+		dst.Del(h)
+	}
+	// r.RemoteAddr is a bare IP after transport.RealClientIP (no port), or a
+	// host:port TCP peer on the fail-safe fallback. SplitHostPort errors on the
+	// bare-IP form, so use the value verbatim there; skip when it is empty.
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		ip = remoteAddr
+	}
+	if ip != "" {
+		dst.Set("X-Real-IP", ip)
+	}
 }
 
 type ProxyService struct {
@@ -211,20 +256,47 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		return nil, err
 	}
 
-	// Rewrite path for services with different internal paths
+	// Rewrite path for services with different internal paths.
+	//
+	// CWE-436 (route/authorization confusion): chi routes on the ESCAPED path
+	// (r.URL.RawPath when set), so any percent-encoded '/', '?' or '#' inside a
+	// matched {param}/* segment stays a single opaque segment for the gateway's
+	// authorization decision. We MUST forward that same escaping to the backend;
+	// forwarding the DECODED r.URL.Path let http.NewRequestWithContext re-split
+	// the URL on the injected special (e.g. an encoded '?' truncated the path to
+	// a different route than chi authorized), sidestepping gateway middleware.
+	//
+	// So we carry the decoded path (`path`) and the escaped path (`rawPath`) in
+	// lock-step through the rewrites below, then hand both to a url.URL so Go
+	// re-emits the encoded form on the wire. Every rewrite here strips/replaces a
+	// FIXED literal prefix that carries no percent-encoding, so the identical
+	// transform applies to both forms — the encoded specials only ever live in
+	// the suffix, which no rewrite touches. `rewrite` applies fn to both so the
+	// two forms can never drift apart.
 	path := r.URL.Path
+	rawPath := r.URL.EscapedPath()
+	rewrite := func(fn func(string) string) {
+		path = fn(path)
+		rawPath = fn(rawPath)
+	}
 	switch service {
 	case "grafana":
 		// /admin/grafana/... -> /admin/grafana/... (Grafana's sub-path, pass through)
-		if path == "" || path == "/admin/grafana" {
-			path = "/admin/grafana/"
-		}
+		rewrite(func(p string) string {
+			if p == "" || p == "/admin/grafana" {
+				return "/admin/grafana/"
+			}
+			return p
+		})
 	case "prometheus":
 		// /admin/prometheus/... -> /prometheus/... (Prometheus's sub-path)
-		path = strings.TrimPrefix(path, "/admin/prometheus")
-		if !strings.HasPrefix(path, "/prometheus") {
-			path = "/prometheus" + path
-		}
+		rewrite(func(p string) string {
+			p = strings.TrimPrefix(p, "/admin/prometheus")
+			if !strings.HasPrefix(p, "/prometheus") {
+				p = "/prometheus" + p
+			}
+			return p
+		})
 	case "scraper":
 		// Phase 17 Plan 03: gateway-side admin debug routes.
 		//   /api/admin/scraper/health → /scraper/health/admin (the admin
@@ -234,14 +306,17 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		//     append because no other admin routes exist yet).
 		// Future admin routes get their own explicit branch above the
 		// generic strip so the path-rewrite never silently 404s.
-		if path == "/api/admin/scraper/health" {
-			path = "/scraper/health/admin"
-		} else {
-			path = strings.Replace(path, "/api/admin/scraper", "/scraper", 1)
-		}
+		rewrite(func(p string) string {
+			if p == "/api/admin/scraper/health" {
+				return "/scraper/health/admin"
+			}
+			return strings.Replace(p, "/api/admin/scraper", "/scraper", 1)
+		})
 	case "streaming":
 		// /api/streaming/... -> /api/v1/... (streaming service uses /api/v1)
-		path = strings.Replace(path, "/api/streaming/", "/api/v1/", 1)
+		rewrite(func(p string) string {
+			return strings.Replace(p, "/api/streaming/", "/api/v1/", 1)
+		})
 	case "rooms":
 		// The rooms service mounts its REST + WS + leaderboard routes ONLY
 		// under /api/v1, so inbound paths must be rewritten or they 404
@@ -251,22 +326,38 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		//   - /api/rooms/...       -> /api/v1/rooms/...  (defensive/direct callers)
 		// A single prefix Replace per form covers both the bare collection
 		// (/api/rooms) and the {roomId} subroutes (/api/rooms/{id}/join).
-		switch {
-		case strings.HasPrefix(path, "/api/game/rooms"):
-			path = strings.Replace(path, "/api/game/rooms", "/api/v1/rooms", 1)
-		case strings.HasPrefix(path, "/api/rooms"):
-			path = strings.Replace(path, "/api/rooms", "/api/v1/rooms", 1)
-		}
+		rewrite(func(p string) string {
+			switch {
+			case strings.HasPrefix(p, "/api/game/rooms"):
+				return strings.Replace(p, "/api/game/rooms", "/api/v1/rooms", 1)
+			case strings.HasPrefix(p, "/api/rooms"):
+				return strings.Replace(p, "/api/rooms", "/api/v1/rooms", 1)
+			}
+			return p
+		})
 	}
 
-	// Build target URL with path and query
-	fullURL := targetURL + path
-	if r.URL.RawQuery != "" {
-		fullURL += "?" + r.URL.RawQuery
+	// Build the upstream URL preserving the exact escaping chi matched on.
+	// Setting both Path (decoded) and RawPath (escaped) makes url.URL.String()/
+	// EscapedPath() re-emit the encoded form on the wire when RawPath is a valid
+	// escaping of Path, and fall back to Path's default encoding otherwise. A
+	// path with no percent-encoded specials has rawPath == the default encoding
+	// of path, so the emitted URL is byte-identical to the previous
+	// targetURL+path concatenation (normal-request routing is unchanged).
+	base, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, errors.Internal(fmt.Sprintf("parse service URL: %v", err))
+	}
+	upstream := url.URL{
+		Scheme:   base.Scheme,
+		Host:     base.Host,
+		Path:     path,
+		RawPath:  rawPath,
+		RawQuery: r.URL.RawQuery,
 	}
 
 	// Create new request
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, fullURL, r.Body)
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream.String(), r.Body)
 	if err != nil {
 		return nil, errors.Internal(fmt.Sprintf("create proxy request: %v", err))
 	}
@@ -277,6 +368,17 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 	// BEFORE Forward is called; copyForwardHeaders strips the original
 	// client Authorization so the backend never sees two values.
 	copyForwardHeaders(req.Header, r.Header)
+
+	// IP-provenance attestation (CWE-290): copyForwardHeaders relays arbitrary
+	// client headers verbatim, including the IP-attestation headers a downstream
+	// chi middleware.RealIP trusts (catalog/auth/player/streaming/themes/...).
+	// Strip every client-supplied value and re-assert exactly one — X-Real-IP —
+	// from the gateway's already-validated client address, so backends key their
+	// anonymous scraper quota, session rows, and access logs on a single
+	// gateway-attested IP rather than one the client chose. Done post-copy (same
+	// discipline as the X-Webauth-*/X-Gateway-Internal injections below) so a
+	// smuggled `Connection: X-Real-IP` cannot drop the injected value.
+	AttestForwardedClientIP(req.Header, r.RemoteAddr)
 
 	// Grafana auth-proxy SSO: the /admin/grafana route already passed
 	// JWTValidationMiddleware + AdminRoleMiddleware, so the request carries
@@ -340,11 +442,16 @@ func (s *ProxyService) forwardWith(client *http.Client, r *http.Request, service
 		}
 	}
 
-	// For auth service only: selectively re-forward the refresh_token
-	// cookie so that /api/auth/refresh and /api/auth/logout can read it.
+	// For auth service only: selectively re-forward the refresh_token cookie so
+	// that /api/auth/refresh and /api/auth/logout can read it, and the
+	// tg_deeplink_nonce cookie so /api/auth/telegram/check can verify the
+	// browser-binding of the Telegram deep-link login (QR-login hijack fix).
 	// Other services MUST NOT receive browser cookies (REVIEW.md BLK-02).
 	if service == "auth" {
 		if c, err := r.Cookie("refresh_token"); err == nil {
+			req.AddCookie(c)
+		}
+		if c, err := r.Cookie("tg_deeplink_nonce"); err == nil {
 			req.AddCookie(c)
 		}
 	}

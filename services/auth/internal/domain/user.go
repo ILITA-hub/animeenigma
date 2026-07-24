@@ -105,6 +105,21 @@ type TelegramAuthSession struct {
 	FirstName  string `json:"first_name,omitempty"`
 	LastName   string `json:"last_name,omitempty"`
 	Username   string `json:"username,omitempty"`
+
+	// NonceHash binds the pending session to the browser that minted the token
+	// (vector A: token theft). It is the sha256-hex of a one-time nonce handed
+	// to that browser as an HttpOnly cookie; CheckDeepLinkToken refuses to hand
+	// out credentials unless the polling request presents the matching cookie.
+	// Empty on sessions minted before browser-binding existed (treated as
+	// unbound so an in-flight login survives a rolling deploy).
+	NonceHash string `json:"nonce_hash,omitempty"`
+
+	// RequestIP / RequestUA record the client that requested the login at mint
+	// time. They are surfaced in the bot's Confirm-login prompt (vector B:
+	// attacker-initiated flow) so a victim asked to confirm a login they did
+	// not start sees an unfamiliar device/IP and can decline.
+	RequestIP string `json:"request_ip,omitempty"`
+	RequestUA string `json:"request_ua,omitempty"`
 }
 
 // AuthResponse represents an authentication response

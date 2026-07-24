@@ -39,6 +39,7 @@ import (
 	"net/url"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/services/gateway/internal/service"
 )
 
 // newWSProxy returns an http.HandlerFunc that reverse-proxies WebSocket
@@ -83,6 +84,13 @@ func newWSProxy(targetBaseURL string, log *logger.Logger) (http.HandlerFunc, err
 		// The WS endpoint authenticates via the ?token= query param (see the
 		// package doc above), so it needs no cookies. Drop them.
 		req.Header.Del("Cookie")
+		// IP-provenance attestation (CWE-290): like the standard Forward path,
+		// this reverse proxy copies request headers verbatim, so a client-
+		// supplied True-Client-IP / X-Forwarded-For / X-Real-IP would otherwise
+		// reach watch-together — which mounts chi middleware.RealIP — letting the
+		// client choose the IP its access logs key on. Strip them and re-assert a
+		// single gateway-attested X-Real-IP from the validated peer address.
+		service.AttestForwardedClientIP(req.Header, req.RemoteAddr)
 	}
 
 	// FlushInterval=-1 flushes immediately after every write. Mandatory for
@@ -99,7 +107,14 @@ func newWSProxy(targetBaseURL string, log *logger.Logger) (http.HandlerFunc, err
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Errorw("watch-together ws proxy error",
 			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
+			// The WS upgrade carries the caller's access token in
+			// ?token=<JWT> (browsers can't set Authorization on a WS
+			// upgrade — see the package doc). Logging the raw query would
+			// write a live, unexpired bearer credential into the gateway
+			// error log (CWE-532), where anyone with log access could
+			// replay it. Mask the token but keep room and other non-secret
+			// params, which are useful for diagnosing backend-down events.
+			"query", redactWSQuery(r.URL.RawQuery),
 			"target", target.String(),
 			"error", err,
 		)
@@ -107,4 +122,24 @@ func newWSProxy(targetBaseURL string, log *logger.Logger) (http.HandlerFunc, err
 	}
 
 	return rp.ServeHTTP, nil
+}
+
+// redactWSQuery returns rawQuery with the value of any `token` parameter
+// masked, leaving all other params (e.g. room) intact for debugging. It is
+// used to keep the watch-together WS access token out of the gateway logs.
+// If the query cannot be parsed, the whole query is dropped rather than
+// risk emitting an unmasked token.
+func redactWSQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return "[redacted: unparseable query]"
+	}
+	if _, ok := values["token"]; !ok {
+		return rawQuery
+	}
+	values.Set("token", "REDACTED")
+	return values.Encode()
 }

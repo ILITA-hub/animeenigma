@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"time"
@@ -55,7 +56,18 @@ func (h *MagicLinkHandler) Login(w http.ResponseWriter, r *http.Request) {
 	oldurl := service.SanitizeOldURL(r.URL.Query().Get("oldurl"))
 	token := r.URL.Query().Get("token")
 	if token != "" {
-		if resp, err := h.authService.ConsumeMagicToken(r.Context(), token, sessionContextFromReq(r)); err == nil && resp != nil {
+		// Hand the service the refresh_token cookie the browser already carries
+		// (if any) so it can refuse to overwrite a still-alive session that
+		// belongs to a DIFFERENT user — the login-CSRF / session-fixation guard
+		// (CWE-352). A first-time cross-domain visitor has no such cookie and
+		// logs in as usual.
+		var currentRefresh string
+		if c, cerr := r.Cookie(refreshTokenCookieName); cerr == nil {
+			currentRefresh = c.Value
+		}
+		resp, err := h.authService.ConsumeMagicToken(r.Context(), token, currentRefresh, sessionContextFromReq(r))
+		switch {
+		case err == nil && resp != nil:
 			h.cookie.setRefreshTokenCookie(w, resp.RefreshToken)
 			h.cookie.setAccessTokenCookie(w, resp.AccessToken, resp.ExpiresAt)
 			// Readable one-shot marker (NOT HttpOnly) telling the SPA to adopt the
@@ -73,7 +85,14 @@ func (h *MagicLinkHandler) Login(w http.ResponseWriter, r *http.Request) {
 				SameSite: http.SameSiteLaxMode,
 			})
 			metrics.AuthEventsTotal.WithLabelValues("magic_link", "success").Inc()
-		} else {
+		case errors.Is(err, service.ErrMagicSessionConflict):
+			// The browser is already signed in as someone else. Refuse to swap
+			// the session (defeats the attacker planting their own session in a
+			// logged-in victim) and land the user on oldurl unchanged — their
+			// existing cookies are untouched.
+			h.log.Warnw("magic link refused: active session for a different user", "remote_ip", clientIP(r))
+			metrics.AuthEventsTotal.WithLabelValues("magic_link", "session_conflict").Inc()
+		default:
 			metrics.AuthEventsTotal.WithLabelValues("magic_link", "error").Inc()
 		}
 	}

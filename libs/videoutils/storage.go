@@ -21,6 +21,13 @@ type StorageConfig struct {
 	UseSSL          bool   `json:"use_ssl" yaml:"use_ssl"`
 	BucketName      string `json:"bucket_name" yaml:"bucket_name"`
 	Region          string `json:"region" yaml:"region"`
+	// PresignBuckets bounds which buckets PresignURL may sign a GET for.
+	// Empty (the default) means "BucketName only". PresignURL takes its
+	// bucket from a caller-supplied URL, so without this bound the
+	// credential would sign reads of ANY bucket reachable with it; the
+	// allowlist keeps it structurally incapable of that, independent of
+	// whatever authorization the caller did or did not perform.
+	PresignBuckets []string `json:"presign_buckets" yaml:"presign_buckets"`
 }
 
 // Storage provides video storage operations
@@ -28,6 +35,10 @@ type Storage struct {
 	client     *minio.Client
 	bucketName string
 	endpoint   string // host:port of the MinIO server, used to recognize own URLs
+	// presignBuckets is the set PresignURL is allowed to sign for; see
+	// StorageConfig.PresignBuckets. Never empty (NewStorage falls back to
+	// bucketName).
+	presignBuckets map[string]struct{}
 }
 
 // Client returns the underlying MinIO client
@@ -58,10 +69,22 @@ func NewStorage(cfg StorageConfig) (*Storage, error) {
 		return nil, fmt.Errorf("create minio client: %w", err)
 	}
 
+	presignable := cfg.PresignBuckets
+	if len(presignable) == 0 {
+		presignable = []string{cfg.BucketName}
+	}
+	presignBuckets := make(map[string]struct{}, len(presignable))
+	for _, b := range presignable {
+		if b != "" {
+			presignBuckets[b] = struct{}{}
+		}
+	}
+
 	return &Storage{
-		client:     client,
-		bucketName: cfg.BucketName,
-		endpoint:   cfg.Endpoint,
+		client:         client,
+		bucketName:     cfg.BucketName,
+		endpoint:       cfg.Endpoint,
+		presignBuckets: presignBuckets,
 	}, nil
 }
 
@@ -88,6 +111,55 @@ func (s *Storage) IsOwnHost(rawURL string) bool {
 	return err == nil && u.Host == s.endpoint
 }
 
+// safeObjectKey reports whether object — the exact key that will be handed to
+// the presigner — is a plain, already-resolved S3 key.
+//
+// PresignURL's input is an attacker-controllable URL (it reaches us from the
+// HLS proxy's `url=` query parameter), so the key is untrusted. S3/MinIO keys
+// are opaque byte strings, NOT filesystem paths, and no first-party layout
+// ever needs a relative segment. A key carrying `.`, `..` or empty segments is
+// nevertheless signed verbatim — minio-go's s3utils.CheckValidObjectName only
+// checks emptiness, length and UTF-8 validity — and travels to the server with
+// those segments intact, where path normalization can resolve it to an object
+// under a DIFFERENT bucket than the one that was inspected here: e.g.
+// "raw-library/../gacha-cards/secret.png" is admitted as bucket "raw-library"
+// but reads "gacha-cards/secret.png". Requiring the key to already be in its
+// resolved form keeps the object the signature authorizes identical to the one
+// this function (and any bucket check upstream of it) actually validated.
+//
+// Every real first-party layout is plain and passes unchanged:
+//
+//	aeProvider/<mal>/RAW/<ep>/{playlist.m3u8,segment_NNN.ts,storyboard_NNN.jpg,storyboard.vtt}
+//	aeProvider/<shikimori>/UPSCALED-<h>p/<ep>/...
+//	pending/<job-uuid>/<ep>/...
+//	<shikimori>/<ep>/...                       (legacy, pre-pool layout)
+//	videos/<anime>/ep<n>_<quality>.mp4, thumbnails/<anime>/ep<n>.jpg, posters/<anime>.jpg
+//
+// Only WHOLE segments are compared, so dots inside a name ("playlist.m3u8",
+// "storyboard.vtt", "ep..1.mp4") are unaffected. This validates the key's
+// shape only — never its business meaning — so new layouts need no change here.
+func safeObjectKey(object string) bool {
+	if object == "" {
+		return false
+	}
+	for _, seg := range strings.Split(object, "/") {
+		switch seg {
+		case "", ".", "..":
+			return false
+		}
+	}
+	return true
+}
+
+// PresignURL rewrites an own-host URL into a short-lived presigned GET for
+// the HLS proxy (contract described above).
+//
+// rawURL is caller-supplied and may be attacker-shaped, so the bucket parsed
+// out of its path is only signed when it is one of this Storage's configured
+// PresignBuckets (default: its own BucketName). Any other bucket returns
+// ("", false) — the same "not claimed" contract as a foreign host — so these
+// credentials cannot be used as a signing oracle for unrelated buckets even
+// if a caller's authorization check is bypassed.
 func (s *Storage) PresignURL(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Host != s.endpoint {
@@ -100,8 +172,19 @@ func (s *Storage) PresignURL(rawURL string) (string, bool) {
 		return "", false
 	}
 	bucket, object := p[:slash], p[slash+1:]
+	if _, ok := s.presignBuckets[bucket]; !ok {
+		return "", false
+	}
 	object, err = url.PathUnescape(object)
 	if err != nil {
+		return "", false
+	}
+	// Checked AFTER the unescape so the validated string is byte-for-byte the
+	// one PresignedGetObject signs below. A traversal that only materializes
+	// once decoded (u.Path is already decoded by url.Parse, so a request path
+	// of "%252e%252e" arrives here as "%2e%2e" and unescapes to "..") cannot
+	// slip past a check performed earlier in the pipeline.
+	if !safeObjectKey(object) {
 		return "", false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

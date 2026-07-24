@@ -744,6 +744,51 @@ func (p *VideoProxy) ProxyPreauthCounted(ctx context.Context, sourceURL, referer
 	return p.proxyRefererCounted(ctx, sourceURL, referer, true, w, r)
 }
 
+// maxTextBodyBytes bounds the two branches of proxyRefererCounted that buffer a
+// whole upstream body in memory (M3U8 manifests and WebVTT tracks). They are the
+// only such branches — every other body takes the streaming io.Copy /
+// rateLimitedCopy path (D-05) — and the branch is selected by the UPSTREAM's own
+// Content-Type / path suffix, so an unbounded read lets one hostile, compromised
+// or on-path CDN response allocate arbitrary heap in the streaming service (50
+// concurrent proxy slots against a 512 MiB container limit).
+//
+// 4 MiB is orders of magnitude above anything legitimate this proxy serves:
+//   - library encoder VOD playlist (6s segments, relative segment_NNN.ts names,
+//     ffmpeg/transcoder.go): ~8 KiB for a 24min episode, ~59 KiB for a 3h movie.
+//   - storyboard.vtt (5s cadence, ffmpeg/storyboard.go BuildStoryboardVTT):
+//     ~20 KiB for a 24min episode, ~147 KiB for a 3h movie.
+//   - external provider manifests with fully-signed absolute segment URLs:
+//     ~75 KiB for a typical episode, ~1.2 MiB for a 2h movie at 4s segments with
+//     700-byte signed URLs.
+//
+// It also matches the playlist cap already used elsewhere in the tree
+// (services/content-verify/internal/prober/playlist.go reads at 4<<20). A larger
+// cap would not close the finding: 50 slots x 16 MiB already exceeds the
+// service's whole memory limit.
+const maxTextBodyBytes = 4 << 20 // 4 MiB
+
+// readCappedTextBody reads a manifest/VTT body into memory under
+// maxTextBodyBytes and reports an error when the upstream exceeds it.
+//
+// Exceeding the cap fails the request rather than falling through to the
+// passthrough copy path, deliberately: the buffered prefix has already been
+// consumed, so a fall-through would emit an UNREWRITTEN manifest whose children
+// carry neither the proxy rewrite nor a provenance signature (they would fail
+// the trust gate on the follow-up fetch and CORS in the browser), while still
+// paying to stream the oversized body. A body this large is not a playable
+// manifest, so the proxy treats it like the other "don't forward garbage to
+// HLS.js" cases and lets the streaming handler map the error to a clean 502.
+func readCappedTextBody(body io.Reader, kind string) ([]byte, error) {
+	buf, err := io.ReadAll(io.LimitReader(body, maxTextBodyBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(buf) > maxTextBodyBytes {
+		return nil, fmt.Errorf("%s body exceeds %d byte cap", kind, maxTextBodyBytes)
+	}
+	return buf, nil
+}
+
 // proxyRefererCounted is the shared pipeline behind ProxyWithRefererCounted and ProxyPreauthCounted.
 func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer string, preauth bool, w http.ResponseWriter, r *http.Request) (bytesIn, bytesOut uint64, _ error) {
 	// Validate URL
@@ -752,26 +797,33 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		return 0, 0, fmt.Errorf("invalid source url: %w", err)
 	}
 
-	// Trust gate: preauth (sealed token) OR first-party internal host OR
-	// provenance-signed. The static external-domain allowlist was retired
-	// 2026-07-14 — every catalog emitter now signs its URLs at the source
-	// (streamsign.Stamp; see docs/stream-security.md,
-	// Track S).
+	// Trust gate: preauth (sealed token) OR provenance-signed. The static
+	// external-domain allowlist was retired 2026-07-14 — every catalog emitter
+	// now signs its URLs at the source (streamsign.Stamp; see
+	// docs/stream-security.md, Track S).
 	//
 	//   - preauth=true skips the gate entirely: the caller already authorized
 	//     the URL by opening a sealed AES-GCM stream token (streamtoken.go),
 	//     which can only be minted server-side for SSRF-vetted URLs.
-	//   - First-party hosts (stealth-scraper, MinIO — the configured
-	//     FirstPartyHosts set) resolve to Docker-private IPs, so
-	//     netguard.ValidatePublicURL inside SignStreamURL rejects them by
-	//     design and they can never be publicly signed; the exact-match host
-	//     check admits them instead.
 	//   - Everything else must carry a valid provenance token — either signed
 	//     at the source by catalog (streamsign) or minted by this proxy when
 	//     it rewrote a playlist child. This is how rotating segment CDNs
 	//     (megaplay/mewstream) are served without any static per-domain entry.
-	if !preauth && !firstPartyAddr(parsed.Host, p.config.FirstPartyHosts) &&
-		!validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
+	//
+	// First-party internal hosts (stealth-scraper, MinIO — the configured
+	// FirstPartyHosts set) get NO free pass here. This endpoint is public and
+	// unauthenticated, so admitting a request purely because the CLIENT-SUPPLIED
+	// `url` names an internal host made the proxy an unauthenticated read oracle
+	// for the private object store (fetchURLFor presigns MinIO reads with the
+	// service's own credentials) and a GET probe into the sidecar. Those hosts
+	// are hostnames rather than private IP literals, so netguard.ValidatePublicURL
+	// admits them and catalog signs their URLs like any other emitter
+	// (raw_resolver.newLibraryStream for the self-hosted library, streamsign for
+	// the sidecar's /hls URLs); this proxy then mints masked/provenance tokens
+	// for their playlist and storyboard children. FirstPartyHosts stays the
+	// exemption from the DIAL-time private-IP guard (they legitimately resolve to
+	// Docker-private addresses) — a separate concern from admission.
+	if !preauth && !validProvenanceToken(sourceURL, r.URL.Query().Get("exp"), r.URL.Query().Get("sig"), time.Now()) {
 		return 0, 0, &DomainNotAllowedError{Domain: parsed.Host}
 	}
 
@@ -885,8 +937,10 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		// Read and rewrite M3U8 content. This is a small manifest (not a
 		// segment stream) so a bounded ReadAll is acceptable here — the D-05
 		// "never ReadAll the stream path" rule applies to segment bodies, which
-		// take the io.Copy/rateLimitedCopy path below.
-		body, err := io.ReadAll(resp.Body)
+		// take the io.Copy/rateLimitedCopy path below. The bound is
+		// maxTextBodyBytes; the upstream picks this branch by Content-Type, so
+		// the read must be capped explicitly.
+		body, err := readCappedTextBody(resp.Body, "m3u8")
 		if err != nil {
 			return 0, 0, fmt.Errorf("read m3u8 body: %w", err)
 		}
@@ -896,15 +950,20 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		// mints masked/provenance tokens for the redirect target's children.
 		rewritten := rewriteM3U8URLs(string(body), rewriteBase, referer)
 
-		bytesOut = writeRewrittenText(w, resp, rewritten)
+		// Derive Content-Type ourselves — never relay the upstream's — so a
+		// hostile manifest host can't serve text/html and get script execution
+		// in our origin (CWE-79). application/vnd.apple.mpegurl is the manifest
+		// type getCorrectHLSContentType uses on the non-rewrite branch; hls.js
+		// accepts it.
+		bytesOut = writeRewrittenText(w, resp, rewritten, "application/vnd.apple.mpegurl")
 		return bytesIn, bytesOut, nil
 	}
 
 	if isVTT && resp.StatusCode == http.StatusOK {
 		// Read and rewrite the VTT content. Same rationale as the M3U8 branch
 		// above: a small cue-sheet payload, not a segment stream, so a bounded
-		// ReadAll is fine here.
-		body, err := io.ReadAll(resp.Body)
+		// ReadAll is fine here — bounded by the same maxTextBodyBytes cap.
+		body, err := readCappedTextBody(resp.Body, "vtt")
 		if err != nil {
 			return 0, 0, fmt.Errorf("read vtt body: %w", err)
 		}
@@ -918,7 +977,11 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		// egress row.
 		rewritten := rewriteVTTURLs(string(body), rewriteBase, referer)
 
-		bytesOut = writeRewrittenText(w, resp, rewritten)
+		// Derive Content-Type ourselves — never relay the upstream's — so a
+		// hostile subtitle host can't serve text/html and get script execution
+		// in our origin (CWE-79). text/vtt is the standard WebVTT type the
+		// SubtitleOverlay expects.
+		bytesOut = writeRewrittenText(w, resp, rewritten, "text/vtt")
 		return bytesIn, bytesOut, nil
 	}
 
@@ -929,7 +992,14 @@ func (p *VideoProxy) proxyRefererCounted(ctx context.Context, sourceURL, referer
 		// otherwise duplicate them and browsers reject a multi-value ACAO as a
 		// CORS failure (notably the stealth-scraper /hls sidecar always sends
 		// Access-Control-Allow-Origin: *).
-		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Type" || isProxySetCORSHeader(key) {
+		//
+		// Also skip Set-Cookie/Set-Cookie2 (CWE-644): the upstream is an
+		// untrusted third-party media host, and media segments/manifests never
+		// legitimately set app cookies. Relaying it would let a hostile or
+		// compromised CDN plant/overwrite cookies (e.g. refresh_token/
+		// access_token) on the first-party origin — session fixation / forced
+		// logout. Keys here are canonical (Go canonicalizes resp.Header).
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Type" || key == "Set-Cookie" || key == "Set-Cookie2" || isProxySetCORSHeader(key) {
 			continue
 		}
 		for _, value := range values {
@@ -1002,11 +1072,24 @@ func isProxySetCORSHeader(key string) bool {
 // headers the proxy already set itself, since an upstream that also sends
 // Access-Control-Allow-* would otherwise duplicate them and a response with
 // two ACAO values is rejected by browsers as a CORS error), sets the new
-// Content-Length, writes the upstream status code, then writes the
-// rewritten body. Returns the number of bytes written (bytesOut).
-func writeRewrittenText(w http.ResponseWriter, resp *http.Response, rewritten string) uint64 {
+// Content-Length and Content-Type, writes the upstream status code, then
+// writes the rewritten body. Returns the number of bytes written (bytesOut).
+//
+// Content-Type is NEVER copied from the upstream on this rewrite path — the
+// caller passes the derived type (application/vnd.apple.mpegurl for M3U8,
+// text/vtt for VTT) and we set it explicitly. Relaying the upstream type
+// verbatim let a hostile segment/subtitle host serve Content-Type: text/html
+// with a script body that the browser then executed in the animeenigma.org
+// origin (the response also carries Access-Control-Allow-Origin: * and renders
+// on our origin) — stored/reflected XSS (CWE-79). The gateway's global
+// X-Content-Type-Options: nosniff does not help, because the type is declared,
+// not sniffed. Set-Cookie is likewise dropped: a rewritten manifest/cue sheet
+// has no legitimate reason to set a cookie on our origin. This mirrors the
+// non-rewrite branch, which already skips upstream Content-Type and re-derives
+// it via getCorrectHLSContentType.
+func writeRewrittenText(w http.ResponseWriter, resp *http.Response, rewritten, contentType string) uint64 {
 	for key, values := range resp.Header {
-		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || isProxySetCORSHeader(key) {
+		if key == "Connection" || key == "Keep-Alive" || key == "Transfer-Encoding" || key == "Content-Length" || key == "Content-Type" || key == "Set-Cookie" || isProxySetCORSHeader(key) {
 			continue
 		}
 		for _, value := range values {
@@ -1014,6 +1097,7 @@ func writeRewrittenText(w http.ResponseWriter, resp *http.Response, rewritten st
 		}
 	}
 
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
 	w.WriteHeader(resp.StatusCode)
 	n, _ := w.Write([]byte(rewritten))

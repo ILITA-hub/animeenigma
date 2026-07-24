@@ -133,23 +133,117 @@ func TestMultiStorage_NilEntriesSkipped(t *testing.T) {
 	}
 }
 
-// TestStorage_PresignURL_UsesURLBucketNotConfiguredBucket pins the actual
-// behavior of Storage.PresignURL: the bucket used in the presigned request
-// is parsed from the URL path segment (storage.go:102), NOT the Storage's
-// configured BucketName. In production both storages point at buckets named
-// "raw-library" so this distinction is invisible, but MultiStorage's
-// host-routing design depends on knowing which one actually wins.
-func TestStorage_PresignURL_UsesURLBucketNotConfiguredBucket(t *testing.T) {
+// TestStorage_PresignURL_RefusesBucketOutsidePresignScope pins the bucket
+// bound on Storage.PresignURL: the bucket is still parsed from the URL path
+// segment, but it is only signed when it is one of the Storage's configured
+// PresignBuckets (default: BucketName). A URL naming any other bucket on the
+// same host is left unclaimed, so the credential can never sign a read
+// outside its own scope even when the URL is attacker-supplied.
+func TestStorage_PresignURL_RefusesBucketOutsidePresignScope(t *testing.T) {
 	s := newFakeStorage(t, "minio-fake:9000", false) // configured bucket: raw-library
 
 	signed, ok := s.PresignURL("http://minio-fake:9000/some-other-bucket/videos/ep1.ts")
+	if ok || signed != "" {
+		t.Errorf("PresignURL(foreign bucket) = (%q, %v); want (\"\", false)", signed, ok)
+	}
+
+	// The configured bucket is still signed.
+	signed, ok = s.PresignURL("http://minio-fake:9000/raw-library/videos/ep1.ts")
 	if !ok {
-		t.Fatalf("expected PresignURL to succeed")
+		t.Fatalf("expected PresignURL to sign the configured bucket")
 	}
-	if !strings.Contains(signed, "/some-other-bucket/") {
-		t.Errorf("signed URL = %q; want it to contain the URL-parsed bucket %q (not the configured bucket %q)", signed, "some-other-bucket", "raw-library")
+	if !strings.Contains(signed, "/raw-library/videos/ep1.ts") || !strings.Contains(signed, "X-Amz-Signature=") {
+		t.Errorf("signed URL = %q; want the configured bucket's object, signed", signed)
 	}
-	if strings.Contains(signed, "/raw-library/") {
-		t.Errorf("signed URL = %q; unexpectedly used the configured bucket instead of the URL-parsed one", signed)
+}
+
+// TestStorage_PresignURL_ExplicitPresignBuckets covers the streaming wiring:
+// a Storage whose own BucketName is NOT the bucket the HLS proxy reads (local
+// MinIO holds admin uploads in MINIO_BUCKET but serves library HLS out of
+// raw-library) presigns exactly the buckets it was configured to presign.
+func TestStorage_PresignURL_ExplicitPresignBuckets(t *testing.T) {
+	s, err := NewStorage(StorageConfig{
+		Endpoint:        "minio-fake:9000",
+		AccessKeyID:     "fake-access-key",
+		SecretAccessKey: "fake-secret-key",
+		BucketName:      "animeenigma",
+		Region:          "us-east-1",
+		PresignBuckets:  []string{"raw-library"},
+	})
+	if err != nil {
+		t.Fatalf("NewStorage: %v", err)
+	}
+
+	if _, ok := s.PresignURL("http://minio-fake:9000/raw-library/54974/1/playlist.m3u8"); !ok {
+		t.Errorf("expected the allowlisted bucket to be presigned")
+	}
+	// Its own BucketName is not in the allowlist, so it is refused too:
+	// PresignBuckets is the whole scope, not an addition to BucketName.
+	if _, ok := s.PresignURL("http://minio-fake:9000/animeenigma/videos/x/ep1.mp4"); ok {
+		t.Errorf("expected a bucket outside PresignBuckets to be refused")
+	}
+}
+
+// TestStorage_PresignURL_RejectsTraversalKeys locks the object-key shape gate
+// (storage.go safeObjectKey). PresignURL's URL is attacker-controllable (the
+// HLS proxy's `url=` parameter), and minio-go signs a key containing dot
+// segments verbatim, so "raw-library/../gacha-cards/secret.png" would be
+// admitted as bucket "raw-library" yet resolve to another bucket's object on
+// the server. Keys must arrive already resolved.
+func TestStorage_PresignURL_RejectsTraversalKeys(t *testing.T) {
+	s := newFakeStorage(t, "minio-fake:9000", false)
+
+	rejected := []struct {
+		name string
+		url  string
+	}{
+		{"parent segment escapes the bucket", "http://minio-fake:9000/raw-library/../gacha-cards/secret.png"},
+		{"parent segment mid-key", "http://minio-fake:9000/raw-library/aeProvider/1/../../gacha-cards/secret.png"},
+		{"percent-encoded traversal", "http://minio-fake:9000/raw-library/%2e%2e/gacha-cards/secret.png"},
+		{"double-encoded traversal", "http://minio-fake:9000/raw-library/%252e%252e/gacha-cards/secret.png"},
+		{"current-dir segment", "http://minio-fake:9000/raw-library/./playlist.m3u8"},
+		{"empty interior segment", "http://minio-fake:9000/raw-library/aeProvider//RAW/1/playlist.m3u8"},
+		{"trailing empty segment", "http://minio-fake:9000/raw-library/aeProvider/1/RAW/1/"},
+	}
+	for _, tc := range rejected {
+		if signed, ok := s.PresignURL(tc.url); ok {
+			t.Errorf("%s: PresignURL(%q) = (%q, true); want it rejected", tc.name, tc.url, signed)
+		}
+	}
+}
+
+// TestStorage_PresignURL_AcceptsRealLayouts guards the other side of the gate:
+// every object layout actually written to our buckets must still presign, so
+// the traversal check can never break real playback. Dots INSIDE a segment
+// ("playlist.m3u8", "storyboard.vtt") are legitimate and must survive.
+func TestStorage_PresignURL_AcceptsRealLayouts(t *testing.T) {
+	s := newFakeStorage(t, "minio-fake:9000", false)
+
+	accepted := []struct {
+		name string
+		key  string
+	}{
+		{"pool playlist", "aeProvider/54974/RAW/1/playlist.m3u8"},
+		{"pool segment", "aeProvider/54974/RAW/1/segment_003.ts"},
+		{"pool storyboard sheet", "aeProvider/54974/RAW/12/storyboard_001.jpg"},
+		{"pool storyboard vtt", "aeProvider/54974/RAW/12/storyboard.vtt"},
+		{"upscaled pool", "aeProvider/54974/UPSCALED-720p/3/playlist.m3u8"},
+		{"pending job", "pending/6f1c9e2a-0b6d-4f5a-9a3c-1d2e3f4a5b6c/1/playlist.m3u8"},
+		{"legacy pre-pool", "54974/1/playlist.m3u8"},
+		{"self-hosted video", "videos/54974/ep1_720.mp4"},
+		{"thumbnail", "thumbnails/54974/ep1.jpg"},
+		{"poster", "posters/54974.jpg"},
+		{"dots inside a segment name", "videos/54974/ep..1.mp4"},
+	}
+	for _, tc := range accepted {
+		raw := "http://minio-fake:9000/raw-library/" + tc.key
+		signed, ok := s.PresignURL(raw)
+		if !ok {
+			t.Errorf("%s: PresignURL(%q) = ok:false; real layouts must still presign", tc.name, raw)
+			continue
+		}
+		if !strings.Contains(signed, "X-Amz-Signature=") {
+			t.Errorf("%s: signed URL %q missing signature params", tc.name, signed)
+		}
 	}
 }

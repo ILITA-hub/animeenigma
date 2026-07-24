@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ILITA-hub/animeenigma/libs/logger"
@@ -24,7 +23,7 @@ type OpenGraphHandler struct {
 	client     *http.Client
 	tmpl       *template.Template
 	log        *logger.Logger
-	cache      sync.Map // map[string]*ogCacheEntry
+	cache      *ogCache // size-capped LRU of rendered pages, keyed by canonical id
 }
 
 type ogCacheEntry struct {
@@ -65,7 +64,51 @@ type ogTemplateData struct {
 var (
 	htmlTagRe    = regexp.MustCompile(`<[^>]*>`)
 	bbcodeTagRe  = regexp.MustCompile(`\[[^\]]*\]`)
+
+	// uuidRe matches a canonical UUID in any letter case. The catalog and auth
+	// services compare uuid literals case-insensitively, so we normalise to
+	// lowercase to collapse the 2^hexletters equivalent spellings onto one key.
+	uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	// shikiIDRe / malIDRe match the prefixed numeric id forms the catalog
+	// resolves (see catalog GetAnime: "shiki_<digits>" / "mal_<digits>"). The
+	// length bound is far beyond any real id and keeps a single key small.
+	shikiIDRe = regexp.MustCompile(`^shiki_[0-9]{1,12}$`)
+	malIDRe   = regexp.MustCompile(`^mal_[0-9]{1,12}$`)
+	// publicIDRe matches the user-chosen public_id shape (auth enforces
+	// alphanum, 3-32 chars). public_ids are stored case-sensitively, so their
+	// case is preserved.
+	publicIDRe = regexp.MustCompile(`^[a-zA-Z0-9]{3,32}$`)
 )
+
+// canonicalAnimeID validates animeID against the exact id forms the catalog
+// accepts — a UUID, shiki_<digits>, or mal_<digits> — and returns the canonical
+// key/fetch id. A UUID is lower-cased so case-variant spellings collapse to a
+// single cache entry (and a single upstream/Redis key). ok is false for
+// anything else; the caller then serves the default page without caching or an
+// upstream fetch.
+func canonicalAnimeID(id string) (string, bool) {
+	if uuidRe.MatchString(id) {
+		return strings.ToLower(id), true
+	}
+	if shikiIDRe.MatchString(id) || malIDRe.MatchString(id) {
+		return id, true
+	}
+	return "", false
+}
+
+// canonicalPublicID validates publicID against the forms the auth service
+// resolves — a UUID or an alphanumeric public_id — and returns the canonical
+// id. A UUID is lower-cased to collapse case-variants; a public_id keeps its
+// case. ok is false for anything else.
+func canonicalPublicID(id string) (string, bool) {
+	if uuidRe.MatchString(id) {
+		return strings.ToLower(id), true
+	}
+	if publicIDRe.MatchString(id) {
+		return id, true
+	}
+	return "", false
+}
 
 const ogHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
@@ -104,6 +147,7 @@ func NewOpenGraphHandler(catalogURL, authURL, playerURL, siteURL string, log *lo
 		siteURL:    siteURL,
 		log:        log,
 		tmpl:       tmpl,
+		cache:      newOGCache(ogCacheCapacity),
 		client: &http.Client{
 			Timeout: 3 * time.Second,
 			Transport: &http.Transport{
@@ -118,18 +162,14 @@ func NewOpenGraphHandler(catalogURL, authURL, playerURL, siteURL string, log *lo
 		},
 	}
 
-	// Background cache cleanup every 15 minutes
+	// Background cache cleanup every 15 minutes. The LRU cap already bounds
+	// memory; this reclaims TTL-expired entries even if they are never read
+	// again, preserving the original sweeper's behaviour.
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			now := time.Now()
-			h.cache.Range(func(key, value any) bool {
-				if entry, ok := value.(*ogCacheEntry); ok && now.After(entry.expiresAt) {
-					h.cache.Delete(key)
-				}
-				return true
-			})
+			h.cache.purgeExpired(time.Now())
 		}
 	}()
 
@@ -138,15 +178,20 @@ func NewOpenGraphHandler(catalogURL, authURL, playerURL, siteURL string, log *lo
 
 // ServeAnime renders OG meta tags for an anime detail page.
 func (h *OpenGraphHandler) ServeAnime(w http.ResponseWriter, r *http.Request) {
-	animeID := chi.URLParam(r, "animeId")
-	if animeID == "" {
+	rawID := chi.URLParam(r, "animeId")
+	// Validate + normalise before caching or fetching upstream. Only the exact
+	// id forms the catalog resolves are accepted; anything else falls back to
+	// the default page and is never cached, so an attacker cannot mint unbounded
+	// distinct cache keys. UUIDs are lower-cased so case-variant spellings
+	// collapse to a single key.
+	animeID, ok := canonicalAnimeID(rawID)
+	if !ok {
 		h.serveDefault(w)
 		return
 	}
 
 	// Check cache
-	if v, ok := h.cache.Load(animeID); ok {
-		entry := v.(*ogCacheEntry)
+	if entry, ok := h.cache.Load(animeID); ok {
 		if time.Now().Before(entry.expiresAt) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write(entry.html)
@@ -211,15 +256,19 @@ type ogWatchlistStats struct {
 
 // ServeUser renders OG meta tags for a user profile page.
 func (h *OpenGraphHandler) ServeUser(w http.ResponseWriter, r *http.Request) {
-	publicID := chi.URLParam(r, "publicId")
-	if publicID == "" {
+	rawID := chi.URLParam(r, "publicId")
+	// Validate + normalise before caching or fetching upstream, mirroring the
+	// anime route: only a UUID or a public_id shape is accepted, UUIDs are
+	// lower-cased to collapse case-variants, and anything else falls back to the
+	// default page without minting a cache key or an upstream call.
+	publicID, ok := canonicalPublicID(rawID)
+	if !ok {
 		h.serveDefault(w)
 		return
 	}
 
 	cacheKey := "user:" + publicID
-	if v, ok := h.cache.Load(cacheKey); ok {
-		entry := v.(*ogCacheEntry)
+	if entry, ok := h.cache.Load(cacheKey); ok {
 		if time.Now().Before(entry.expiresAt) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write(entry.html)

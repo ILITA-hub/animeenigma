@@ -106,7 +106,7 @@ func main() {
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, sessionRepo, redisCache, cfg.JWT, cfg.Telegram.BotToken, cfg.GuestTokenTTL, log)
-	userService := service.NewUserService(userRepo, log)
+	userService := service.NewUserService(userRepo, sessionRepo, log)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService, cfg.Cookie, cfg.Telegram, log)

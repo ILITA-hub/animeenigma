@@ -7,8 +7,8 @@
 // up — every new episode draws a fresh segment domain.
 //
 // Solution: when the proxy rewrites a playlist it fetched from a trusted
-// origin (provenance-signed by catalog, or a first-party internal host), it
-// signs each rewritten child/segment URL with a short-TTL HMAC (the
+// origin (provenance-signed by catalog, or authorized by a sealed stream
+// token), it signs each rewritten child/segment URL with a short-TTL HMAC (the
 // "provenance token"). A later segment request bearing a valid token passes
 // the proxy's trust gate — its provenance is the trusted playlist, not its
 // own domain. Tokens only ever GRANT access, and they can only be minted for
@@ -17,10 +17,12 @@
 //
 // Since 2026-07-14 signing IS the trust model (the static external-domain
 // allowlist was retired — docs/stream-security.md):
-// the HLS gate is `preauth (sealed token) OR first-party internal host OR
-// provenance-signed`. Catalog signs every externally-hosted stream/subtitle
-// URL at the source (streamsign.Stamp), and this file's minting covers the
-// playlist children.
+// the HLS gate is `preauth (sealed token) OR provenance-signed`. Catalog signs
+// every stream/subtitle URL at the source (streamsign.Stamp) — INCLUDING the
+// first-party internal ones (self-hosted MinIO library playlists, the
+// stealth-scraper sidecar's /hls URLs), which are hostnames and therefore pass
+// netguard.ValidatePublicURL — and this file's minting covers the playlist
+// children.
 package videoutils
 
 import (

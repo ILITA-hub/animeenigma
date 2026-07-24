@@ -22,6 +22,17 @@ const (
 	// refresh so it keeps sliding ~10 years out and never ages out client-side.
 	refreshTokenMaxAge    = 10 * 365 * 24 * time.Hour
 	accessTokenCookieName = "access_token"
+
+	// telegramNonceCookieName holds the one-time browser-binding nonce for the
+	// Telegram deep-link / QR login. DeepLink sets it (HttpOnly); CheckDeepLink
+	// requires it so a leaked deep-link token cannot be redeemed by a browser
+	// that never held the cookie. Scoped to /api/auth so it rides only the
+	// deeplink + check requests. Must match the name re-forwarded by the gateway
+	// proxy for the auth service (services/gateway/internal/service/proxy.go).
+	telegramNonceCookieName = "tg_deeplink_nonce"
+	// telegramNonceMaxAge matches the deep-link token TTL (cache.TTLTelegramAuth
+	// = 5min); a stale nonce is worthless once the token expires.
+	telegramNonceMaxAge = 5 * time.Minute
 )
 
 // clientIP returns the best-effort client IP without the port.
@@ -139,6 +150,42 @@ func (h *AuthHandler) clearAccessTokenCookie(w http.ResponseWriter) {
 		Name:     accessTokenCookieName,
 		Value:    "",
 		Path:     "/",
+		Domain:   h.cookieConfig.Domain,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   h.cookieConfig.Secure,
+	})
+}
+
+func (h *AuthHandler) setTelegramNonceCookie(w http.ResponseWriter, nonce string) {
+	sameSite := http.SameSiteLaxMode
+	switch h.cookieConfig.SameSite {
+	case "Strict":
+		sameSite = http.SameSiteStrictMode
+	case "None":
+		sameSite = http.SameSiteNoneMode
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:  telegramNonceCookieName,
+		Value: nonce,
+		// Scoped to /api/auth: the browser only needs to present it on the
+		// /telegram/check poll (and it is minted on /telegram/deeplink). Unlike
+		// the refresh cookie there is no admin-path reason to widen this to "/".
+		Path:     "/api/auth",
+		Domain:   h.cookieConfig.Domain,
+		MaxAge:   int(telegramNonceMaxAge.Seconds()),
+		HttpOnly: true,
+		Secure:   h.cookieConfig.Secure,
+		SameSite: sameSite,
+	})
+}
+
+func (h *AuthHandler) clearTelegramNonceCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     telegramNonceCookieName,
+		Value:    "",
+		Path:     "/api/auth",
 		Domain:   h.cookieConfig.Domain,
 		MaxAge:   -1,
 		HttpOnly: true,
@@ -283,13 +330,20 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeepLink creates a new deep link auth token and returns the Telegram bot URL.
+// It also sets a one-time HttpOnly browser-binding nonce cookie: the same
+// browser must present it when polling CheckDeepLink, so a leaked deep-link
+// token cannot be redeemed from a different browser (vector A). The requesting
+// client (IP + User-Agent) is captured into the pending session so the bot's
+// Confirm-login prompt can show where the login was requested from (vector B).
 func (h *AuthHandler) DeepLink(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.authService.CreateDeepLinkToken(r.Context(), h.telegramConfig.BotName)
+	sc := sessionContextFromReq(r)
+	resp, nonce, err := h.authService.CreateDeepLinkToken(r.Context(), h.telegramConfig.BotName, sc)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
 
+	h.setTelegramNonceCookie(w, nonce)
 	httputil.OK(w, resp)
 }
 
@@ -301,8 +355,16 @@ func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Browser-binding nonce (vector A): present only if this is the browser
+	// that minted the token. Missing cookie → empty string, which the service
+	// treats as a non-match for any bound session.
+	var bindingNonce string
+	if c, err := r.Cookie(telegramNonceCookieName); err == nil {
+		bindingNonce = c.Value
+	}
+
 	sc := sessionContextFromReq(r)
-	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token, sc)
+	checkResp, authResp, err := h.authService.CheckDeepLinkToken(r.Context(), token, bindingNonce, sc)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -313,6 +375,8 @@ func (h *AuthHandler) CheckDeepLink(w http.ResponseWriter, r *http.Request) {
 		metrics.AuthEventsTotal.WithLabelValues("telegram_login", "success").Inc()
 		h.setRefreshTokenCookie(w, authResp.RefreshToken)
 		h.setAccessTokenCookie(w, authResp.AccessToken, authResp.ExpiresAt)
+		// One-time nonce: the token is consumed, so retire the binding cookie.
+		h.clearTelegramNonceCookie(w)
 	}
 
 	httputil.OK(w, checkResp)

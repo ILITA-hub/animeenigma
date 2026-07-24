@@ -8,20 +8,38 @@ import (
 
 	"github.com/ILITA-hub/animeenigma/libs/errors"
 	"github.com/ILITA-hub/animeenigma/libs/logger"
+	"github.com/ILITA-hub/animeenigma/libs/metrics"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/domain"
 	"github.com/ILITA-hub/animeenigma/services/auth/internal/repo"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type UserService struct {
-	userRepo *repo.UserRepository
-	log      *logger.Logger
+// otherSessionRevoker revokes every session of a user except one. It is
+// satisfied by *repo.SessionRepository — the SAME RevokeOthers method the
+// "revoke other sessions" settings button uses — and by in-package test fakes.
+// UserService depends on the interface, not the concrete repo, so a password
+// change can invalidate the user's other sessions and still be unit-tested.
+type otherSessionRevoker interface {
+	RevokeOthers(ctx context.Context, userID, keepID string) (int64, error)
 }
 
-func NewUserService(userRepo *repo.UserRepository, log *logger.Logger) *UserService {
+// nilSessionID is a syntactically valid UUID that never matches a real session
+// row (gen_random_uuid never yields all-zeros). It is passed as the "keep" id
+// when the caller's own session cannot be identified, so RevokeOthers revokes
+// ALL of the user's sessions (fail safe — the user simply re-authenticates).
+const nilSessionID = "00000000-0000-0000-0000-000000000000"
+
+type UserService struct {
+	userRepo    *repo.UserRepository
+	sessionRepo otherSessionRevoker
+	log         *logger.Logger
+}
+
+func NewUserService(userRepo *repo.UserRepository, sessionRepo otherSessionRevoker, log *logger.Logger) *UserService {
 	return &UserService{
-		userRepo: userRepo,
-		log:      log,
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		log:         log,
 	}
 }
 
@@ -39,7 +57,11 @@ func (s *UserService) GetPublicProfile(ctx context.Context, id string) (*domain.
 	return pub, nil
 }
 
-func (s *UserService) Update(ctx context.Context, userID string, req *domain.UpdateUserRequest) (*domain.User, error) {
+// Update applies a profile update. currentSessionID is the id of the caller's
+// own session (the JWT `sid` claim, forwarded by the handler); it is spared
+// when a password change forces revocation of the user's OTHER sessions so the
+// user stays logged in on the device they just used.
+func (s *UserService) Update(ctx context.Context, userID, currentSessionID string, req *domain.UpdateUserRequest) (*domain.User, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -47,6 +69,14 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 
 	// Update username if provided
 	if req.Username != nil && *req.Username != user.Username {
+		// Enforce the same charset/length policy the registration path applies
+		// (mirrors the domain.ValidatePassword call below). Without this the
+		// profile-update path accepted homoglyphs, whitespace-padded or empty
+		// usernames and control characters that registration forbids.
+		if err := domain.ValidateUsername(*req.Username); err != nil {
+			return nil, err
+		}
+
 		exists, err := s.userRepo.ExistsByUsername(ctx, *req.Username)
 		if err != nil {
 			return nil, err
@@ -58,6 +88,7 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 	}
 
 	// Update password if provided
+	passwordChanged := false
 	if req.NewPassword != nil {
 		if req.CurrentPassword == nil {
 			return nil, errors.InvalidInput("current password is required to change password")
@@ -81,10 +112,41 @@ func (s *UserService) Update(ctx context.Context, userID string, req *domain.Upd
 			return nil, fmt.Errorf("hash password: %w", err)
 		}
 		user.PasswordHash = hashedPassword
+		passwordChanged = true
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
+	}
+
+	// A changed credential must invalidate every OTHER session so a refresh
+	// token captured under the old password cannot outlive it (CWE-613).
+	// Sessions never time-expire (100-year sentinel) and are revoke-only, so
+	// this is the only thing that kills the attacker's stolen token; without
+	// it the "change your password" remediation silently does nothing.
+	//
+	// Ordering is deliberate: the new password is persisted FIRST (above) and
+	// is durable no matter what happens here — a revocation failure never rolls
+	// the password back. The failure IS surfaced (not swallowed) so the caller
+	// learns the containment step did not fully complete rather than believing
+	// they are safe; they can retry via the /auth/sessions/revoke-others
+	// control. A username-only (or any non-password) update revokes nothing.
+	if passwordChanged {
+		keepID := currentSessionID
+		if keepID == "" {
+			// The caller's own session id is unknown (e.g. a legacy access
+			// token minted without a `sid` claim). Fail safe: revoke ALL of the
+			// user's sessions rather than none — forcing a re-login is strictly
+			// safer than leaving a possibly-stolen token alive.
+			keepID = nilSessionID
+			s.log.Warnw("password changed but current session id unknown; revoking all sessions", "user_id", userID)
+		}
+		n, err := s.sessionRepo.RevokeOthers(ctx, userID, keepID)
+		if err != nil {
+			return nil, fmt.Errorf("revoke other sessions after password change: %w", err)
+		}
+		metrics.AuthEventsTotal.WithLabelValues("session_revoked", "password_change").Add(float64(n))
+		s.log.Infow("revoked other sessions after password change", "user_id", userID, "revoked", n)
 	}
 
 	return user, nil

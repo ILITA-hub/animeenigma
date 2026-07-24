@@ -302,6 +302,19 @@ func (h *ProxyHandler) proxyStream(w http.ResponseWriter, r *http.Request, servi
 		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), service).Inc()
 	}
 
+	// Strip upstream Set-Cookie on the public streaming body routes
+	// (/api/streaming/hls-proxy, /m/*, /stream/*). Those bodies proxy an
+	// untrusted third-party media host through the first-party origin; a
+	// relayed Set-Cookie would let a hostile/compromised upstream plant or
+	// overwrite cookies (e.g. refresh_token/access_token) on animeenigma.org
+	// — session fixation / forced logout (CWE-113). Media segments/manifests
+	// never legitimately set app cookies. Scoped to non-auth so the auth
+	// login/refresh cookie-setting responses (which are NOT routed through this
+	// streaming path) stay unaffected, mirroring the request-side auth cookie
+	// special-case in service/proxy.go. Mirrors the resp.Header.Del("Set-Cookie")
+	// idiom in external_api.go.
+	stripUpstreamSetCookie(resp, service)
+
 	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
 	for key, values := range resp.Header {
 		if isCORSHeader(key) {
@@ -314,6 +327,23 @@ func (h *ProxyHandler) proxyStream(w http.ResponseWriter, r *http.Request, servi
 
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// stripUpstreamSetCookie removes Set-Cookie/Set-Cookie2 from an upstream
+// streaming-body response before it is relayed to the browser, for every
+// service except auth. The streaming body routes proxy untrusted third-party
+// media hosts through the first-party origin, so a relayed Set-Cookie is a
+// cookie-injection vector (CWE-113). auth is exempted so its legitimate
+// refresh_token/access_token cookie-setting responses still reach the browser
+// — though auth is never actually routed through the streaming path today, the
+// exemption keeps this correct if that ever changes and matches the request-
+// side auth cookie special-case in service/proxy.go.
+func stripUpstreamSetCookie(resp *http.Response, service string) {
+	if service == "auth" {
+		return
+	}
+	resp.Header.Del("Set-Cookie")
+	resp.Header.Del("Set-Cookie2")
 }
 
 // proxyStreamFlush is proxyStream but flushes after every read so SSE events
@@ -337,6 +367,11 @@ func (h *ProxyHandler) proxyStreamFlush(w http.ResponseWriter, r *http.Request, 
 	if resp.StatusCode >= 500 {
 		metrics.ProxyUpstreamErrors.WithLabelValues(strconv.Itoa(resp.StatusCode), service).Inc()
 	}
+
+	// Strip upstream Set-Cookie for non-auth streaming/SSE bodies (CWE-113) —
+	// same rationale as proxyStream above; an untrusted upstream must not be
+	// able to set cookies on the first-party origin.
+	stripUpstreamSetCookie(resp, service)
 
 	// Copy response headers, skipping CORS headers (gateway middleware handles CORS)
 	for key, values := range resp.Header {

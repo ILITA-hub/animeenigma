@@ -43,7 +43,8 @@ func newTestUserService(t *testing.T, withShowcaseTable bool) (*UserService, *go
 		}
 	})
 	r := repo.NewUserRepository(db)
-	return NewUserService(r, logger.Default()), db
+	sr := repo.NewSessionRepository(db)
+	return NewUserService(r, sr, logger.Default()), db
 }
 
 func seedTestUser(t *testing.T, db *gorm.DB) (id, publicID string) {
