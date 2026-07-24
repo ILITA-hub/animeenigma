@@ -169,15 +169,18 @@ func certFingerprint(cert *x509.Certificate) string {
 }
 
 // generateP12Password returns a ~10-char human-typeable password. Charset
-// avoids ambiguous glyphs (0/O, 1/l).
+// avoids ambiguous glyphs (0/O, 1/l). Each character is sampled via
+// rand.Int against the charset length to avoid modulo bias.
 func generateP12Password() (string, error) {
 	const charset = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+	charsetLen := big.NewInt(int64(len(charset)))
 	b := make([]byte, 10)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("rand: %w", err)
-	}
 	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
+		n, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", fmt.Errorf("rand: %w", err)
+		}
+		b[i] = charset[n.Int64()]
 	}
 	return string(b), nil
 }
