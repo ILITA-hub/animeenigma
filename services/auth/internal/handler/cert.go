@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -48,7 +49,10 @@ func (h *CertHandler) Issue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req issueCertRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		httputil.Error(w, errors.InvalidInput("invalid body"))
+		return
+	}
 	user, err := h.auth.GetUserByID(r.Context(), claims.UserID)
 	if err != nil {
 		httputil.Error(w, err)
