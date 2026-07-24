@@ -36,14 +36,23 @@ func NewNotificationService(r *repo.NotificationRepository, log *logger.Logger) 
 	return &NotificationService{repo: r, log: log}
 }
 
-// NewEpisodeDedupeKey builds the canonical dedupe key for a new_episode
-// notification per the design-doc Dedupe Key spec:
+// NewEpisodeDedupeKey builds the canonical per-anime dedupe key for a
+// new_episode notification:
 //
-//	new_episode:<anime_id>:<player>:<language>:<watch_type>:<translation_id>
+//	new_episode:<anime_id>
 //
-// Stable order so two callers (Phase 2 detector + this service's UPSERT)
-// always agree on the same string.
-func NewEpisodeDedupeKey(animeID, player, language, watchType, translationID string) string {
+// AUTO-660 deliberately excludes provider/team fields. The detector still
+// scans and snapshots every watched combo, but a user gets one active
+// notification for an anime regardless of which combo discovers the episode.
+func NewEpisodeDedupeKey(animeID string) string {
+	return fmt.Sprintf("new_episode:%s", animeID)
+}
+
+// LegacyNewEpisodeDedupeKey returns the pre-AUTO-660 combo-scoped key. The
+// detector supplies these keys when it creates the canonical per-anime row so
+// any still-unread legacy rows are invalidated instead of remaining visible
+// beside the grouped notification.
+func LegacyNewEpisodeDedupeKey(animeID, player, language, watchType, translationID string) string {
 	return fmt.Sprintf("new_episode:%s:%s:%s:%s:%s",
 		animeID, player, language, watchType, translationID)
 }

@@ -315,7 +315,7 @@ func Test_Detector_FiresOnDiffAfterBootstrap(t *testing.T) {
 	if err := db.Where("user_id = ?", userID).Take(&n).Error; err != nil {
 		t.Fatalf("fetch notification: %v", err)
 	}
-	want := "new_episode:" + animeID + ":animelib:ru:dub:9999"
+	want := "new_episode:" + animeID
 	if n.DedupeKey != want {
 		t.Fatalf("dedupe key mismatch: want %q, got %q", want, n.DedupeKey)
 	}
@@ -327,6 +327,179 @@ func Test_Detector_FiresOnDiffAfterBootstrap(t *testing.T) {
 	}
 	if payload.TranslationTitle != "AniRise" {
 		t.Fatalf("translation_title mismatch: want %q, got %q", "AniRise", payload.TranslationTitle)
+	}
+}
+
+// Test_Detector_GroupsCombosAndEpisodesPerUserAnime is the AUTO-660
+// regression: every watched provider/team combo is still scanned and
+// snapshotted, while simultaneous diffs collapse into one notification whose
+// range covers every newly available episode.
+func Test_Detector_GroupsCombosAndEpisodesPerUserAnime(t *testing.T) {
+	db := testDB(t)
+
+	animeID := "anime-grouped"
+	shikimoriID := "660"
+	userID := "user-1"
+	animelib := domain.Combo{
+		AnimeID: animeID, ShikimoriID: shikimoriID,
+		Player: "animelib", Language: "ru", WatchType: "dub", TranslationID: "team-a",
+	}
+	kodik := domain.Combo{
+		AnimeID: animeID, ShikimoriID: shikimoriID,
+		Player: "kodik", Language: "ru", WatchType: "dub", TranslationID: "team-b",
+	}
+
+	seedAnime(t, db, animeID, shikimoriID)
+	seedList(t, db, userID, animeID, "watching")
+	seedWatch(t, db, userID, animeID, animelib.Player, animelib.Language, animelib.WatchType, animelib.TranslationID, 5)
+	seedWatch(t, db, userID, animeID, kodik.Player, kodik.Language, kodik.WatchType, kodik.TranslationID, 4)
+
+	checker := &stubChecker{byCombo: map[domain.Combo]int{
+		animelib: 5,
+		kodik:    5,
+	}}
+	det := newDetector(t, db, checker)
+
+	if _, err := det.Run(context.Background()); err != nil {
+		t.Fatalf("bootstrap run: %v", err)
+	}
+
+	// Both combos advance in the same detector pass, and one of them jumps
+	// across multiple episodes.
+	checker.byCombo[animelib] = 7
+	checker.byCombo[kodik] = 8
+	report, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("diff run: %v", err)
+	}
+	if report.CombosScanned != 2 || report.CombosSelected != 2 || report.AffectedCombos != 2 {
+		t.Fatalf("all combos must still be scanned: report=%+v", report)
+	}
+	if report.NotificationsUpserted != 1 {
+		t.Fatalf("expected one grouped notification, got %+v", report)
+	}
+
+	var snapshots []domain.ParserEpisodeSnapshot
+	if err := db.Order("player").Find(&snapshots).Error; err != nil {
+		t.Fatalf("fetch snapshots: %v", err)
+	}
+	if len(snapshots) != 2 || snapshots[0].LatestEpisode != 7 || snapshots[1].LatestEpisode != 8 {
+		t.Fatalf("both combo snapshots must advance independently, got %+v", snapshots)
+	}
+
+	var notifications []domain.UserNotification
+	if err := db.Where("user_id = ?", userID).Find(&notifications).Error; err != nil {
+		t.Fatalf("fetch notifications: %v", err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("expected exactly one row for both combos, got %d", len(notifications))
+	}
+	if want := service.NewEpisodeDedupeKey(animeID); notifications[0].DedupeKey != want {
+		t.Fatalf("dedupe key mismatch: want %q, got %q", want, notifications[0].DedupeKey)
+	}
+	var payload domain.NewEpisodePayload
+	if err := json.Unmarshal([]byte(notifications[0].Payload), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.FirstUnwatchedEpisode != 6 || payload.LatestAvailableEpisode != 8 {
+		t.Fatalf("expected grouped episode range 6-8, got %+v", payload)
+	}
+}
+
+// Test_Detector_SkipsLaggingComboDuplicate verifies the cross-run half of
+// AUTO-660. When provider B reports episode 6 one run after provider A, it is
+// still scanned and its snapshot advances, but the already-reported episode
+// must not refresh/reset the user's per-anime notification. Episode 7 remains
+// a genuine new event and updates that same row.
+func Test_Detector_SkipsLaggingComboDuplicate(t *testing.T) {
+	db := testDB(t)
+
+	animeID := "anime-staggered"
+	shikimoriID := "661"
+	userID := "user-1"
+	first := domain.Combo{
+		AnimeID: animeID, ShikimoriID: shikimoriID,
+		Player: "animelib", Language: "ru", WatchType: "sub", TranslationID: "team-a",
+	}
+	lagging := domain.Combo{
+		AnimeID: animeID, ShikimoriID: shikimoriID,
+		Player: "kodik", Language: "ru", WatchType: "sub", TranslationID: "team-b",
+	}
+
+	seedAnime(t, db, animeID, shikimoriID)
+	seedList(t, db, userID, animeID, "watching")
+	seedWatch(t, db, userID, animeID, first.Player, first.Language, first.WatchType, first.TranslationID, 5)
+	seedWatch(t, db, userID, animeID, lagging.Player, lagging.Language, lagging.WatchType, lagging.TranslationID, 5)
+
+	checker := &stubChecker{byCombo: map[domain.Combo]int{first: 5, lagging: 5}}
+	det := newDetector(t, db, checker)
+	if _, err := det.Run(context.Background()); err != nil {
+		t.Fatalf("bootstrap run: %v", err)
+	}
+
+	checker.byCombo[first] = 6
+	firstReport, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("first provider diff: %v", err)
+	}
+	if firstReport.NotificationsUpserted != 1 {
+		t.Fatalf("first provider must create one notification, got %+v", firstReport)
+	}
+
+	readAt := time.Now().UTC()
+	if err := db.Model(&domain.UserNotification{}).
+		Where("user_id = ?", userID).
+		Update("read_at", readAt).Error; err != nil {
+		t.Fatalf("mark notification read: %v", err)
+	}
+
+	// Same episode arrives on the second provider. Snapshot it, but do not
+	// upsert (which would incorrectly reset read_at and show a duplicate).
+	checker.byCombo[lagging] = 6
+	duplicateReport, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("lagging provider diff: %v", err)
+	}
+	if duplicateReport.AffectedCombos != 1 || duplicateReport.NotificationsUpserted != 0 {
+		t.Fatalf("lagging combo must advance without notifying, got %+v", duplicateReport)
+	}
+	var notification domain.UserNotification
+	if err := db.Where("user_id = ?", userID).Take(&notification).Error; err != nil {
+		t.Fatalf("fetch notification after duplicate: %v", err)
+	}
+	if notification.ReadAt == nil {
+		t.Fatal("duplicate provider arrival reset read_at")
+	}
+
+	// A truly newer episode on either provider updates the same per-anime row.
+	checker.byCombo[lagging] = 7
+	newReport, err := det.Run(context.Background())
+	if err != nil {
+		t.Fatalf("newer provider diff: %v", err)
+	}
+	if newReport.NotificationsUpserted != 1 {
+		t.Fatalf("episode 7 must refresh one grouped notification, got %+v", newReport)
+	}
+	var count int64
+	if err := db.Model(&domain.UserNotification{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+		t.Fatalf("count notifications: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one stable per-anime row, got %d", count)
+	}
+	notification = domain.UserNotification{}
+	if err := db.Where("user_id = ?", userID).Take(&notification).Error; err != nil {
+		t.Fatalf("fetch refreshed notification: %v", err)
+	}
+	if notification.ReadAt != nil {
+		t.Fatal("genuinely newer episode must reset read_at")
+	}
+	var payload domain.NewEpisodePayload
+	if err := json.Unmarshal([]byte(notification.Payload), &payload); err != nil {
+		t.Fatalf("unmarshal refreshed payload: %v", err)
+	}
+	if payload.FirstUnwatchedEpisode != 6 || payload.LatestAvailableEpisode != 7 {
+		t.Fatalf("expected refreshed episode range 6-7, got %+v", payload)
 	}
 }
 

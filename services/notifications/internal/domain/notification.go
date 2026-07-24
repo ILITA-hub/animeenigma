@@ -16,10 +16,10 @@ import (
 type NotificationType string
 
 const (
-	// TypeNewEpisode signals that a parser snapshot detected a new episode
-	// for an anime + (player, language, watch_type, translation_id) combo
-	// that the user has watched at least once. Payload shape:
-	// NewEpisodePayload.
+	// TypeNewEpisode signals that one or more watched provider/team combos
+	// detected new episodes for an anime. Detector output is grouped per
+	// user + anime; the payload retains one representative combo for source
+	// display while its episode range covers the grouped result.
 	TypeNewEpisode NotificationType = "new_episode"
 
 	// Feedback triage loop (AUTO-417): the player service emits one

@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestNewEpisodeDedupeKey_IsPerAnime(t *testing.T) {
+	if got, want := NewEpisodeDedupeKey("anime-660"), "new_episode:anime-660"; got != want {
+		t.Fatalf("NewEpisodeDedupeKey = %q, want %q", got, want)
+	}
+}
+
 // BuildWatchURL is now a bare anime-page link with NO query params — the old
 // ?provider&team&episode deep-link baked in a stale episode number that the
 // frontend treated as a hard override, landing users on the wrong episode.

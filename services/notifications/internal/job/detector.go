@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,23 +29,24 @@ type RunReport struct {
 
 // NewEpisodeDetectorJob runs the design-doc §Detection Flow once per call:
 //
-//  1. Collect hot combos (DISTINCT join over watch_history × anime_list ×
-//     animes; status='watching' + 'ongoing' + translation_id != '').
+//  1. Collect eligible watched combos (DISTINCT join over watch_history ×
+//     anime_list × animes; status='watching' + 'ongoing').
 //  2. BulkLoad prior parser_episode_snapshots.
 //  3. Fan-out per-combo parser lookups via the EpisodeChecker port
 //     (errgroup cap WorkerLimit, per-call ParserTimeout). Per-combo
 //     failures are LOGGED + COUNTED but DO NOT abort the run.
 //  4. Diff each parser-reported latest against the prior snapshot:
 //     - No prior snapshot → bootstrap (record snapshot, NO notification)
-//       per NOTIF-DET-06.
+//     per NOTIF-DET-06.
 //     - latest <= prior → never lower the snapshot; skip the combo
-//       (NOTIF-DET-10).
+//     (NOTIF-DET-10).
 //     - latest > prior → record affected.
 //  5. BulkUpsert snapshots BEFORE notifications (mid-run crash recovery:
 //     next run re-runs parser calls idempotently and the un-fired
 //     notifications surface on the next diff).
-//  6. For each affected combo, iterate (user, max_watched) pairs and
-//     UPSERT a new_episode notification via the in-process
+//  6. Group affected combos by (user, anime), discard provider/team diffs
+//     that do not exceed that user's prior best availability, and UPSERT one
+//     new_episode notification per group via the in-process
 //     NotificationService (D-DET-01 — NOT HTTP self-loopback).
 type NewEpisodeDetectorJob struct {
 	hotCombos  *HotCombosCollector
@@ -183,20 +185,29 @@ func (j *NewEpisodeDetectorJob) Run(ctx context.Context) (RunReport, error) {
 		return report, nil
 	}
 
-	// Step 6 — UPSERT notifications per (user, combo). MaxWatched queries
-	// watch_history (no shikimori_id column), so normalise the affected
-	// combo keys before passing in — keeps ForCombos's returned map keys
-	// shape-stable with the snapKey lookup below.
-	affectedForLookup := make([]domain.Combo, len(affected))
-	for i, c := range affected {
-		affectedForLookup[i] = snapKey(c)
+	// Step 6 — UPSERT one notification per (user, anime). Query every combo
+	// selected for the affected anime(s), not only the combos with a diff:
+	// the user's highest prior provider/team snapshot is what lets us suppress
+	// a lagging provider that reports an already-notified episode later.
+	affectedAnime := make(map[string]struct{}, len(affected))
+	for _, c := range affected {
+		affectedAnime[c.AnimeID] = struct{}{}
 	}
-	maxByCombo, err := j.maxWatched.ForCombos(ctx, affectedForLookup)
+	trackedCombos := make([]domain.Combo, 0, len(combos))
+	combosForLookup := make([]domain.Combo, 0, len(combos))
+	for _, c := range combos {
+		if _, ok := affectedAnime[c.AnimeID]; !ok {
+			continue
+		}
+		trackedCombos = append(trackedCombos, c)
+		combosForLookup = append(combosForLookup, snapKey(c))
+	}
+	maxByCombo, err := j.maxWatched.ForCombos(ctx, combosForLookup)
 	if err != nil {
 		return j.fail(&report, "detector max-watched lookup failed", err)
 	}
 
-	upserted := j.upsertNotifications(ctx, affected, resultPerCombo, maxByCombo)
+	upserted := j.upsertNotifications(ctx, trackedCombos, affected, resultPerCombo, snapshotMap, maxByCombo)
 	report.NotificationsUpserted = upserted
 
 	// Outcome derivation (matches plan touch-list exactly):
@@ -346,15 +357,35 @@ func diffSnapshots(
 	return affected, snapUpdates
 }
 
-// upsertNotifications UPSERTs a new_episode notification per (user, combo)
-// for every affected combo (D-DET-01 — in-process NotificationService, not
-// HTTP self-loopback). maxByCombo is keyed by snapKey-normalised combos
-// (watch_history has no shikimori_id column). Anime metadata is memoized
-// across combos sharing an animeID. Returns the count successfully upserted.
+type userAnimeKey struct {
+	userID  string
+	animeID string
+}
+
+type groupedNotification struct {
+	maxWatched          int
+	priorLatest         int
+	latestAffected      int
+	representative      domain.Combo
+	representativeWatch int
+	legacyDedupeKeys    []string
+}
+
+// upsertNotifications groups affected provider/team combos into one
+// new_episode notification per (user, anime) (AUTO-660). Every combo is still
+// parser-checked and snapshotted; grouping happens only at the emission edge.
+//
+// A lagging provider must not re-notify when it later reaches an episode
+// another watched combo already exposed. To enforce that, latestAffected is
+// compared with the highest pre-run snapshot across all combos tracked by the
+// user for the anime. Multiple affected combos and multi-episode jumps collapse
+// into one [max watched + 1, highest affected latest] payload range.
 func (j *NewEpisodeDetectorJob) upsertNotifications(
 	ctx context.Context,
+	combos []domain.Combo,
 	affected []domain.Combo,
 	resultPerCombo map[domain.Combo]service.EpisodeCheckResult,
+	snapshotMap map[domain.Combo]int,
 	maxByCombo map[domain.Combo]map[string]int,
 ) int {
 	// Memoize anime metadata across combos sharing animeID. Typical user
@@ -373,64 +404,128 @@ func (j *NewEpisodeDetectorJob) upsertNotifications(
 		return v, nil
 	}
 
-	upserted := 0
-	for _, combo := range affected {
-		// maxByCombo is keyed by combo WITHOUT shikimori_id (watch_history
-		// has no shikimori_id column). Same normalisation as snapshot
-		// lookup above.
-		users, ok := maxByCombo[snapKey(combo)]
-		if !ok {
-			continue
+	groups := make(map[userAnimeKey]*groupedNotification)
+
+	// Seed each group with user-wide watch progress, the highest pre-run
+	// availability across their combos, and legacy combo keys to invalidate.
+	for _, combo := range combos {
+		users := maxByCombo[snapKey(combo)]
+		for userID, maxWatched := range users {
+			key := userAnimeKey{userID: userID, animeID: combo.AnimeID}
+			group, ok := groups[key]
+			if !ok {
+				group = &groupedNotification{}
+				groups[key] = group
+			}
+			if maxWatched > group.maxWatched {
+				group.maxWatched = maxWatched
+			}
+			if previous, ok := snapshotMap[snapKey(combo)]; ok && previous > group.priorLatest {
+				group.priorLatest = previous
+			}
+			group.legacyDedupeKeys = append(group.legacyDedupeKeys,
+				service.LegacyNewEpisodeDedupeKey(
+					combo.AnimeID, combo.Player, combo.Language, combo.WatchType, combo.TranslationID))
 		}
+	}
+
+	// Only genuine per-combo diffs can make a group eligible. Select the
+	// affected combo with the greatest latest episode as the representative;
+	// ties prefer the combo on which this user watched furthest, then a stable
+	// lexical combo order so payload choice does not depend on map iteration.
+	for _, combo := range affected {
 		result := resultPerCombo[combo]
-		anime, err := getAnime(combo.AnimeID)
+		users := maxByCombo[snapKey(combo)]
+		for userID, comboMaxWatched := range users {
+			key := userAnimeKey{userID: userID, animeID: combo.AnimeID}
+			group := groups[key]
+			if group == nil {
+				continue
+			}
+			if result.Latest > group.latestAffected ||
+				(result.Latest == group.latestAffected &&
+					betterRepresentative(combo, comboMaxWatched, group.representative, group.representativeWatch)) {
+				group.latestAffected = result.Latest
+				group.representative = combo
+				group.representativeWatch = comboMaxWatched
+			}
+		}
+	}
+
+	keys := make([]userAnimeKey, 0, len(groups))
+	for key, group := range groups {
+		if group.latestAffected > group.priorLatest &&
+			group.maxWatched+1 <= group.latestAffected {
+			keys = append(keys, key)
+		}
+	}
+	sort.Slice(keys, func(i, k int) bool {
+		if keys[i].animeID == keys[k].animeID {
+			return keys[i].userID < keys[k].userID
+		}
+		return keys[i].animeID < keys[k].animeID
+	})
+
+	upserted := 0
+	for _, key := range keys {
+		group := groups[key]
+		result := resultPerCombo[group.representative]
+		anime, err := getAnime(key.animeID)
 		if err != nil {
 			if j.log != nil {
 				j.log.Warnw("detector anime view lookup failed",
-					"anime_id", combo.AnimeID, "error", err)
+					"anime_id", key.animeID, "error", err)
 			}
 			continue
 		}
-		for userID, maxWatched := range users {
-			firstUnwatched := maxWatched + 1
-			if firstUnwatched > result.Latest {
-				// Defensive race guard: the user already watched the new
-				// episode between the parser call and now. NOTIF-DET-07.
-				continue
+		payload, err := service.BuildNewEpisodePayload(
+			group.representative,
+			anime,
+			group.maxWatched,
+			group.latestAffected,
+			result.TranslationTitle,
+		)
+		if err != nil {
+			if j.log != nil {
+				j.log.Warnw("detector payload build failed",
+					"anime_id", key.animeID,
+					"player", group.representative.Player,
+					"translation_id", group.representative.TranslationID,
+					"error", err)
 			}
-			payload, err := service.BuildNewEpisodePayload(combo, anime, maxWatched, result.Latest, result.TranslationTitle)
-			if err != nil {
-				if j.log != nil {
-					j.log.Warnw("detector payload build failed",
-						"anime_id", combo.AnimeID,
-						"player", combo.Player,
-						"translation_id", combo.TranslationID,
-						"error", err)
-				}
-				continue
-			}
-			dedupeKey := service.NewEpisodeDedupeKey(
-				combo.AnimeID, combo.Player, combo.Language, combo.WatchType, combo.TranslationID)
-			_, err = j.notif.Upsert(ctx, service.UpsertRequest{
-				UserID:    userID,
-				Type:      string(domain.TypeNewEpisode),
-				DedupeKey: dedupeKey,
-				Payload:   payload,
-			})
-			if err != nil {
-				if j.log != nil {
-					j.log.Warnw("detector notification upsert failed",
-						"user_id", userID,
-						"anime_id", combo.AnimeID,
-						"error", err)
-				}
-				continue
-			}
-			NotificationsCreatedTotal.WithLabelValues(string(domain.TypeNewEpisode), "detector").Inc()
-			upserted++
+			continue
 		}
+		_, err = j.notif.Upsert(ctx, service.UpsertRequest{
+			UserID:               key.userID,
+			Type:                 string(domain.TypeNewEpisode),
+			DedupeKey:            service.NewEpisodeDedupeKey(key.animeID),
+			Payload:              payload,
+			InvalidateDedupeKeys: group.legacyDedupeKeys,
+		})
+		if err != nil {
+			if j.log != nil {
+				j.log.Warnw("detector notification upsert failed",
+					"user_id", key.userID,
+					"anime_id", key.animeID,
+					"error", err)
+			}
+			continue
+		}
+		NotificationsCreatedTotal.WithLabelValues(string(domain.TypeNewEpisode), "detector").Inc()
+		upserted++
 	}
 	return upserted
+}
+
+func betterRepresentative(candidate domain.Combo, candidateWatch int, current domain.Combo, currentWatch int) bool {
+	if current.AnimeID == "" || candidateWatch != currentWatch {
+		return current.AnimeID == "" || candidateWatch > currentWatch
+	}
+	candidateKey := candidate.Player + "\x00" + candidate.Language + "\x00" +
+		candidate.WatchType + "\x00" + candidate.TranslationID
+	currentKey := current.Player + "\x00" + current.Language + "\x00" +
+		current.WatchType + "\x00" + current.TranslationID
+	return candidateKey < currentKey
 }
 
 // recordOutcome stamps the outcome on the report AND bumps the runs counter.
