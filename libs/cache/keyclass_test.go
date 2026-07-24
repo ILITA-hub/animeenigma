@@ -79,3 +79,15 @@ func itoa(n int) string {
 	}
 	return string(b[i:])
 }
+
+func TestKeyCertLogin(t *testing.T) {
+	if got := KeyCertLogin("abc"); got != "certlogin:abc" {
+		t.Fatalf("KeyCertLogin = %q", got)
+	}
+}
+
+func TestKeyWebAuthnCeremony(t *testing.T) {
+	if got := KeyWebAuthnCeremony("abc"); got != "webauthn:abc" {
+		t.Fatalf("KeyWebAuthnCeremony = %q", got)
+	}
+}

@@ -89,6 +89,18 @@ func KeyXDomainMagic(token string) string {
 	return PrefixXDomainMagic + token
 }
 
+// KeyCertLogin is the Redis key for a one-time TLS-cert login handoff token
+// (minted by /cert/handshake-login, consumed by /api/auth/cert/consume).
+func KeyCertLogin(token string) string {
+	return "certlogin:" + token
+}
+
+// KeyWebAuthnCeremony is the Redis key for in-flight WebAuthn ceremony state
+// (registration or login), keyed by a random ceremony id.
+func KeyWebAuthnCeremony(id string) string {
+	return "webauthn:" + id
+}
+
 // classOther is the single catch-all bucket for unknown prefixes. Keeping it a
 // named constant makes the bounded-set intent explicit and greppable.
 const classOther = "other"

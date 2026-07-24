@@ -15,6 +15,11 @@ var (
 	// One-time cross-domain SSO handoff token. Deliberately tiny — the token
 	// rides in a URL during a single redirect chain.
 	TTLXDomainMagic = 60 * time.Second
+	// TTLCertLogin bounds the window between a successful mTLS handshake on
+	// cert.animeenigma.org and the main-origin cookie exchange.
+	TTLCertLogin = 60 * time.Second
+	// TTLWebAuthnCeremony bounds a WebAuthn register/login ceremony.
+	TTLWebAuthnCeremony = 5 * time.Minute
 
 	// Medium-lived cache for moderately stable data
 	TTLAnimeList      = 1 * time.Hour
