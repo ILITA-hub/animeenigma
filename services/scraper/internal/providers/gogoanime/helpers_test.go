@@ -71,6 +71,25 @@ func (f *fakeCache) Delete(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+func (f *fakeCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.getLog = append(f.getLog, key)
+	data, ok := f.data[key]
+	if !ok {
+		return cache.ErrNotFound
+	}
+	if exp, ok := f.expiry[key]; ok && time.Now().After(exp) {
+		delete(f.data, key)
+		delete(f.expiry, key)
+		return cache.ErrNotFound
+	}
+	f.deleted = append(f.deleted, key)
+	delete(f.data, key)
+	delete(f.expiry, key)
+	return json.Unmarshal(data, dest)
+}
+
 func (f *fakeCache) Exists(ctx context.Context, key string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

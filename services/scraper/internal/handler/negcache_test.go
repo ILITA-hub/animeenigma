@@ -50,6 +50,17 @@ func (m *negMemCache) Set(_ context.Context, key string, value interface{}, _ ti
 	return nil
 }
 
+func (m *negMemCache) GetDel(_ context.Context, key string, dest interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.data[key]
+	if !ok {
+		return errors.New("miss")
+	}
+	delete(m.data, key)
+	return json.Unmarshal(b, dest)
+}
+
 func (m *negMemCache) Delete(_ context.Context, keys ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

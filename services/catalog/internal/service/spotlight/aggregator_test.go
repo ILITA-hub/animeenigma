@@ -87,6 +87,20 @@ func (c *fakeCache) Set(ctx context.Context, key string, value interface{}, ttl 
 	return nil
 }
 
+func (c *fakeCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.getErr != nil {
+		return c.getErr
+	}
+	data, ok := c.store[key]
+	if !ok {
+		return cache.ErrNotFound
+	}
+	delete(c.store, key)
+	return json.Unmarshal(data, dest)
+}
+
 func (c *fakeCache) Delete(ctx context.Context, keys ...string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

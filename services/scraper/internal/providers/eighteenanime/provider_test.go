@@ -56,6 +56,17 @@ func (c *inMemoryCache) Delete(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+func (c *inMemoryCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[key]
+	if !ok {
+		return errors.New("miss")
+	}
+	delete(c.m, key)
+	return json.Unmarshal(v, dest)
+}
+
 func (c *inMemoryCache) Exists(ctx context.Context, key string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

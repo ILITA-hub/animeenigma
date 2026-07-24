@@ -48,6 +48,27 @@ func (c *skipTimesTestCache) Get(_ context.Context, key string, dest interface{}
 	return json.Unmarshal(data, dest)
 }
 
+func (c *skipTimesTestCache) GetDel(_ context.Context, key string, dest interface{}) error {
+	if flag, ok := c.flags[key]; ok {
+		data, err := json.Marshal(flag)
+		if err != nil {
+			return err
+		}
+		delete(c.flags, key)
+		return json.Unmarshal(data, dest)
+	}
+	value, ok := c.store[key]
+	if !ok {
+		return cache.ErrNotFound
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	delete(c.store, key)
+	return json.Unmarshal(data, dest)
+}
+
 func (c *skipTimesTestCache) Set(_ context.Context, key string, value interface{}, _ time.Duration) error {
 	switch v := value.(type) {
 	case SkipTimesResult:

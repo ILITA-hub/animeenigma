@@ -86,6 +86,18 @@ func (m *memCache) Set(ctx context.Context, key string, value interface{}, ttl t
 	return nil
 }
 
+func (m *memCache) GetDel(ctx context.Context, key string, dest interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.data[key]; !ok {
+		return cache.ErrNotFound
+	}
+	delete(m.data, key)
+	// Mirrors Get: every lookup in this test is a miss-by-design (see Get
+	// above), so real decoding isn't needed here either.
+	return cache.ErrNotFound
+}
+
 func (m *memCache) Delete(ctx context.Context, keys ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

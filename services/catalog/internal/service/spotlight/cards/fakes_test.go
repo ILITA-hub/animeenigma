@@ -110,6 +110,23 @@ func (f *fakeCache) Set(_ context.Context, key string, value interface{}, _ time
 	return nil
 }
 
+func (f *fakeCache) GetDel(_ context.Context, key string, dest interface{}) error {
+	atomic.AddInt32(&f.gets, 1)
+	if f.getErr != nil {
+		return f.getErr
+	}
+	f.mu.Lock()
+	data, ok := f.store[key]
+	if ok {
+		delete(f.store, key)
+	}
+	f.mu.Unlock()
+	if !ok {
+		return cache.ErrNotFound
+	}
+	return json.Unmarshal(data, dest)
+}
+
 func (f *fakeCache) Delete(_ context.Context, _ ...string) error      { return nil }
 func (f *fakeCache) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
 func (f *fakeCache) Invalidate(_ context.Context, _ string) error     { return nil }

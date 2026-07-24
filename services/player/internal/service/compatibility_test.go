@@ -54,6 +54,17 @@ func (c *fakeCache) Set(_ context.Context, key string, value interface{}, _ time
 	return nil
 }
 
+func (c *fakeCache) GetDel(_ context.Context, key string, dest interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.data[key]
+	if !ok {
+		return cache.ErrNotFound
+	}
+	delete(c.data, key)
+	return json.Unmarshal(b, dest)
+}
+
 func (c *fakeCache) Delete(_ context.Context, _ ...string) error      { return nil }
 func (c *fakeCache) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
 func (c *fakeCache) Invalidate(_ context.Context, _ string) error     { return nil }
