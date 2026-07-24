@@ -18,9 +18,9 @@ function mountDashboard() {
 }
 
 describe('AdminDashboard', () => {
-  it('renders all 7 admin tool cards', () => {
+  it('renders all 8 admin tool cards', () => {
     const w = mountDashboard()
-    expect(w.findAll('[data-testid="admin-tool-card"]').length).toBe(7)
+    expect(w.findAll('[data-testid="admin-tool-card"]').length).toBe(8)
   })
 
   it('links each internal tool to its SPA route', () => {
@@ -50,6 +50,6 @@ describe('AdminDashboard', () => {
 
   it('renders an icon per card', () => {
     const w = mountDashboard()
-    expect(w.findAll('[data-testid="admin-tool-card"] svg').length).toBe(7)
+    expect(w.findAll('[data-testid="admin-tool-card"] svg').length).toBe(8)
   })
 })
