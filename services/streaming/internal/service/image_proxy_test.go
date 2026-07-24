@@ -127,6 +127,62 @@ func TestDownscaleImageRejectsGarbage(t *testing.T) {
 	}
 }
 
+// TestDownscaleImagePreservesAlpha pins Finding 2: gacha card/banner art with
+// real transparency must survive resizing as PNG, not get flattened onto a
+// JPEG background. Mirrors the ingest-side isOpaque split in
+// services/gacha/internal/service/images.go.
+func TestDownscaleImagePreservesAlpha(t *testing.T) {
+	w, h := 400, 600
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			// Left half fully opaque, right half half-transparent — not
+			// isOpaque() for the image as a whole.
+			a := uint8(255)
+			if x >= w/2 {
+				a = 128
+			}
+			img.Set(x, y, color.NRGBA{R: uint8(x % 256), G: uint8(y % 256), B: 128, A: a})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode source PNG: %v", err)
+	}
+
+	out, ct, err := downscaleImage(buf.Bytes(), 256)
+	if err != nil {
+		t.Fatalf("downscaleImage: %v", err)
+	}
+	if ct != "image/png" {
+		t.Errorf("content type = %q, want image/png (transparency must not be flattened to JPEG)", ct)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if decoded.Bounds().Dx() != 256 {
+		t.Errorf("output width = %d, want 256", decoded.Bounds().Dx())
+	}
+	// Sample a pixel from the transparent half and confirm alpha survived.
+	_, _, _, a := decoded.At(decoded.Bounds().Dx()-1, decoded.Bounds().Dy()/2).RGBA()
+	if a == 0xffff {
+		t.Errorf("alpha not preserved: transparent-side pixel came back fully opaque")
+	}
+}
+
+// TestDownscaleImageOpaquePNGStillEncodesJPEG confirms the JPEG fast path is
+// unaffected: a fully-opaque PNG source (isOpaque true) still produces JPEG
+// output, matching TestDownscaleImagePNGInput's existing expectation.
+func TestDownscaleImageOpaquePNGStillEncodesJPEG(t *testing.T) {
+	src := encodeTestImage(t, 200, 300, true)
+	if _, ct, err := downscaleImage(src, 128); err != nil {
+		t.Fatalf("downscaleImage: %v", err)
+	} else if ct != "image/jpeg" {
+		t.Errorf("content type = %q, want image/jpeg for an opaque source", ct)
+	}
+}
+
 // TestResizeOrShedUnderCriticalDegradation proves the request-path lever: at
 // degradation level >= 2 the CPU-heavy resize is skipped and the un-resized
 // original ImageResult is served verbatim (and not cached), while level < 2

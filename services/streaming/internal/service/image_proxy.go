@@ -8,7 +8,7 @@ import (
 	"image"
 	_ "image/gif" // register decoder for upstream GIF posters
 	"image/jpeg"
-	_ "image/png" // register decoder for upstream PNG posters
+	"image/png"
 	"io"
 	"net"
 	"net/http"
@@ -67,6 +67,7 @@ const (
 	SourceCache       ImageSource = "cache_hit"
 	SourceShikimori   ImageSource = "shikimori"
 	SourceMAL         ImageSource = "mal"
+	SourceGacha       ImageSource = "gacha"
 	SourcePlaceholder ImageSource = "placeholder"
 )
 
@@ -89,13 +90,23 @@ type degradationLevelReader interface {
 }
 
 type ImageProxyService struct {
-	storage      *videoutils.Storage
-	httpClient   *http.Client
-	sfGroup      singleflight.Group
-	semaphore    chan struct{}
-	degradation  degradationLevelReader
-	log          *logger.Logger
-	gachaBaseURL string
+	storage    *videoutils.Storage
+	httpClient *http.Client
+	// internalClient fetches ONLY gachaBaseURL-prefixed URLs (see isGachaURL) —
+	// the fixed, config-supplied internal gacha service (a private Docker/K8s
+	// address). It shares httpClient's timeouts/transport shape but has no
+	// SSRF dial guard, because the guard would (correctly, for every OTHER
+	// caller) reject a dial to that private address. This is safe because
+	// isGachaURL is the only router to it, and it only ever matches URLs
+	// rewriteGachaURL produced — which are gated by gachaImagePattern's strict
+	// regex (cards|banners + [A-Za-z0-9._-]+ key, anchored, no traversal) — so
+	// no attacker-controlled input can reach this client with a different host.
+	internalClient *http.Client
+	sfGroup        singleflight.Group
+	semaphore      chan struct{}
+	degradation    degradationLevelReader
+	log            *logger.Logger
+	gachaBaseURL   string
 }
 
 func NewImageProxyService(storage *videoutils.Storage, degradation degradationLevelReader, log *logger.Logger, gachaBaseURL string) *ImageProxyService {
@@ -132,6 +143,27 @@ func NewImageProxyService(storage *videoutils.Storage, degradation degradationLe
 				return nil
 			},
 		},
+		internalClient: &http.Client{
+			Timeout: fetchTimeout,
+			// No dial Control guard here — see the internalClient field doc.
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				ForceAttemptHTTP2:     true,
+				MaxIdleConns:          10,
+				IdleConnTimeout:       30 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 5 {
+					return fmt.Errorf("too many redirects")
+				}
+				return nil
+			},
+		},
 		semaphore:    make(chan struct{}, maxConcurrent),
 		degradation:  degradation,
 		log:          log,
@@ -148,6 +180,16 @@ func (s *ImageProxyService) rewriteGachaURL(rawURL string) (string, bool) {
 		return "", false
 	}
 	return s.gachaBaseURL + "/api/gacha/images/" + m[1], true
+}
+
+// isGachaURL reports whether rawURL is our own gacha-internal fetch target —
+// i.e. it was already produced by rewriteGachaURL. gachaBaseURL is fixed
+// backend config (never attacker input), and rewriteGachaURL is the only
+// producer of URLs carrying this prefix, so this is a safe, non-bypassable
+// selector for both HTTP client routing (fetchURL) and telemetry labeling
+// (resolveImage).
+func (s *ImageProxyService) isGachaURL(rawURL string) bool {
+	return s.gachaBaseURL != "" && strings.HasPrefix(rawURL, s.gachaBaseURL+"/")
 }
 
 // GetImage returns the proxied image. width <= 0 serves the upstream
@@ -263,7 +305,11 @@ func (s *ImageProxyService) resizeOrShed(full *ImageResult, width int) (*ImageRe
 }
 
 // downscaleImage scales src down to targetWidth (never upscales) and
-// re-encodes as JPEG. Returns the encoded bytes and content type.
+// re-encodes it. Fully-opaque sources encode as JPEG q80 (small); sources with
+// any transparency encode as PNG instead, so transparent gacha card/banner art
+// doesn't get flattened onto a black background at thumbnail time — mirroring
+// the ingest-side choice in services/gacha/internal/service/images.go.
+// Returns the encoded bytes and content type.
 func downscaleImage(src []byte, targetWidth int) ([]byte, string, error) {
 	img, _, err := image.Decode(bytes.NewReader(src))
 	if err != nil {
@@ -275,6 +321,8 @@ func downscaleImage(src []byte, targetWidth int) ([]byte, string, error) {
 	if srcW <= 0 || srcH <= 0 {
 		return nil, "", fmt.Errorf("invalid dimensions %dx%d", srcW, srcH)
 	}
+
+	opaque := isOpaque(img)
 
 	outW, outH := srcW, srcH
 	if srcW > targetWidth {
@@ -293,10 +341,34 @@ func downscaleImage(src []byte, targetWidth int) ([]byte, string, error) {
 	}
 
 	var buf bytes.Buffer
+	if !opaque {
+		if err := png.Encode(&buf, dst); err != nil {
+			return nil, "", fmt.Errorf("encode: %w", err)
+		}
+		return buf.Bytes(), "image/png", nil
+	}
 	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: resizeJPEGQuality}); err != nil {
 		return nil, "", fmt.Errorf("encode: %w", err)
 	}
 	return buf.Bytes(), "image/jpeg", nil
+}
+
+// isOpaque reports whether every pixel of img has full alpha. Mirrors
+// services/gacha/internal/service/images.go's isOpaque — a 15-line local copy
+// beats a shared lib for a single boolean helper.
+func isOpaque(img image.Image) bool {
+	if o, ok := img.(interface{ Opaque() bool }); ok {
+		return o.Opaque()
+	}
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0xffff {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s *ImageProxyService) resolveImage(ctx context.Context, rawURL, cacheKey string) (*ImageResult, error) {
@@ -320,11 +392,19 @@ func (s *ImageProxyService) resolveImage(ctx context.Context, rawURL, cacheKey s
 		return nil, ctx.Err()
 	}
 
-	// 2. Fetch from original URL (Shikimori)
+	// 2. Fetch from original URL (Shikimori, or the internal gacha service for
+	// gacha-internal URLs)
+	isGacha := s.isGachaURL(rawURL)
 	if data, contentType, err := s.fetchURL(ctx, rawURL); err == nil {
-		result := &ImageResult{Data: data, ContentType: contentType, Source: SourceShikimori}
+		source := SourceShikimori
+		if isGacha {
+			source = SourceGacha
+		}
+		result := &ImageResult{Data: data, ContentType: contentType, Source: source}
 		s.storeInCache(ctx, cacheKey, data, contentType)
 		return result, nil
+	} else if isGacha {
+		s.log.Warnw("gacha image fetch failed", "url", rawURL, "error", err)
 	} else {
 		s.log.Warnw("shikimori image fetch failed", "url", rawURL, "error", err)
 	}
@@ -431,7 +511,16 @@ func (s *ImageProxyService) fetchURL(ctx context.Context, rawURL string) ([]byte
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-	resp, err := s.httpClient.Do(req)
+	// Gacha-internal URLs (rewritten by rewriteGachaURL) target a private
+	// Docker/K8s address on purpose — route them through internalClient,
+	// which has no SSRF dial guard, instead of the guarded httpClient used for
+	// every external host. See isGachaURL and the internalClient field doc.
+	client := s.httpClient
+	if s.isGachaURL(rawURL) {
+		client = s.internalClient
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
