@@ -127,6 +127,7 @@ func main() {
 	sessionsHandler := handler.NewSessionsHandler(authService, log)
 	magicLinkHandler := handler.NewMagicLinkHandler(authService, authHandler, cfg.MagicLinkTargetBase, log)
 	userResolveHandler := handler.NewUserResolveHandler(userRepo, log)
+	adminUsersHandler := handler.NewAdminUsersHandler(userRepo, log)
 	passkeyHandler := handler.NewPasskeyHandler(passkeyService, authService, authHandler, log)
 	certHandler := handler.NewCertHandler(certService, authService, userService, authHandler, log)
 
@@ -134,7 +135,7 @@ func main() {
 	metricsCollector := metrics.NewCollector("auth")
 
 	// Initialize router
-	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, passkeyHandler, certHandler, cfg.JWT, log, metricsCollector)
+	router := transport.NewRouter(authHandler, telegramBotHandler, userHandler, sessionsHandler, magicLinkHandler, userResolveHandler, adminUsersHandler, passkeyHandler, certHandler, cfg.JWT, log, metricsCollector)
 
 	// Register Telegram webhook (warn on failure, don't block startup)
 	if cfg.Telegram.BotToken != "" && cfg.Telegram.WebhookURL != "" {
