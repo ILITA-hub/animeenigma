@@ -22,25 +22,25 @@
       />
     </div>
 
-    <!-- Footer: view-older (always) + mark-all-read (hidden when nothing unread) -->
-    <div class="border-t border-white/10 bg-white/[0.02] px-3 py-2 flex flex-col gap-2">
+    <!-- Footer: view-older (tinted text, always) left · mark-all-read right
+         (hidden when nothing unread) -->
+    <div class="border-t border-white/10 bg-white/[0.02] px-3 py-2 flex items-center justify-between gap-2">
       <Button
-        v-if="store.unreadCount > 0"
         variant="link"
         size="xs"
-        class="self-end"
-        @click="onMarkAllRead"
-      >
-        {{ $t('notifications.dropdown.markAllRead') }}
-      </Button>
-      <Button
-        variant="soft"
-        size="sm"
-        full-width
+        class="text-white/60 hover:text-white"
         @click="onViewOlder"
       >
         <History aria-hidden="true" />
         {{ $t('notifications.history.viewOlder') }}
+      </Button>
+      <Button
+        v-if="store.unreadCount > 0"
+        variant="link"
+        size="xs"
+        @click="onMarkAllRead"
+      >
+        {{ $t('notifications.dropdown.markAllRead') }}
       </Button>
     </div>
   </div>
