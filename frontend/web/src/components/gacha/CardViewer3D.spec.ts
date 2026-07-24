@@ -206,4 +206,40 @@ describe('CardViewer3D — inspect mode', () => {
     expect(document.querySelector('.vtagNEW')).toBeNull()
     w.unmount()
   })
+
+  // ── Drag-release face snapping ─────────────────────────────────────────────
+
+  /** Drag the card horizontally by dx pixels (0.42°/px), then release. */
+  async function dragAndRelease(dx: number) {
+    const card = document.querySelector('.card3d') as HTMLElement & {
+      setPointerCapture: (id: number) => void
+    }
+    card.setPointerCapture = () => {} // jsdom lacks pointer capture
+    // jsdom has no PointerEvent — MouseEvent + assigned pointerId is enough
+    // for the handlers (they only read clientX/clientY/pointerId).
+    const ev = (type: string, x: number) =>
+      Object.assign(new MouseEvent(type, { clientX: x, clientY: 0 }), { pointerId: 1 })
+    card.dispatchEvent(ev('pointerdown', 0))
+    card.dispatchEvent(ev('pointermove', dx))
+    card.dispatchEvent(ev('pointerup', dx))
+    await flushPromises()
+    return card
+  }
+
+  it('inspect: dragging past 90° rests on the BACK face on release', async () => {
+    const w = mountViewer([pulled('a', 'SSR', true, 1, 'cards/back.jpg')], true, 'inspect')
+    await flushPromises()
+    // 430px * 0.42 ≈ 180.6° → nearest face (step 180) = 180 → back stays visible.
+    const card = await dragAndRelease(430)
+    expect(card.style.transform).toContain('rotateY(180deg)')
+    w.unmount()
+  })
+
+  it('reveal: the ceremonial front snap is unchanged (multiple of 360)', async () => {
+    const w = mountViewer([pulled('a', 'SSR')], true)
+    await flushPromises()
+    const card = await dragAndRelease(430)
+    expect(card.style.transform).toContain('rotateY(360deg)')
+    w.unmount()
+  })
 })

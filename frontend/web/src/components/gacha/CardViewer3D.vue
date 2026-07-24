@@ -151,6 +151,15 @@ const backImage = computed(() =>
   current.value?.card.back_path ? cardImageUrl(current.value.card.back_path) : '',
 )
 
+// Inspect rests on whichever face is nearest — front OR back — so the uploaded
+// card back can actually be examined; reveal keeps its ceremonial always-front
+// snap (step 360 makes every formula below collapse to the original behavior).
+const faceStep = computed(() => (isInspect.value ? 180 : 360))
+
+function nearestFace(deg: number): number {
+  return Math.round(deg / faceStep.value) * faceStep.value
+}
+
 // ── Drag-rotate state ───────────────────────────────────────────────────────
 let drag = false
 let lx = 0
@@ -201,10 +210,12 @@ function onPointerMove(e: PointerEvent) {
     ly = e.clientY
     rx = Math.max(-32, Math.min(32, rx))
   } else {
+    // Hover tilt is relative to the resting face, so an inspect card resting
+    // on its back is not yanked to the front by a mere mouse-over.
     const r = c.getBoundingClientRect()
     const px = (e.clientX - r.left) / r.width - 0.5
     const py = (e.clientY - r.top) / r.height - 0.5
-    ry = px * 22
+    ry = nearestFace(ry) + px * 22
     rx = -py * 22
     applyTilt()
   }
@@ -214,9 +225,10 @@ function release() {
   const c = card3d.value
   if (!c || !drag) return
   drag = false
-  // Spring back: round Y to the nearest "facing us" (multiple of 360).
+  // Spring to the nearest face: front-only in reveal (multiple of 360),
+  // front OR back in inspect (multiple of 180).
   c.style.transition = 'transform .5s cubic-bezier(.2,1.2,.4,1)'
-  ry = Math.round(ry / 360) * 360
+  ry = nearestFace(ry)
   rx = 0
   applyTilt()
   setTimeout(() => {
@@ -232,7 +244,7 @@ function onPointerUp() {
 function onPointerLeave() {
   if (!drag) {
     rx = 0
-    ry = 0
+    ry = nearestFace(ry)
     applyTilt()
   }
 }
