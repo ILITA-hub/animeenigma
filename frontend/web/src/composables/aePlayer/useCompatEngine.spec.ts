@@ -15,6 +15,7 @@ class FakeAVPlayer {
   destroy = vi.fn(async () => {})
   setVolume = vi.fn()
   setPlaybackRate = vi.fn()
+  resize = vi.fn()
   getDuration = vi.fn(() => 1_440_000n) // 24 min
   getStats = vi.fn(() => ({ videoDecodeFramerate: 24, videoRenderFramerate: 24, width: 1920, height: 1080 }))
   constructor(opts: Record<string, unknown>) {
@@ -113,6 +114,18 @@ describe('useCompatEngine', () => {
     expect(engine.clockElement.duration).toBe(1440)
     expect(engine.clockElement.videoWidth).toBe(1920)
     expect(engine.clockElement.paused).toBe(false)
+  })
+
+  it('resizes to the container real dimensions once visible (AUTO-629 1x1-canvas regression)', async () => {
+    // The host div is `v-show`-hidden until `active` flips, so at `new
+    // AVPlayer()` time it measures 0x0; this simulates the container as it
+    // is AFTER Vue paints it visible (what nextTick() should wait for).
+    const mount = container()
+    Object.defineProperty(mount, 'offsetWidth', { value: 960, configurable: true })
+    Object.defineProperty(mount, 'offsetHeight', { value: 540, configurable: true })
+    const engine = useCompatEngine()
+    await engine.activate({ container: mount, url: '/pl', volume: 100, muted: false, rate: 1 })
+    expect(FakeAVPlayer.instances[0].resize).toHaveBeenCalledWith(960, 540)
   })
 
   it('destroy tears the player down and deactivates', async () => {

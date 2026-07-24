@@ -1,4 +1,4 @@
-import { ref, shallowRef } from 'vue'
+import { nextTick, ref, shallowRef } from 'vue'
 
 // ── Hi10P wasm compat engine (AUTO-629) ─────────────────────────────────────
 // Browsers whose native stacks cannot decode H.264 High 10 (Firefox on every
@@ -33,6 +33,10 @@ export interface AVPlayerLike {
   destroy(): Promise<void>
   setVolume(v: number): void
   setPlaybackRate(r: number): void
+  /** Forces the internal render viewport (and canvas raster size) to match
+   *  the given CSS pixel dimensions — the library's own remedy for a host
+   *  container whose size wasn't known at construction time. */
+  resize(width: number, height: number): void
   getDuration(): bigint
   getStats(): { videoDecodeFramerate?: number; videoRenderFramerate?: number; width?: number; height?: number }
   readonly currentTime: bigint
@@ -197,6 +201,16 @@ export function useCompatEngine() {
       if (startAt >= 1) await p.seek(toMs(startAt))
       active.value = true
       paused.value = false
+      // `opts.container` is `v-show`-hidden until `active` flips (see
+      // AePlayer.vue's compat-host div), so the canvas libmedia created
+      // inside `new AVPlayer()` above read a 0×0 offsetWidth/offsetHeight
+      // and locked in a ~1×1 raster — decode/playback (audio included) is
+      // unaffected, but no frame is ever visible. Wait for Vue to paint the
+      // now-visible container, then force the real size via the library's
+      // own resize() so it re-measures instead of staying pinned at 1×1.
+      await nextTick()
+      if (myGen !== gen) return false
+      p.resize(opts.container.offsetWidth, opts.container.offsetHeight)
       cancelAnimationFrame(raf)
       lastStatsAt = 0 // sample stats on the first tick
       raf = requestAnimationFrame(tick)
