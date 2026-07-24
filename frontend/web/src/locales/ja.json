@@ -823,6 +823,43 @@
       "error": "リストのエクスポートに失敗しました。後でもう一度お試しください。",
       "rateLimited": "再度エクスポートするまで1分お待ちください。"
     },
+    "advancedLogin": {
+      "title": "高度なログイン",
+      "subtitle": "パスキーとTLS証明書によるサインイン",
+      "open": "設定",
+      "passkeys": {
+        "title": "パスキー",
+        "add": "パスキーを追加",
+        "name": "名前",
+        "empty": "パスキーはまだありません",
+        "unsupported": "このブラウザーはパスキーに対応していません",
+        "delete": "削除",
+        "lastUsed": "最終使用: {date}",
+        "confirmDelete": "このパスキーを削除しますか？"
+      },
+      "cert": {
+        "title": "TLS証明書",
+        "issue": "証明書を発行",
+        "name": "名前（例：「ノートパソコン」）",
+        "password": "インストール用パスワード（一度だけ表示）",
+        "passwordCopy": "コピー",
+        "passwordWarn": "パスワードを保存してください。ウィンドウを閉じると二度と表示されません",
+        "empty": "発行済みの証明書はありません",
+        "revoke": "失効",
+        "revoked": "失効済み",
+        "expires": "有効期限: {date}",
+        "lastUsed": "最終使用: {date}",
+        "autoLogin": "証明書が検出されたら自動的にサインインする",
+        "autoLoginHint": "証明書を1つ以上発行すると利用できます",
+        "confirmRevoke": "この証明書を失効しますか？",
+        "instructions": "証明書のインストール方法",
+        "instructionsWindows": "Windows: ダウンロードした.p12を開き、「現在のユーザー」を選択してパスワードを入力します",
+        "instructionsMacos": "macOS: .p12を開いてパスワードを入力すると、証明書がキーチェーンに追加されます",
+        "instructionsIos": "iOS: .p12をダウンロードし、設定 → 一般 → VPNとデバイス管理 → プロファイルをインストール",
+        "instructionsAndroid": "Android: 設定 → セキュリティ → 暗号化と認証情報 → 証明書をインストール（VPNとアプリ）",
+        "instructionsLinux": "Linux: .p12をブラウザーにインポートします（設定 → プライバシー → 証明書）"
+      }
+    },
     "settings": {
       "account": "アカウント",
       "signOut": "ログアウト",

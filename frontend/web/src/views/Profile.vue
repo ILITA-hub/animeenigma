@@ -667,6 +667,20 @@
                 </template>
               </div>
 
+              <!-- Advanced login (passkeys + TLS certs) -->
+              <div class="glass-card p-6">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 class="text-white font-medium">{{ $t('profile.advancedLogin.title') }}</h3>
+                    <p class="text-white/50 text-sm mt-1">{{ $t('profile.advancedLogin.subtitle') }}</p>
+                  </div>
+                  <Button variant="secondary" size="sm" @click="advancedLoginOpen = true">
+                    {{ $t('profile.advancedLogin.open') }}
+                  </Button>
+                </div>
+              </div>
+              <AdvancedLoginModal v-model:open="advancedLoginOpen" />
+
               <!-- Timezone -->
               <TimezoneCard />
 
@@ -890,6 +904,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWatchlistStore } from '@/stores/watchlist'
 import { Avatar, Badge, Button, Checkbox, Chip, EmptyState, Input, Modal, Tabs, Select, PaginationBar, ScoreDiamond, Spinner, SegmentedControl, type SelectOption } from '@/components/ui'
 import ActiveSessionsCard from '@/components/profile/ActiveSessionsCard.vue'
+import AdvancedLoginModal from '@/components/profile/AdvancedLoginModal.vue'
 import TimezoneCard from '@/components/profile/TimezoneCard.vue'
 import GachaCollection from '@/components/profile/GachaCollection.vue'
 import { useGachaVisible } from '@/utils/gachaGate'
@@ -1160,6 +1175,7 @@ interface Tier2DebugView {
 }
 const tier2View = ref<Tier2DebugView | null>(null)
 const loadingTier2View = ref(false)
+const advancedLoginOpen = ref(false)
 const resettingPrefs = ref(false)
 const resetMessage = ref('')
 

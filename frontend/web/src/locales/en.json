@@ -813,6 +813,43 @@
       "error": "Failed to export list. Please try again later.",
       "rateLimited": "Please wait a minute before exporting again."
     },
+    "advancedLogin": {
+      "title": "Advanced login",
+      "subtitle": "Passkey and TLS-certificate sign-in",
+      "open": "Configure",
+      "passkeys": {
+        "title": "Passkeys",
+        "add": "Add passkey",
+        "name": "Name",
+        "empty": "No passkeys yet",
+        "unsupported": "This browser does not support passkeys",
+        "delete": "Delete",
+        "lastUsed": "Last used: {date}",
+        "confirmDelete": "Delete this passkey?"
+      },
+      "cert": {
+        "title": "TLS certificate",
+        "issue": "Issue certificate",
+        "name": "Name (e.g. “Laptop”)",
+        "password": "Installation password (shown once)",
+        "passwordCopy": "Copy",
+        "passwordWarn": "Save the password — it won't be shown again after you close this window",
+        "empty": "No certificates issued yet",
+        "revoke": "Revoke",
+        "revoked": "Revoked",
+        "expires": "Valid until {date}",
+        "lastUsed": "Last used: {date}",
+        "autoLogin": "Sign in automatically when a certificate is detected",
+        "autoLoginHint": "Available after you issue at least one certificate",
+        "confirmRevoke": "Revoke this certificate?",
+        "instructions": "How to install the certificate",
+        "instructionsWindows": "Windows: open the downloaded .p12, choose “Current user”, enter the password",
+        "instructionsMacos": "macOS: open the .p12, enter the password — the certificate goes into your Keychain",
+        "instructionsIos": "iOS: download the .p12, then Settings → General → VPN & Device Management → install the profile",
+        "instructionsAndroid": "Android: Settings → Security → Encryption & credentials → Install a certificate (VPN & apps)",
+        "instructionsLinux": "Linux: import the .p12 into your browser (Settings → Privacy → Certificates)"
+      }
+    },
     "settings": {
       "account": "Account",
       "signOut": "Sign Out",
