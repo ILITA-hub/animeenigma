@@ -35,12 +35,18 @@ const (
 
 // User represents a user in the system
 type User struct {
-	ID             string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Username       string         `gorm:"size:32;uniqueIndex" json:"username"`
-	PasswordHash   string         `gorm:"size:255" json:"-"`
-	TelegramID     *int64         `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
-	PublicID       string         `gorm:"size:32;uniqueIndex" json:"public_id"`
-	PublicStatuses pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
+	ID           string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Username     string `gorm:"size:32;uniqueIndex" json:"username"`
+	PasswordHash string `gorm:"size:255" json:"-"`
+	TelegramID *int64 `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
+	// Telegram display identity, refreshed on every Telegram login (spec
+	// 2026-07-24 admin users page). Distinct from Username, which is the
+	// 32-char unique login handle (derived + de-duplicated). Nullable — blank
+	// for existing users until their next Telegram login.
+	TelegramUsername  *string        `gorm:"size:64" json:"telegram_username,omitempty"`
+	TelegramFirstName *string        `gorm:"size:128" json:"telegram_first_name,omitempty"`
+	PublicID          string         `gorm:"size:32;uniqueIndex" json:"public_id"`
+	PublicStatuses    pq.StringArray `gorm:"type:text[]" json:"public_statuses"`
 	// ActivityVisibility is enforced server-side by the player service
 	// (activity feed + public watchlist reads) — see
 	// docs/superpowers/specs/2026-06-12-activity-visibility-design.md.

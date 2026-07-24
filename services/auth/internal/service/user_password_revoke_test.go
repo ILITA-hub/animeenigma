@@ -27,6 +27,7 @@ func newUserServiceWithSessions(t *testing.T) (*UserService, *gorm.DB) {
 	require.NoError(t, db.Exec(
 		`CREATE TABLE users (
 			id text primary key, username text, password_hash text, telegram_id integer,
+			telegram_username text, telegram_first_name text,
 			public_id text, public_statuses text, activity_visibility text default 'all',
 			avatar text, timezone text, api_key_hash text, cert_auto_login integer default 0,
 			role text default 'user',

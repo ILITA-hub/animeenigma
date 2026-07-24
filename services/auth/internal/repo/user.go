@@ -201,6 +201,30 @@ func (r *UserRepository) UpdateCertAutoLogin(ctx context.Context, userID string,
 	return nil
 }
 
+// UpdateTelegramProfile persists the Telegram display username / first name
+// onto the user row (called on every Telegram login). Empty values are skipped
+// so a login that omits a field never nulls a previously-stored value.
+func (r *UserRepository) UpdateTelegramProfile(ctx context.Context, userID, tgUsername, tgFirstName string) error {
+	updates := map[string]interface{}{}
+	if tgUsername != "" {
+		updates["telegram_username"] = tgUsername
+	}
+	if tgFirstName != "" {
+		updates["telegram_first_name"] = tgFirstName
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("update telegram profile: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return liberrors.NotFound("user")
+	}
+	return nil
+}
+
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&domain.User{}).Where("username = ?", username).Count(&count).Error; err != nil {

@@ -319,6 +319,22 @@ func (s *AuthService) LoginWithTelegram(ctx context.Context, tgUser *domain.Tele
 		)
 	}
 
+	// Persist the user's Telegram display identity on every login so admin
+	// search (username / tg name) stays current. Best-effort: a cosmetic write
+	// failure must never block login.
+	if err := s.userRepo.UpdateTelegramProfile(ctx, user.ID, tgUser.Username, tgUser.FirstName); err != nil {
+		s.log.Warnw("failed to persist telegram profile", "user_id", user.ID, "error", err)
+	} else {
+		if tgUser.Username != "" {
+			v := tgUser.Username
+			user.TelegramUsername = &v
+		}
+		if tgUser.FirstName != "" {
+			v := tgUser.FirstName
+			user.TelegramFirstName = &v
+		}
+	}
+
 	return s.createSessionAndAuthResponse(ctx, user, sc)
 }
 
