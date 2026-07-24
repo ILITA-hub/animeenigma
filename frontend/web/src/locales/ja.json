@@ -1399,7 +1399,8 @@
       "feedbackDesc": "ユーザーのアイデア・バグ・エラー報告を確認・整理する。",
       "collectionsDesc": "編集部のアニメコレクションを編集・公開する。",
       "rawLibraryDesc": "生の日本語エピソード用のセルフホスト型 torrent → HLS パイプライン。",
-      "policyDesc": "ランタイムの機能アクセス管理 — ロール、ユーザー単位の上書き、ルーレットプール。"
+      "policyDesc": "ランタイムの機能アクセス管理 — ロール、ユーザー単位の上書き、ルーレットプール。",
+      "usersDesc": "ユーザーアカウントとロールの閲覧・検索・管理。"
     },
     "feedback": {
       "title": "プロジェクトボード",
@@ -1622,6 +1623,28 @@
       "save": "保存",
       "saved": "保存しました",
       "preview": "プレビュー"
+    },
+    "users": {
+      "title": "ユーザー（管理）",
+      "searchLabel": "検索",
+      "searchPlaceholder": "ユーザー名、公開ID、UUID、Telegram IDまたは名前",
+      "roleFilter": "ロール",
+      "roleAll": "すべてのロール",
+      "roleUser": "ユーザー",
+      "roleLibrarian": "ライブラリアン",
+      "roleAdmin": "管理者",
+      "colUser": "ユーザー",
+      "colPublicId": "公開ID",
+      "colRole": "ロール",
+      "colTelegram": "Telegram",
+      "colJoined": "登録日",
+      "totalCount": "ユーザー数: {count}",
+      "empty": "条件に一致するユーザーがいません。",
+      "changeRoleAria": "{user} のロールを変更",
+      "confirmRoleTitle": "ロールの変更",
+      "confirmRoleDesc": "{user} のロールを {role} に変更しますか？",
+      "confirmRoleConfirm": "ロールを変更",
+      "errorGeneric": "エラーが発生しました。"
     },
     "policy": {
       "title": "ポリシー",

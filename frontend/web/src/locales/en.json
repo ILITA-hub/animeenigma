@@ -1399,7 +1399,8 @@
       "feedbackDesc": "Read and triage user ideas, bugs and error reports.",
       "collectionsDesc": "Curate and publish editorial anime collections.",
       "rawLibraryDesc": "Self-hosted torrent → HLS pipeline for raw-JP episodes.",
-      "policyDesc": "Runtime feature access — roles, per-user overrides, and the roulette pool."
+      "policyDesc": "Runtime feature access — roles, per-user overrides, and the roulette pool.",
+      "usersDesc": "Browse, search and manage user accounts and roles."
     },
     "feedback": {
       "title": "Project Board",
@@ -1622,6 +1623,28 @@
       "save": "Save",
       "saved": "Saved",
       "preview": "Preview"
+    },
+    "users": {
+      "title": "Users (admin)",
+      "searchLabel": "Search",
+      "searchPlaceholder": "Username, public ID, UUID, Telegram ID or name",
+      "roleFilter": "Role",
+      "roleAll": "All roles",
+      "roleUser": "User",
+      "roleLibrarian": "Librarian",
+      "roleAdmin": "Admin",
+      "colUser": "User",
+      "colPublicId": "Public ID",
+      "colRole": "Role",
+      "colTelegram": "Telegram",
+      "colJoined": "Joined",
+      "totalCount": "{count} users",
+      "empty": "No users match your search.",
+      "changeRoleAria": "Change role for {user}",
+      "confirmRoleTitle": "Change role",
+      "confirmRoleDesc": "Change {user} to {role}?",
+      "confirmRoleConfirm": "Change role",
+      "errorGeneric": "Something went wrong."
     },
     "policy": {
       "title": "Policy",
