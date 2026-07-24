@@ -65,9 +65,19 @@ var tokenStopwords = map[string]bool{
 	"but": true, "out": true, "has": true, "had": true, "can": true,
 }
 
+// minFallbackTokenLen is the minimum NORMALIZED length a title token must
+// have to count in the per-token fallback below. Live-verified follow-up to
+// the stopword guard above: after excluding stopwords, the SAME title still
+// false-matched a second unrelated slug via "chi" (from "Imaizumi**n Chi**
+// wa...") landing as a coincidental 3-letter substring inside "e-cchi" —
+// not a stopword, just too short to be a reliable signal. Any 1-3 char token
+// has a large collision surface against hyphen-stripped slugs; requiring 4+
+// chars closes this class generally instead of enumerating more exceptions.
+const minFallbackTokenLen = 4
+
 // bestMatch scores hits against the wanted title (normalized containment first,
-// then per-token overlap, skipping stopwords). Returns nil when no hit exceeds
-// a zero score.
+// then per-token overlap, skipping stopwords and short tokens). Returns nil
+// when no hit exceeds a zero score.
 func bestMatch(title string, hits []SearchHit) *SearchHit {
 	want := normalize(title)
 	var best *SearchHit
@@ -83,7 +93,7 @@ func bestMatch(title string, hits []SearchHit) *SearchHit {
 					continue
 				}
 				nt := normalize(tok)
-				if len(tok) > 2 && nt != "" && strings.Contains(slugNorm, nt) {
+				if len(nt) >= minFallbackTokenLen && strings.Contains(slugNorm, nt) {
 					score++
 				}
 			}

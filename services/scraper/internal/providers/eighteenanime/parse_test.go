@@ -92,6 +92,16 @@ func TestBestMatch(t *testing.T) {
 	if got := bestMatch("Imaizumi Brings All the Gyarus to His House", stopwordOnly); got != nil {
 		t.Fatalf("expected nil for stopword-only overlap, got %+v", got)
 	}
+	// AUTO-593 follow-up: a short (<4 char) non-stopword token can still
+	// collide by coincidence — live incident #2, same anime: the romaji
+	// title's "Chi" token landed as a bare 3-letter substring inside an
+	// unrelated slug's "e-cchi" segment and won a false match.
+	shortTokenOnly := []SearchHit{
+		{Slug: "3441-1ldk-jk-ikinari-doukyo-micchak-hatsu-ecchi-7", URL: "https://18anime.me/hentai/3441-1ldk-jk-ikinari-doukyo-micchak-hatsu-ecchi-7.html"},
+	}
+	if got := bestMatch("Imaizumin Chi wa Douyara Gal no Tamariba ni Natteru Rashii", shortTokenOnly); got != nil {
+		t.Fatalf("expected nil for short-token coincidental overlap, got %+v", got)
+	}
 }
 
 func TestParseEpisodeMirrors(t *testing.T) {
