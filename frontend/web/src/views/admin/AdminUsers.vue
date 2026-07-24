@@ -58,6 +58,7 @@
               <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.users.colRole') }}</th>
               <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.users.colTelegram') }}</th>
               <th scope="col" class="px-3 py-2 text-left">{{ $t('admin.users.colJoined') }}</th>
+              <th scope="col" class="px-3 py-2 text-right">{{ $t('admin.users.colActions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -90,6 +91,21 @@
                 <span v-else class="text-white/30">—</span>
               </td>
               <td class="px-3 py-2 text-white/60 text-xs">{{ formatDate(u.created_at) }}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <Button
+                  v-if="u.public_id"
+                  :href="`/user/${u.public_id}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="soft"
+                  size="xs"
+                  :aria-label="$t('admin.users.openProfileAria', { user: u.username })"
+                >
+                  <template #icon><ExternalLink /></template>
+                  {{ $t('admin.users.openProfile') }}
+                </Button>
+                <span v-else class="text-white/30">—</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -106,9 +122,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ExternalLink } from 'lucide-vue-next'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
-import { Spinner, Badge, Avatar, PaginationBar } from '@/components/ui'
+import { Spinner, Badge, Avatar, PaginationBar, Button } from '@/components/ui'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAdminUsers } from '@/composables/useAdminUsers'
 import { useAuthStore } from '@/stores/auth'

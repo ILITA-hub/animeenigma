@@ -1644,7 +1644,10 @@
       "confirmRoleTitle": "Change role",
       "confirmRoleDesc": "Change {user} to {role}?",
       "confirmRoleConfirm": "Change role",
-      "errorGeneric": "Something went wrong."
+      "errorGeneric": "Something went wrong.",
+      "colActions": "Actions",
+      "openProfile": "Open profile",
+      "openProfileAria": "Open {user}'s profile in a new tab"
     },
     "policy": {
       "title": "Policy",

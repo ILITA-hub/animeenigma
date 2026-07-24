@@ -1644,7 +1644,10 @@
       "confirmRoleTitle": "ロールの変更",
       "confirmRoleDesc": "{user} のロールを {role} に変更しますか？",
       "confirmRoleConfirm": "ロールを変更",
-      "errorGeneric": "エラーが発生しました。"
+      "errorGeneric": "エラーが発生しました。",
+      "colActions": "操作",
+      "openProfile": "プロフィールを開く",
+      "openProfileAria": "{user} のプロフィールを新しいタブで開く"
     },
     "policy": {
       "title": "ポリシー",

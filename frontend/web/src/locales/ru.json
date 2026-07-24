@@ -1644,7 +1644,10 @@
       "confirmRoleTitle": "Изменить роль",
       "confirmRoleDesc": "Изменить роль {user} на {role}?",
       "confirmRoleConfirm": "Изменить роль",
-      "errorGeneric": "Что-то пошло не так."
+      "errorGeneric": "Что-то пошло не так.",
+      "colActions": "Действия",
+      "openProfile": "Открыть профиль",
+      "openProfileAria": "Открыть профиль {user} в новой вкладке"
     },
     "policy": {
       "title": "Политика доступа",
