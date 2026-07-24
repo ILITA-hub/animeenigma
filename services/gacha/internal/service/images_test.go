@@ -332,3 +332,54 @@ func TestIngestUpload_RecompressesOversizedOpaquePNG(t *testing.T) {
 		t.Errorf("reported size %d does not match stored data length %d", up.size, len(up.data))
 	}
 }
+
+// TestIngestFromURL_RecompressesOversizedOpaquePNG mirrors
+// TestIngestUpload_RecompressesOversizedOpaquePNG for the URL-fetch path: a
+// real noisy opaque PNG is served over HTTP, ingested via IngestFromURL, and
+// must come out the other side as a smaller, downscaled JPEG in the fake
+// store. This exercises the buf2/ct2/ext2 threading in IngestFromURL under
+// real recompression, not just an undecodable magic-bytes fixture.
+func TestIngestFromURL_RecompressesOversizedOpaquePNG(t *testing.T) {
+	// Noisy (non-flat) fixture: see noisyOpaqueImage doc comment for why a
+	// flat fill can't be used to prove "jpeg is smaller".
+	pngBytes := encodePNG(t, noisyOpaqueImage(3000, 1500))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pngBytes)
+	}))
+	defer srv.Close()
+
+	store := &fakeStore{}
+	svc := NewImageService(store)
+	svc.allowPrivate = true // reach the loopback httptest server
+
+	key, err := svc.IngestFromURL(context.Background(), srv.URL, "cards")
+	if err != nil {
+		t.Fatalf("IngestFromURL: %v", err)
+	}
+	if !strings.HasSuffix(key, ".jpg") {
+		t.Errorf("key %q should end in .jpg after recompression", key)
+	}
+	if len(store.uploaded) != 1 {
+		t.Fatalf("expected 1 upload, got %d", len(store.uploaded))
+	}
+	up := store.uploaded[0]
+	if up.contentType != "image/jpeg" {
+		t.Errorf("content-type = %q, want image/jpeg", up.contentType)
+	}
+	dec, err := jpeg.Decode(bytes.NewReader(up.data))
+	if err != nil {
+		t.Fatalf("stored bytes not decodable jpeg: %v", err)
+	}
+	if w := dec.Bounds().Dx(); w != 2048 {
+		t.Errorf("stored image longest side = %d, want 2048", w)
+	}
+	if len(up.data) >= len(pngBytes) {
+		t.Errorf("stored jpeg (%d bytes) should be smaller than source png (%d bytes)", len(up.data), len(pngBytes))
+	}
+	if up.size != int64(len(up.data)) {
+		t.Errorf("reported size %d does not match stored data length %d", up.size, len(up.data))
+	}
+}
