@@ -13,6 +13,7 @@ package transport
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,5 +166,54 @@ func TestRouter_AdminUsersResolve_AdminJWT_ProxiesToAuth(t *testing.T) {
 	case got := <-gw.catalogGotURL:
 		t.Errorf("catalog backend received unexpected request %q — /admin/users/resolve must not fall through to catalog", got)
 	default:
+	}
+}
+
+func TestRouter_AdminUsersList_AdminJWT_ProxiesToAuth(t *testing.T) {
+	gw := buildResolveGatewayRouter(t)
+	defer gw.teardown()
+
+	token := signTestJWT(t, authz.RoleAdmin)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/users?q=test&page=1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.RemoteAddr = "10.0.0.32:1234"
+	rec := httptest.NewRecorder()
+	gw.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-gw.authGotURL:
+		if got != "/api/admin/users" {
+			t.Errorf("auth backend received path = %q; want /api/admin/users", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("auth backend never received /api/admin/users")
+	}
+}
+
+func TestRouter_AdminUsersRole_AdminJWT_ProxiesToAuth(t *testing.T) {
+	gw := buildResolveGatewayRouter(t)
+	defer gw.teardown()
+
+	token := signTestJWT(t, authz.RoleAdmin)
+	req := httptest.NewRequest(http.MethodPatch, "/api/admin/users/abc-123/role", strings.NewReader(`{"role":"admin"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "10.0.0.32:1234"
+	rec := httptest.NewRecorder()
+	gw.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	select {
+	case got := <-gw.authGotURL:
+		if got != "/api/admin/users/abc-123/role" {
+			t.Errorf("auth backend received path = %q; want /api/admin/users/abc-123/role", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("auth backend never received the role PATCH")
 	}
 }

@@ -645,17 +645,20 @@ func NewRouterWithCleanup(
 			r.HandleFunc("/admin/policy/*", proxyHandler.ProxyToPolicy)
 		})
 
-		// Task 2 (RBAC and roulette) — admin-only canonical user-resolve
-		// endpoint, proxied to AUTH (not catalog). Turns a UUID, username,
+		// Task 2 (RBAC and roulette) — admin-only user management subtree,
+		// proxied to AUTH (not catalog): canonical user-resolve, the user
+		// list, and per-user role management. Turns a UUID, username,
 		// public_id, or telegram_id into the canonical user record; consumed
 		// by other admin surfaces (recs picker, policy admin UI). Mirrors the
 		// /admin/policy/* group immediately above (same JWT + userRateLimit +
 		// AdminRoleMiddleware chain). CRITICAL ORDER: this is a static
-		// "/admin/users/..." path, so chi's route tree resolves it against the
+		// "/admin/users..." path, so chi's route tree resolves it against the
 		// generic "/api/admin/*" -> catalog catch-all group above the SAME way
 		// "/admin/policy/*" already does (see TestRouter_Policy_AdminFlags_AdminJWT_ProxiesToPolicy
-		// for the sibling proof, and TestRouter_AdminUsersResolve_AdminJWT_ProxiesToAuth
-		// in router_resolve_test.go for this route) — a more specific static
+		// for the sibling proof, and TestRouter_AdminUsersResolve_AdminJWT_ProxiesToAuth,
+		// TestRouter_AdminUsersList_AdminJWT_ProxiesToAuth, and
+		// TestRouter_AdminUsersRole_AdminJWT_ProxiesToAuth in
+		// router_resolve_test.go for this route) — a more specific static
 		// segment always wins over a shallower wildcard regardless of
 		// registration order, but this group is still placed next to its
 		// closest analog for readability.
@@ -663,7 +666,12 @@ func NewRouterWithCleanup(
 			r.Use(JWTValidationMiddleware(cfg.JWT, cfg.Services.AuthService))
 			r.Use(userRateLimit)
 			r.Use(AdminRoleMiddleware)
-			r.HandleFunc("/admin/users/resolve", proxyHandler.ProxyToAuth)
+			// List + role management + resolve all live in auth. The bare path
+			// and the wildcard are both registered (chi's /* does not match the
+			// slash-less bare path). A more-specific static/param subtree still
+			// wins over the generic /admin/* -> catalog group.
+			r.HandleFunc("/admin/users", proxyHandler.ProxyToAuth)
+			r.HandleFunc("/admin/users/*", proxyHandler.ProxyToAuth)
 		})
 
 		// Profile showcase ("стена") — runtime-gated by the policy ruleset
