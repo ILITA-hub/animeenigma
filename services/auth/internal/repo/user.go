@@ -237,7 +237,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, query, role string, limi
 		if query != "" {
 			like := "%" + query + "%"
 			db = db.Where(
-				"username ILIKE ? OR public_id ILIKE ? OR telegram_username ILIKE ? OR telegram_first_name ILIKE ? OR id::text = ? OR CAST(telegram_id AS TEXT) = ?",
+				"(username ILIKE ? OR public_id ILIKE ? OR telegram_username ILIKE ? OR telegram_first_name ILIKE ? OR id::text = ? OR CAST(telegram_id AS TEXT) = ?)",
 				like, like, like, like, query, query,
 			)
 		}

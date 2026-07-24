@@ -5,6 +5,7 @@ package repo_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
@@ -95,6 +96,17 @@ func TestListUsers_SearchPaginateAndRoleFilter(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, containsID(got, u.ID))
 
+	// by public_id substring
+	got, _, err = r.ListUsers(ctx, u.PublicID, "", 10, 0)
+	require.NoError(t, err)
+	require.True(t, containsID(got, u.ID))
+
+	// by telegram_first_name substring (no overlap with username/telegram_username)
+	require.NoError(t, r.UpdateTelegramProfile(ctx, u.ID, "neo_tg", "UniqueFirstName"))
+	got, _, err = r.ListUsers(ctx, "UniqueFirst", "", 10, 0)
+	require.NoError(t, err)
+	require.True(t, containsID(got, u.ID))
+
 	// role filter excludes a 'user' when filtering for 'admin'
 	_, total, err = r.ListUsers(ctx, "neotokyo_zz", "admin", 10, 0)
 	require.NoError(t, err)
@@ -116,4 +128,38 @@ func TestUpdateRole_SuccessAndNotFound(t *testing.T) {
 	require.Equal(t, authz.RoleAdmin, got.Role)
 
 	require.Error(t, r.UpdateRole(ctx, "00000000-0000-0000-0000-000000000000", string(authz.RoleUser)))
+}
+
+func TestListUsers_OrdersNewestFirst(t *testing.T) {
+	db := usersDB(t)
+	r := repo.NewUserRepository(db)
+	ctx := context.Background()
+
+	older := &domain.User{Username: "orderold_zzz", Role: authz.RoleUser}
+	require.NoError(t, r.Create(ctx, older))
+	t.Cleanup(func() { db.Exec("DELETE FROM users WHERE id = ?", older.ID) })
+
+	// Ensure a distinct created_at between the two rows regardless of DB
+	// timestamp resolution.
+	time.Sleep(10 * time.Millisecond)
+
+	newer := &domain.User{Username: "ordernew_zzz", Role: authz.RoleUser}
+	require.NoError(t, r.Create(ctx, newer))
+	t.Cleanup(func() { db.Exec("DELETE FROM users WHERE id = ?", newer.ID) })
+
+	got, _, err := r.ListUsers(ctx, "", "", 10, 0)
+	require.NoError(t, err)
+
+	newerIdx, olderIdx := -1, -1
+	for i, u := range got {
+		if u.ID == newer.ID {
+			newerIdx = i
+		}
+		if u.ID == older.ID {
+			olderIdx = i
+		}
+	}
+	require.GreaterOrEqual(t, newerIdx, 0, "newer user not found in ListUsers result")
+	require.GreaterOrEqual(t, olderIdx, 0, "older user not found in ListUsers result")
+	require.Less(t, newerIdx, olderIdx, "newer user should appear before older user")
 }
