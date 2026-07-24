@@ -38,7 +38,7 @@ type User struct {
 	ID           string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Username     string `gorm:"size:32;uniqueIndex" json:"username"`
 	PasswordHash string `gorm:"size:255" json:"-"`
-	TelegramID *int64 `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
+	TelegramID   *int64 `gorm:"uniqueIndex" json:"telegram_id,omitempty"`
 	// Telegram display identity, refreshed on every Telegram login (spec
 	// 2026-07-24 admin users page). Distinct from Username, which is the
 	// 32-char unique login handle (derived + de-duplicated). Nullable — blank
