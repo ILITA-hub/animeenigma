@@ -848,7 +848,7 @@
         "instructionsIos": "iOS: download the .p12, then Settings → General → VPN & Device Management → install the profile",
         "instructionsAndroid": "Android: Settings → Security → Encryption & credentials → Install a certificate (VPN & apps)",
         "instructionsLinux": "Linux: import the .p12 into your browser (Settings → Privacy → Certificates)",
-        "instructionsFirefox": "Firefox (any OS): doesn't see system-store certificates — import the .p12 into Firefox itself: Settings → Privacy & Security → Certificates → View Certificates → Your Certificates → Import"
+        "instructionsFirefox": "Firefox (any OS): doesn't see system-store certificates — import the .p12 into Firefox itself: Settings → Privacy & Security → Certificates → View Certificates → Your Certificates → Import. There, also pick “Select one automatically” — Firefox stops asking for the certificate (otherwise a private window may ask twice: it opens two parallel connections)"
       }
     },
     "settings": {
