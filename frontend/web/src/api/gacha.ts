@@ -201,6 +201,16 @@ export interface CardFilterParams {
   enabled?: boolean
 }
 
+// ─── Bulk card operations ──────────────────────────────────────────────────
+
+/** Partial field set for bulk card updates — absent keys are left unchanged. */
+export interface BulkCardSet {
+  name?: string
+  source_title?: string
+  rarity?: Rarity
+  enabled?: boolean
+}
+
 // ─── Image URL helper ──────────────────────────────────────────────────────
 
 /** Build the full public URL for a card/banner image_path / art_path. */
@@ -257,6 +267,12 @@ export const gachaAdminApi = {
 
   deleteCard: (id: string) =>
     apiClient.delete<{ data: { deleted: boolean } }>(`/gacha/admin/cards/${id}`),
+
+  bulkUpdateCards: (ids: string[], set: BulkCardSet) =>
+    apiClient.patch<{ data: { updated: number } }>('/gacha/admin/cards/bulk', { ids, set }),
+
+  bulkDeleteCards: (ids: string[]) =>
+    apiClient.post<{ data: { deleted: number } }>('/gacha/admin/cards/bulk-delete', { ids }),
 
   // ── Groups ──
   listGroups: () =>
