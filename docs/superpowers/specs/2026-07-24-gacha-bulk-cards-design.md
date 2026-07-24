@@ -36,10 +36,11 @@ No new pages, no import wizard, no CSV.
 - **Checkbox column** + master «select all» checkbox (selects the currently
   filtered set). Selection survives inline edits, resets on filter change.
 - **Inline editing** in cells (no dialog round-trip):
-  - name and source_title: click → input, Enter/blur saves via existing
-    `PATCH /api/gacha/admin/cards/{id}` (full UpdateCardRequest built from the
-    row's current values with the one field changed)
-  - rarity: compact select in the cell, saves on change
+  - name and source_title: click → input, Enter/blur saves via the new bulk
+    endpoint with a single id (partial semantics — unlike the full-replace
+    single PATCH, no other field can be clobbered)
+  - rarity: compact select in the cell; enabled: checkbox in the cell —
+    both save on change through the same single-id bulk call
   - The existing per-card edit dialog stays (images, card back, groups).
 - **Bulk actions bar** appears when ≥1 selected (sticky above the table):
   «выбрано N» + actions:
@@ -73,8 +74,9 @@ hence a dedicated request shape:
   ```json
   { "ids": ["uuid", ...] }
   ```
-  - same soft-delete + join-row cleanup semantics as single `DeleteCard`,
-    applied to the whole set in one transaction; response `{ "deleted": <n> }`
+  - same semantics as single `DeleteCard`: plain soft-delete, join rows stay
+    (every join query already filters on `deleted_at`); response
+    `{ "deleted": <n> }`
 - Both admin-gated by the gateway exactly like the rest of `/api/gacha/admin/*`
   (prefix-routed — **no gateway change needed**).
 
