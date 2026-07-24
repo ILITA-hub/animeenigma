@@ -83,6 +83,15 @@ func TestBestMatch(t *testing.T) {
 	if got := bestMatch("恋する乙女", unrelated); got != nil {
 		t.Fatalf("expected nil for CJK-only title against unrelated slugs, got %+v", got)
 	}
+	// AUTO-593: a lone stopword overlap ("the") must not create a false
+	// match — live incident: "Imaizumi Brings All the Gyarus to His House"
+	// matched an unrelated slug purely via its "-the-animation-" segment.
+	stopwordOnly := []SearchHit{
+		{Slug: "9999-reika-wa-karei-na-boku-no-joou-the-animation-4", URL: "https://18anime.me/hentai/9999-reika-wa-karei-na-boku-no-joou-the-animation-4.html"},
+	}
+	if got := bestMatch("Imaizumi Brings All the Gyarus to His House", stopwordOnly); got != nil {
+		t.Fatalf("expected nil for stopword-only overlap, got %+v", got)
+	}
 }
 
 func TestParseEpisodeMirrors(t *testing.T) {

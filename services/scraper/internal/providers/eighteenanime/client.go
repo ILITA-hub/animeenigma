@@ -51,8 +51,23 @@ func normalize(s string) string {
 	return b.String()
 }
 
+// tokenStopwords are common short English words that recur across unrelated
+// titles and slugs. Without this guard a single incidental stopword overlap
+// (e.g. "the") was enough for the per-token fallback below to score > 0 and
+// declare an unrelated series the bestMatch — confirmed live: "Imaizumi
+// Brings All the Gyarus to His House" matched an unrelated slug solely via
+// its "the-animation" segment, serving the wrong hentai title as "episode 4"
+// (AUTO-593). Mirrors the AUTO-630 empty-normalized-token guard in spirit.
+var tokenStopwords = map[string]bool{
+	"the": true, "and": true, "for": true, "are": true, "was": true,
+	"were": true, "all": true, "his": true, "her": true, "its": true,
+	"who": true, "you": true, "she": true, "him": true, "not": true,
+	"but": true, "out": true, "has": true, "had": true, "can": true,
+}
+
 // bestMatch scores hits against the wanted title (normalized containment first,
-// then per-token overlap). Returns nil when no hit exceeds a zero score.
+// then per-token overlap, skipping stopwords). Returns nil when no hit exceeds
+// a zero score.
 func bestMatch(title string, hits []SearchHit) *SearchHit {
 	want := normalize(title)
 	var best *SearchHit
@@ -64,6 +79,9 @@ func bestMatch(title string, hits []SearchHit) *SearchHit {
 			score = len(want)
 		} else {
 			for _, tok := range strings.Fields(strings.ToLower(title)) {
+				if tokenStopwords[tok] {
+					continue
+				}
 				nt := normalize(tok)
 				if len(tok) > 2 && nt != "" && strings.Contains(slugNorm, nt) {
 					score++
