@@ -299,23 +299,31 @@ function cleanup() {
   if (troubleshootingTimeout) { clearTimeout(troubleshootingTimeout); troubleshootingTimeout = null }
 }
 
+/** Consumes the pending post-login redirect target (defaulting to home) and navigates there in place. */
+function replaceWithReturnUrl() {
+  const returnUrl = sessionStorage.getItem('returnUrl')
+  sessionStorage.removeItem('returnUrl')
+  router.replace(returnUrl || '/')
+}
+
 onMounted(async () => {
   // UA-027: if user is already authed, bounce them out rather than show a fresh QR.
   if (authStore.isAuthenticated) {
-    const returnUrl = sessionStorage.getItem('returnUrl')
-    sessionStorage.removeItem('returnUrl')
-    router.replace(returnUrl || '/')
+    replaceWithReturnUrl()
     return
   }
 
-  // TLS-cert auto-login (spec 2026-07-24): benefits direct navigation to /auth too.
-  const { tryCertAutoLogin } = await import('@/composables/useCertAutoLogin')
-  if (await tryCertAutoLogin()) {
-    const returnUrl = sessionStorage.getItem('returnUrl')
-    sessionStorage.removeItem('returnUrl')
-    router.replace(returnUrl || '/')
-    return
-  }
+  // TLS-cert auto-login (spec 2026-07-24): probe WITHOUT blocking startAuth —
+  // the cert-picker dialog can stay open for many seconds (probe timeout is
+  // sized for that), and the QR/password login must render immediately
+  // underneath it. On success we bounce out to returnUrl mid-page.
+  void import('@/composables/useCertAutoLogin').then(async ({ tryCertAutoLogin }) => {
+    if (!(await tryCertAutoLogin())) return
+    // The picker can sit open for a while — if the user logged in manually
+    // (or navigated away) meanwhile, don't yank them anywhere.
+    if (router.currentRoute.value.name !== 'auth') return
+    replaceWithReturnUrl()
+  })
 
   startAuth()
 })

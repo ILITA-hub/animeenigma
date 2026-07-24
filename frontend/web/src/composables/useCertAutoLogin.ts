@@ -9,7 +9,13 @@ import { CERT_SUPPRESS_KEY, CERT_NEG_CACHE_KEY } from '@/composables/certLoginFl
 export { CERT_SUPPRESS_KEY, CERT_NEG_CACHE_KEY }
 
 const NEG_CACHE_MS = 24 * 60 * 60 * 1000
-const PROBE_TIMEOUT_MS = 2500
+// Generous on purpose: browsers (Firefox especially) pause the TLS handshake
+// on a HUMAN-interactive certificate-picker dialog, and the user needs time
+// to click it. 2.5s used to abort the fetch mid-pick, so the chosen cert
+// never logged anyone in (owner report 2026-07-24). All probe call sites are
+// fire-and-forget, so a slow probe delays nothing user-visible; the timeout
+// only reaps genuinely hung connections.
+const PROBE_TIMEOUT_MS = 30_000
 
 function lsGet(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
