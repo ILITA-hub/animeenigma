@@ -79,6 +79,13 @@ func toLibraryCredential(row *domain.WebAuthnCredential) (webauthn.Credential, e
 		ID:        rawID,
 		PublicKey: row.PublicKey,
 		Transport: transports,
+		// BackupEligible must survive the round trip: validateLogin rejects
+		// the assertion when it differs from the authenticator's BE flag,
+		// which synced passkeys always set.
+		Flags: webauthn.CredentialFlags{
+			BackupEligible: row.BackupEligible,
+			BackupState:    row.BackupState,
+		},
 		Authenticator: webauthn.Authenticator{
 			AAGUID:    row.AAGUID,
 			SignCount: row.SignCount,
@@ -156,6 +163,7 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, user *domain.Us
 	}
 	cred, err := s.wa.FinishRegistration(wu, session, r)
 	if err != nil {
+		s.log.Warnw("passkey registration rejected", "user_id", user.ID, "error", err)
 		metrics.AuthEventsTotal.WithLabelValues("passkey_register", "failure").Inc()
 		return nil, errors.InvalidInput("passkey verification failed")
 	}
@@ -172,13 +180,15 @@ func (s *PasskeyService) FinishRegistration(ctx context.Context, user *domain.Us
 		transports = append(transports, string(t))
 	}
 	row := &domain.WebAuthnCredential{
-		UserID:       user.ID,
-		CredentialID: base64.RawURLEncoding.EncodeToString(cred.ID),
-		PublicKey:    cred.PublicKey,
-		SignCount:    cred.Authenticator.SignCount,
-		Transports:   strings.Join(transports, ","),
-		AAGUID:       cred.Authenticator.AAGUID,
-		Name:         name,
+		UserID:         user.ID,
+		CredentialID:   base64.RawURLEncoding.EncodeToString(cred.ID),
+		PublicKey:      cred.PublicKey,
+		SignCount:      cred.Authenticator.SignCount,
+		Transports:     strings.Join(transports, ","),
+		AAGUID:         cred.Authenticator.AAGUID,
+		BackupEligible: cred.Flags.BackupEligible,
+		BackupState:    cred.Flags.BackupState,
+		Name:           name,
 	}
 	if err := s.store.Create(ctx, row); err != nil {
 		return nil, err
@@ -239,6 +249,10 @@ func (s *PasskeyService) FinishLogin(ctx context.Context, ceremonyID string, r *
 
 	cred, err := s.wa.FinishDiscoverableLogin(handler, session, r)
 	if err != nil || matched == nil || matchedUser == nil {
+		// The client only ever sees an opaque 401; the library's reason
+		// (flag mismatch, bad signature, origin, …) must land in the logs
+		// or the failure is undiagnosable.
+		s.log.Warnw("passkey login rejected", "error", err)
 		metrics.AuthEventsTotal.WithLabelValues("passkey_login", "failure").Inc()
 		return nil, errors.Unauthorized("passkey verification failed")
 	}
