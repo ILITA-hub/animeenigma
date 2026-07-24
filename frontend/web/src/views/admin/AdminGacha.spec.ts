@@ -34,6 +34,8 @@ vi.mock('@/api/gacha', async (importOriginal) => {
       setBannerCards:       vi.fn(),
       addCardsToGroup:      vi.fn(),
       removeCardFromGroup:  vi.fn(),
+      bulkUpdateCards:      vi.fn(),
+      bulkDeleteCards:      vi.fn(),
     },
   }
 })
@@ -123,8 +125,23 @@ describe('AdminGacha', () => {
             props: ['modelValue'],
             template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
           },
-          Select: { props: ['modelValue', 'options'], template: '<select />' },
-          Checkbox: { props: ['modelValue'], template: '<input type="checkbox" :checked="modelValue" />' },
+          // Renders the selected option's label as text (mirrors the real
+          // Select's trigger text) so assertions against wrapper.html() still
+          // see the rarity/group label after Step 3g moved it from a bare
+          // <span> into an inline Select.
+          Select: {
+            props: ['modelValue', 'options'],
+            template: '<select>{{ options?.find(o => o.value === modelValue)?.label ?? modelValue }}</select>',
+          },
+          // Emits update:modelValue on click (flipping the boolean) so tests can
+          // drive selection/toggle behavior via `.trigger('click')` on the
+          // data-testid selector — matches how the real Checkbox (reka-ui
+          // CheckboxRoot) behaves on click.
+          Checkbox: {
+            props: ['modelValue'],
+            emits: ['update:modelValue'],
+            template: '<input type="checkbox" :checked="modelValue" @click="$emit(\'update:modelValue\', !modelValue)" />',
+          },
           Pencil: { template: '<span />' },
           Trash2: { template: '<span />' },
           Upload: { template: '<span />' },
@@ -132,6 +149,7 @@ describe('AdminGacha', () => {
           X: { template: '<span />' },
           Info: { template: '<span />' },
           GachaCardPicker: GachaCardPickerStub,
+          GachaBulkUpload: { template: '<div />' },
         },
       },
     })
@@ -506,5 +524,63 @@ describe('AdminGacha', () => {
       expect.arrayContaining(['card-p', 'card-q']),
     )
     expect(vm.groupPickerOpen).toBe(false)
+  })
+
+  // ── Bulk selection + actions ─────────────────────────────────────────────────
+
+  it('row checkbox selection shows the bulk bar and Enable calls bulkUpdateCards', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: { data: [makeCard({ id: 'c1' }), makeCard({ id: 'c2', name: 'Second' })] },
+    } as never)
+    vi.mocked(gachaAdminApi.bulkUpdateCards).mockResolvedValue({ data: { data: { updated: 1 } } } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="bulk-actions-bar"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="row-select-c1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="bulk-actions-bar"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="bulk-enable-btn"]').trigger('click')
+    await flushPromises()
+    expect(gachaAdminApi.bulkUpdateCards).toHaveBeenCalledWith(['c1'], { enabled: true })
+  })
+
+  it('select-all selects every filtered card', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: { data: [makeCard({ id: 'c1' }), makeCard({ id: 'c2', name: 'Second' })] },
+    } as never)
+    vi.mocked(gachaAdminApi.bulkUpdateCards).mockResolvedValue({ data: { data: { updated: 2 } } } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="select-all"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="bulk-disable-btn"]').trigger('click')
+    await flushPromises()
+    const [ids, set] = vi.mocked(gachaAdminApi.bulkUpdateCards).mock.calls[0]
+    expect([...ids].sort()).toEqual(['c1', 'c2'])
+    expect(set).toEqual({ enabled: false })
+  })
+
+  it('bulk delete goes through the confirm dialog then calls bulkDeleteCards', async () => {
+    const { gachaAdminApi } = await import('@/api/gacha')
+    vi.mocked(gachaAdminApi.listCards).mockResolvedValue({
+      data: { data: [makeCard({ id: 'c1' })] },
+    } as never)
+    vi.mocked(gachaAdminApi.bulkDeleteCards).mockResolvedValue({ data: { data: { deleted: 1 } } } as never)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="row-select-c1"]').trigger('click')
+    await wrapper.find('[data-testid="bulk-delete-btn"]').trigger('click')
+    await flushPromises()
+    expect(gachaAdminApi.bulkDeleteCards).not.toHaveBeenCalled()  // confirm first
+
+    const vm = wrapper.vm as unknown as { runDelete: () => Promise<void> }
+    await vm.runDelete()
+    expect(gachaAdminApi.bulkDeleteCards).toHaveBeenCalledWith(['c1'])
   })
 })

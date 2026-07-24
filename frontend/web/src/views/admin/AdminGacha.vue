@@ -42,8 +42,62 @@
                 {{ $t('gacha.admin.filter_enabled_only') }}
               </label>
             </div>
-            <Button size="sm" @click="openCardCreate">
-              + {{ $t('gacha.admin.card_create') }}
+            <div class="flex gap-2">
+              <Button size="sm" variant="outline" data-testid="bulk-upload-btn" @click="showBulkUpload = true">
+                <Upload class="size-4 mr-1" />
+                {{ $t('gacha.admin.bulk_upload_btn') }}
+              </Button>
+              <Button size="sm" @click="openCardCreate">
+                + {{ $t('gacha.admin.card_create') }}
+              </Button>
+            </div>
+          </div>
+
+          <!-- Bulk actions bar (visible while a selection exists) -->
+          <div
+            v-if="selectedIds.size > 0"
+            class="glass-card flex flex-wrap items-center gap-2 px-3 py-2 mb-3"
+            data-testid="bulk-actions-bar"
+          >
+            <span class="text-sm text-white/80 font-medium">
+              {{ $t('gacha.admin.bulk_selected', { n: selectedIds.size }) }}
+            </span>
+            <Select
+              v-model="bulkRarity"
+              :options="rarityEditOptions"
+              :placeholder="$t('gacha.admin.bulk_set_rarity')"
+              size="sm"
+              class="w-28"
+              data-testid="bulk-rarity-select"
+            />
+            <div class="flex items-center gap-1">
+              <Input v-model="bulkName" size="sm" :placeholder="$t('gacha.admin.bulk_set_name_placeholder')" class="w-36" />
+              <Button size="sm" variant="outline" :disabled="!bulkName.trim() || bulkBusy" data-testid="bulk-name-apply" @click="applyBulk({ name: bulkName.trim() })">
+                {{ $t('gacha.admin.bulk_apply') }}
+              </Button>
+            </div>
+            <div class="flex items-center gap-1">
+              <Input v-model="bulkSource" size="sm" :placeholder="$t('gacha.admin.bulk_set_source_placeholder')" class="w-36" />
+              <Button size="sm" variant="outline" :disabled="!bulkSource.trim() || bulkBusy" data-testid="bulk-source-apply" @click="applyBulk({ source_title: bulkSource.trim() })">
+                {{ $t('gacha.admin.bulk_apply') }}
+              </Button>
+            </div>
+            <Select
+              v-model="bulkGroup"
+              :options="bulkGroupOptions"
+              :placeholder="$t('gacha.admin.bulk_add_to_group')"
+              size="sm"
+              class="w-36"
+              data-testid="bulk-group-select"
+            />
+            <Button size="sm" variant="outline" :disabled="bulkBusy" data-testid="bulk-enable-btn" @click="applyBulk({ enabled: true })">
+              {{ $t('gacha.admin.bulk_enable') }}
+            </Button>
+            <Button size="sm" variant="outline" :disabled="bulkBusy" data-testid="bulk-disable-btn" @click="applyBulk({ enabled: false })">
+              {{ $t('gacha.admin.bulk_disable') }}
+            </Button>
+            <Button size="sm" variant="destructive" :disabled="bulkBusy" data-testid="bulk-delete-btn" @click="confirmBulkDelete">
+              {{ $t('gacha.admin.bulk_delete') }}
             </Button>
           </div>
 
@@ -62,6 +116,9 @@
             <table class="w-full text-sm text-white">
               <thead class="bg-black/40 backdrop-blur text-white/70 text-xs uppercase">
                 <tr>
+                  <th class="px-3 py-2 w-8">
+                    <Checkbox :model-value="allSelected" data-testid="select-all" @update:model-value="toggleSelectAll" />
+                  </th>
                   <th class="px-3 py-2 text-left w-12">{{ $t('gacha.admin.card_image') }}</th>
                   <th class="px-3 py-2 text-left">{{ $t('gacha.admin.card_name') }}</th>
                   <th class="px-3 py-2 text-left">{{ $t('gacha.admin.card_source') }}</th>
@@ -77,23 +134,60 @@
                   class="border-t border-white/10 hover:bg-white/5"
                 >
                   <td class="px-3 py-2">
+                    <Checkbox :model-value="selectedIds.has(card.id)" :data-testid="`row-select-${card.id}`" @update:model-value="toggleSelect(card.id)" />
+                  </td>
+                  <td class="px-3 py-2">
                     <img
                       :src="cardImageUrl(card.image_path)"
                       :alt="card.name"
                       class="w-8 h-10 object-cover rounded"
                     />
                   </td>
-                  <td class="px-3 py-2 font-medium">{{ card.name }}</td>
-                  <td class="px-3 py-2 text-white/60 text-xs">{{ card.source_title }}</td>
+                  <td class="px-3 py-2 font-medium cursor-pointer" @click="startInlineEdit(card, 'name')">
+                    <Input
+                      v-if="isEditing(card.id, 'name')"
+                      v-model="inlineValue"
+                      size="sm"
+                      autofocus
+                      @keyup.enter="commitInlineEdit"
+                      @keyup.esc="cancelInlineEdit"
+                      @blur="commitInlineEdit"
+                      @click.stop
+                    />
+                    <template v-else>
+                      {{ card.name }}
+                      <span
+                        v-if="!card.enabled"
+                        class="ml-1.5 text-[10px] uppercase tracking-wide text-white/50 border border-white/20 rounded px-1 py-px align-middle"
+                      >
+                        {{ $t('gacha.admin.draft_badge') }}
+                      </span>
+                    </template>
+                  </td>
+                  <td class="px-3 py-2 text-white/60 text-xs cursor-pointer" @click="startInlineEdit(card, 'source_title')">
+                    <Input
+                      v-if="isEditing(card.id, 'source_title')"
+                      v-model="inlineValue"
+                      size="sm"
+                      autofocus
+                      @keyup.enter="commitInlineEdit"
+                      @keyup.esc="cancelInlineEdit"
+                      @blur="commitInlineEdit"
+                      @click.stop
+                    />
+                    <template v-else>{{ card.source_title }}</template>
+                  </td>
                   <td class="px-3 py-2">
-                    <span :class="['text-xs font-semibold px-1.5 py-0.5 rounded', rarityBadgeClass(card.rarity)]">
-                      {{ card.rarity }}
-                    </span>
+                    <Select
+                      :model-value="card.rarity"
+                      :options="rarityEditOptions"
+                      size="sm"
+                      class="w-20"
+                      @update:model-value="v => onInlineRarity(card, v as Rarity)"
+                    />
                   </td>
                   <td class="px-3 py-2 text-center">
-                    <span :class="card.enabled ? 'text-teal-400' : 'text-muted-foreground'">
-                      {{ card.enabled ? '✓' : '–' }}
-                    </span>
+                    <Checkbox :model-value="card.enabled" @update:model-value="v => onInlineEnabled(card, v as boolean)" />
                   </td>
                   <td class="px-3 py-2 text-right space-x-2">
                     <Button variant="ghost" size="sm" @click="openCardEdit(card)">
@@ -675,6 +769,9 @@
       </div>
     </template>
   </Modal>
+
+  <!-- ─── BULK UPLOAD DIALOG ────────────────────────────────────────────── -->
+  <GachaBulkUpload v-model="showBulkUpload" />
 </template>
 
 <script setup lang="ts">
@@ -688,6 +785,7 @@ import {
   type GachaGroup,
   type GachaBanner,
   type Rarity,
+  type BulkCardSet,
 } from '@/api/gacha'
 import Tabs from '@/components/ui/Tabs.vue'
 import Modal from '@/components/ui/Modal.vue'
@@ -698,6 +796,7 @@ import Checkbox from '@/components/ui/Checkbox.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import Alert from '@/components/ui/Alert.vue'
 import GachaCardPicker from '@/components/admin/GachaCardPicker.vue'
+import GachaBulkUpload from '@/components/admin/GachaBulkUpload.vue'
 
 const { t } = useI18n()
 
@@ -735,6 +834,152 @@ const filteredCards = computed(() => {
     return true
   })
 })
+
+// ── Bulk upload dialog ────────────────────────────────────────────────────────
+const showBulkUpload = ref(false)
+// Refetch on close — the dialog created draft cards behind the table's back.
+watch(showBulkUpload, open => {
+  if (!open) void loadCards()
+})
+
+// ── Bulk selection + actions ──────────────────────────────────────────────────
+const selectedIds = ref<Set<string>>(new Set())
+const bulkBusy = ref(false)
+const bulkName = ref('')
+const bulkSource = ref('')
+const bulkRarity = ref('')
+const bulkGroup = ref('')
+
+const allSelected = computed(() =>
+  filteredCards.value.length > 0 && filteredCards.value.every(c => selectedIds.value.has(c.id)))
+
+function toggleSelect(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  selectedIds.value = allSelected.value ? new Set() : new Set(filteredCards.value.map(c => c.id))
+}
+
+// Selection references filtered rows; changing filters invalidates it.
+watch([cardFilterRarity, cardFilterGroup, cardFilterEnabled], () => {
+  selectedIds.value = new Set()
+})
+
+async function applyBulk(set: BulkCardSet) {
+  if (selectedIds.value.size === 0) return
+  bulkBusy.value = true
+  pageError.value = null
+  try {
+    await gachaAdminApi.bulkUpdateCards(Array.from(selectedIds.value), set)
+    bulkName.value = ''
+    bulkSource.value = ''
+    await loadCards()
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  } finally {
+    bulkBusy.value = false
+  }
+}
+
+// Selects apply immediately on pick, then reset to '' so the placeholder returns.
+watch(bulkRarity, v => {
+  if (!v) return
+  void applyBulk({ rarity: v as Rarity }).finally(() => { bulkRarity.value = '' })
+})
+
+watch(bulkGroup, v => {
+  if (!v || selectedIds.value.size === 0) {
+    if (v) bulkGroup.value = ''
+    return
+  }
+  bulkBusy.value = true
+  gachaAdminApi.addCardsToGroup(v, Array.from(selectedIds.value))
+    .catch((err: unknown) => { pageError.value = extractMessage(err) })
+    .finally(() => { bulkBusy.value = false; bulkGroup.value = '' })
+})
+
+const bulkGroupOptions = computed(() => groups.value.map(g => ({ value: g.id, label: g.name })))
+const rarityEditOptions = [
+  { value: 'N', label: 'N' },
+  { value: 'R', label: 'R' },
+  { value: 'SR', label: 'SR' },
+  { value: 'SSR', label: 'SSR' },
+]
+
+function confirmBulkDelete() {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  deleteTarget.value = {
+    label: t('gacha.admin.bulk_delete_label'),
+    confirmMsg: t('gacha.admin.bulk_delete_confirm', { n: ids.length }),
+    action: async () => {
+      await gachaAdminApi.bulkDeleteCards(ids)
+      selectedIds.value = new Set()
+      await loadCards()
+    },
+  }
+  showDeleteDialog.value = true
+}
+
+// ── Inline cell editing ───────────────────────────────────────────────────────
+// Single-cell edits go through the bulk endpoint with one id: partial
+// semantics — unlike updateCard (full replace), nothing else can be clobbered.
+const inlineEdit = ref<{ id: string; field: 'name' | 'source_title' } | null>(null)
+const inlineValue = ref('')
+
+function isEditing(id: string, field: 'name' | 'source_title') {
+  return inlineEdit.value?.id === id && inlineEdit.value?.field === field
+}
+
+function startInlineEdit(card: GachaCard, field: 'name' | 'source_title') {
+  inlineEdit.value = { id: card.id, field }
+  inlineValue.value = field === 'name' ? card.name : card.source_title
+}
+
+function cancelInlineEdit() {
+  inlineEdit.value = null
+}
+
+async function commitInlineEdit() {
+  const edit = inlineEdit.value
+  if (!edit) return
+  inlineEdit.value = null
+  const card = cards.value.find(c => c.id === edit.id)
+  if (!card) return
+  const value = inlineValue.value.trim()
+  if (edit.field === 'name' && !value) return // backend rejects empty names
+  if (value === (edit.field === 'name' ? card.name : card.source_title)) return
+  try {
+    await gachaAdminApi.bulkUpdateCards([card.id], { [edit.field]: value })
+    if (edit.field === 'name') card.name = value
+    else card.source_title = value
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  }
+}
+
+async function onInlineRarity(card: GachaCard, rarity: Rarity) {
+  if (rarity === card.rarity) return
+  try {
+    await gachaAdminApi.bulkUpdateCards([card.id], { rarity })
+    card.rarity = rarity
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  }
+}
+
+async function onInlineEnabled(card: GachaCard, enabled: boolean) {
+  try {
+    await gachaAdminApi.bulkUpdateCards([card.id], { enabled })
+    card.enabled = enabled
+  } catch (err: unknown) {
+    pageError.value = extractMessage(err)
+  }
+}
 
 // ── Groups state ──────────────────────────────────────────────────────────────
 const groups = ref<GachaGroup[]>([])
