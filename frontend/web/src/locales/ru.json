@@ -2350,6 +2350,8 @@
     "viewer_inspect_prev_aria": "Предыдущая карта",
     "viewer_inspect_next_aria": "Следующая карта",
     "viewer_inspect_close_aria": "Закрыть просмотр карт",
+    "viewer_flip": "Перевернуть",
+    "viewer_flip_aria": "Перевернуть карту",
     "summary_title_x1": "Результат крутки",
     "summary_title_x10": "Результат ×10",
     "summary_balance": "Баланс: {balance} ◆ · до гаранта SSR: {pity}",

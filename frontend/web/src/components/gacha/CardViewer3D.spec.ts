@@ -226,6 +226,36 @@ describe('CardViewer3D — inspect mode', () => {
     return card
   }
 
+  it('inspect: a motionless tap flips the card to its back (and back again)', async () => {
+    const w = mountViewer([pulled('a', 'SSR', true, 1, 'cards/back.jpg')], true, 'inspect')
+    await flushPromises()
+    const card = await dragAndRelease(0) // no movement = tap
+    expect(card.style.transform).toContain('rotateY(180deg)')
+    await dragAndRelease(0) // second tap returns to front
+    expect(card.style.transform).toContain('rotateY(360deg)')
+    w.unmount()
+  })
+
+  it('inspect: the Flip footer button turns the card', async () => {
+    const w = mountViewer([pulled('a', 'SSR', true, 1, 'cards/back.jpg')], true, 'inspect')
+    await flushPromises()
+    const btn = document.querySelector('[data-testid="viewer-inspect-flip"]') as HTMLElement
+    expect(btn).not.toBeNull()
+    btn.click()
+    await flushPromises()
+    const card = document.querySelector('.card3d') as HTMLElement
+    expect(card.style.transform).toContain('rotateY(180deg)')
+    w.unmount()
+  })
+
+  it('reveal: a tap does NOT flip — ceremonial front stays', async () => {
+    const w = mountViewer([pulled('a', 'SSR')], true)
+    await flushPromises()
+    const card = await dragAndRelease(0)
+    expect(card.style.transform).toContain('rotateY(0deg)')
+    w.unmount()
+  })
+
   it('inspect: dragging past 90° rests on the BACK face on release', async () => {
     const w = mountViewer([pulled('a', 'SSR', true, 1, 'cards/back.jpg')], true, 'inspect')
     await flushPromises()

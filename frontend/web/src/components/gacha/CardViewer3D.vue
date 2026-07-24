@@ -87,6 +87,15 @@
         <Button
           variant="outline"
           size="sm"
+          data-testid="viewer-inspect-flip"
+          :aria-label="$t('gacha.viewer_flip_aria')"
+          @click="flipCard"
+        >
+          {{ $t('gacha.viewer_flip') }}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           data-testid="viewer-inspect-close"
           :aria-label="$t('gacha.viewer_inspect_close_aria')"
           @click="finish"
@@ -164,6 +173,9 @@ function nearestFace(deg: number): number {
 let drag = false
 let lx = 0
 let ly = 0
+// Total pointer travel since pointerdown — distinguishes a tap (flip in
+// inspect mode) from a drag (free rotate).
+let travel = 0
 let rx = 0
 let ry = 0
 let raf: number | null = null
@@ -192,6 +204,7 @@ function onPointerDown(e: PointerEvent) {
   drag = true
   lx = e.clientX
   ly = e.clientY
+  travel = 0
   c.setPointerCapture(e.pointerId)
   c.style.transition = 'none'
   if (!raf) raf = requestAnimationFrame(tick)
@@ -204,6 +217,7 @@ function onPointerMove(e: PointerEvent) {
     // Vertical contribution fades to 0 at the edge (90°) and flips sign past it —
     // continuous, no jump, unlike a hard inversion.
     const k = Math.cos((ry * Math.PI) / 180)
+    travel += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly)
     ry += (e.clientX - lx) * 0.42
     rx -= (e.clientY - ly) * 0.42 * k
     lx = e.clientX
@@ -221,20 +235,37 @@ function onPointerMove(e: PointerEvent) {
   }
 }
 
-function release() {
+// springTo animates Y to target, levels X, then normalizes the angle.
+function springTo(target: number) {
   const c = card3d.value
-  if (!c || !drag) return
-  drag = false
-  // Spring to the nearest face: front-only in reveal (multiple of 360),
-  // front OR back in inspect (multiple of 180).
+  if (!c) return
   c.style.transition = 'transform .5s cubic-bezier(.2,1.2,.4,1)'
-  ry = nearestFace(ry)
+  ry = target
   rx = 0
   applyTilt()
   setTimeout(() => {
     c.style.transition = 'transform .08s linear'
     ry = ry % 360
   }, 520)
+}
+
+// flipCard turns the card to its other face (inspect footer button + tap).
+function flipCard() {
+  springTo(nearestFace(ry) + 180)
+}
+
+function release() {
+  const c = card3d.value
+  if (!c || !drag) return
+  drag = false
+  // A motionless tap in inspect mode flips the card — the discoverable way to
+  // see the рубашка without mastering a 90°+ drag. Real drags spring to the
+  // nearest face: front-only in reveal (step 360), front OR back in inspect.
+  if (isInspect.value && travel < 6) {
+    flipCard()
+    return
+  }
+  springTo(nearestFace(ry))
 }
 
 function onPointerUp() {

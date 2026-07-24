@@ -2350,6 +2350,8 @@
     "viewer_inspect_prev_aria": "Previous card",
     "viewer_inspect_next_aria": "Next card",
     "viewer_inspect_close_aria": "Close card viewer",
+    "viewer_flip": "Flip",
+    "viewer_flip_aria": "Flip the card",
     "summary_title_x1": "Pull result",
     "summary_title_x10": "Result ×10",
     "summary_balance": "Balance: {balance} ◆ · until SSR guarantee: {pity}",

@@ -2350,6 +2350,8 @@
     "viewer_inspect_prev_aria": "前のカード",
     "viewer_inspect_next_aria": "次のカード",
     "viewer_inspect_close_aria": "カードビューワーを閉じる",
+    "viewer_flip": "裏返す",
+    "viewer_flip_aria": "カードを裏返す",
     "summary_title_x1": "ガチャ結果",
     "summary_title_x10": "結果 ×10",
     "summary_balance": "残高: {balance} ◆ · SSR天井まで: {pity}",
