@@ -154,6 +154,13 @@ type ProviderSummary struct {
 	// of one provider share the episode list; kodik teams differ, max = the
 	// fullest team). 0 = no unit reported a count yet.
 	Episodes int `json:"episodes,omitempty"`
+	// Unreachable: EVERY probed unit came back StatusUnreachable (stream resolved
+	// but its media is dead — see prober.unreachable). A provider with any
+	// verified/inconclusive unit is at least partially reachable and is NOT
+	// flagged. Drives the aePlayer "may not work" badge (informational only —
+	// the source stays selectable). Never set for the ae/kodik synth (their
+	// units are always verified). omitempty: absent == false on the wire.
+	Unreachable bool `json:"unreachable,omitempty"`
 }
 
 func Summarize(units []UnitVerdict) ProviderSummary {
@@ -164,9 +171,13 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 	dub := map[string]bool{}
 	hs := map[string]bool{}
 	verified := 0
+	unreachable := 0
 	for _, u := range units {
 		if u.Status == StatusVerified {
 			verified++
+		}
+		if u.Status == StatusUnreachable {
+			unreachable++
 		}
 		s.Episodes = max(s.Episodes, u.Episodes)
 		if u.Status == StatusVerified && u.RawAudio {
@@ -202,5 +213,7 @@ func Summarize(units []UnitVerdict) ProviderSummary {
 	case verified > 0 || s.Raw || len(s.DubLangs) > 0 || len(s.HardsubLangs) > 0:
 		s.Status = "partial"
 	}
+	// Flagged only when every unit is unreachable (len>0 guaranteed above).
+	s.Unreachable = unreachable == len(units)
 	return s
 }

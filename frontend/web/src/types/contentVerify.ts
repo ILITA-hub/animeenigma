@@ -22,6 +22,11 @@ export interface ProviderVerify {
   hardsub_langs: string[]
   /** Provider-level episodes-ready count (max across units); absent = unknown. */
   episodes?: number
+  /** Every probed unit came back unreachable (dead stream) — drives the Source
+   *  panel "may not work" badge. Informational only; the source stays
+   *  selectable. Absent/false = at least partially reachable (or never probed).
+   *  Never set for the ae/kodik synth. */
+  unreachable?: boolean
   units?: VerifyUnit[]
 }
 

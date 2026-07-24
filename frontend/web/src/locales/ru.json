@@ -325,6 +325,7 @@
       "degraded": "Деградирован",
       "recovering": "Восстанавливается",
       "noContent": "Нет серий",
+      "mayNotWork": "Может не работать",
       "tryAnother": "Другой источник",
       "subBurnedIn": "вшитые",
       "episodeCount": "{n} эп.",

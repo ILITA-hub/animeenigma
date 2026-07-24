@@ -325,6 +325,7 @@
       "degraded": "Degraded",
       "recovering": "Recovering",
       "noContent": "No episodes",
+      "mayNotWork": "May not work",
       "tryAnother": "Try another source",
       "subBurnedIn": "burned-in",
       "episodeCount": "{n} ep.",

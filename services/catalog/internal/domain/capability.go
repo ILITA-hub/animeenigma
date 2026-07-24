@@ -81,6 +81,11 @@ type VerifySummary struct {
 	// (max across probe units). Backfills ProviderCap.Episodes for providers
 	// without a live feed-time episode list (EN scrapers, animejoy legs).
 	Episodes int `json:"episodes,omitempty"`
+	// Unreachable: every probed unit came back unreachable (dead stream). Drives
+	// the aePlayer "may not work" badge (informational; the source stays
+	// selectable). Decoded straight off content-verify's ProviderSummary wire;
+	// never set for the ae/kodik synth (always-verified units).
+	Unreachable bool `json:"unreachable,omitempty"`
 }
 
 // Variant is a watchable unit: a category (+ optional translation team for RU),

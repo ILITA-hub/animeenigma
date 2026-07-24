@@ -148,4 +148,39 @@ describe('ProviderChip', () => {
     w = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
     expect(w.find('[data-test="cap-episodes"]').exists()).toBe(false)
   })
+
+  // Owner 2026-07-24: content-verify rated every probed unit unreachable → a
+  // "may not work" warning + red dot, but the source STAYS selectable (live
+  // playback in the browser is the real test).
+  it('shows the "may not work" badge + red dot but stays selectable when verify.unreachable', async () => {
+    const verify: ProviderVerify = { status: 'unverified', raw: false, dub_langs: [], hardsub_langs: [], unreachable: true }
+    const w = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
+    const badge = w.find('[data-test="cap-unreachable"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('player.sources.mayNotWork')
+    // Red dot: the status dot swaps to the destructive token.
+    expect(w.find('span.rounded-full').classes()).toContain('bg-destructive')
+    // Informational only — still clickable.
+    expect(w.find('button').attributes('disabled')).toBeUndefined()
+    await w.find('button').trigger('click')
+    expect(w.emitted('select')).toBeTruthy()
+  })
+
+  it('the may-not-work badge takes priority over the roster state badge', () => {
+    const verify: ProviderVerify = { status: 'unverified', raw: false, dub_langs: [], hardsub_langs: [], unreachable: true }
+    const w = mount(ProviderChip, {
+      props: { row: row({ state: 'degraded', hackerOnly: true }), cap, verify },
+      ...stub,
+    })
+    expect(w.find('[data-test="cap-unreachable"]').exists()).toBe(true)
+    expect(w.find('[data-test="cap-degraded"]').exists()).toBe(false)
+  })
+
+  it('no may-not-work badge when verify is absent or unreachable is false', () => {
+    const wNone = mount(ProviderChip, { props: { row: row(), cap }, ...stub })
+    expect(wNone.find('[data-test="cap-unreachable"]').exists()).toBe(false)
+    const verify: ProviderVerify = { status: 'verified', raw: true, dub_langs: [], hardsub_langs: [], unreachable: false }
+    const wOk = mount(ProviderChip, { props: { row: row(), cap, verify }, ...stub })
+    expect(wOk.find('[data-test="cap-unreachable"]').exists()).toBe(false)
+  })
 })

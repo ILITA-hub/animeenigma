@@ -63,3 +63,37 @@ func TestSummarizeHardsubOnlyPartial(t *testing.T) {
 		t.Fatalf("unexpected raw/dub_langs = raw=%v dub_langs=%v", s.Raw, s.DubLangs)
 	}
 }
+
+// TestSummarizeUnreachable locks the provider-level "may not work" rollup: the
+// flag is set ONLY when every probed unit is StatusUnreachable. Any reachable
+// unit (verified or inconclusive) clears it, and an empty unit list is never
+// flagged (never probed ≠ unreachable).
+func TestSummarizeUnreachable(t *testing.T) {
+	allDead := []UnitVerdict{
+		{Status: StatusUnreachable, Fails: 3},
+		{Status: StatusUnreachable, Fails: 1},
+	}
+	if s := Summarize(allDead); !s.Unreachable {
+		t.Fatalf("all-unreachable must flag unreachable: %+v", s)
+	}
+	// One inconclusive unit means the provider is at least partially reachable.
+	mixed := []UnitVerdict{
+		{Status: StatusUnreachable},
+		{Status: StatusInconclusive},
+	}
+	if s := Summarize(mixed); s.Unreachable {
+		t.Fatalf("mixed reachability must NOT flag unreachable: %+v", s)
+	}
+	// A verified unit obviously works.
+	withVerified := []UnitVerdict{
+		{Status: StatusUnreachable},
+		{Status: StatusVerified, Audio: &AudioVerdict{Lang: "en", Verified: true}},
+	}
+	if s := Summarize(withVerified); s.Unreachable {
+		t.Fatalf("any verified unit must clear unreachable: %+v", s)
+	}
+	// Never probed → not flagged.
+	if Summarize(nil).Unreachable {
+		t.Fatal("empty unit list must not flag unreachable")
+	}
+}

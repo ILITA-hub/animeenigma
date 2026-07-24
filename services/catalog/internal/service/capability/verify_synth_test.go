@@ -170,6 +170,10 @@ func TestSynthSummaries_Parity(t *testing.T) {
 			if !ok {
 				t.Fatalf("missing %q summary in %+v", tc.key, got)
 			}
+			// ae/kodik synth units are always verified → never "may not work".
+			if s.Unreachable {
+				t.Fatalf("synth summary must never be unreachable: %+v", s)
+			}
 			if !reflect.DeepEqual(s, tc.want) {
 				t.Fatalf("summary = %+v, want %+v", s, tc.want)
 			}

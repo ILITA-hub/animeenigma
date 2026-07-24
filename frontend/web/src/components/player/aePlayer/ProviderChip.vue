@@ -67,6 +67,15 @@
         <Check class="size-[14px]" aria-hidden="true" />
       </span>
 
+      <!-- Content-verify "may not work": every probed unit was unreachable
+           (dead stream). Informational — the source stays selectable. Takes
+           priority over the roster state badges. -->
+      <span
+        v-else-if="unreachable"
+        data-test="cap-unreachable"
+        class="ml-auto flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-destructive font-mono"
+      >{{ $t('player.sources.mayNotWork') }}</span>
+
       <!-- State badges (recovering / degraded / no_content) -->
       <span
         v-else-if="row.state === 'recovering'"
@@ -120,6 +129,10 @@ const emit = defineEmits<{
 const isSelected = computed(() => props.selected === true)
 const labels = computed(() => deriveCapLabels(props.cap, props.verify ?? null))
 
+// content-verify rated every probed unit unreachable (dead stream) → the "may
+// not work" warning + red dot. Informational only; selectability is untouched.
+const unreachable = computed(() => props.verify?.unreachable === true)
+
 // Episodes-ready count. The live verify poll refreshes faster than the
 // 10-min-cached capability feed, so its count wins; the feed's native count
 // (kodik/hanime/ae live lists, or the blend at feed-build time) is the
@@ -145,7 +158,8 @@ const DOT: Record<ChipState, string> = {
   degraded: 'bg-warning',
   no_content: 'bg-[var(--muted-foreground)]',
 }
-const dotClass = computed(() => DOT[props.row.state])
+// A "may not work" verdict overrides the roster-state hue with destructive red.
+const dotClass = computed(() => (unreachable.value ? 'bg-destructive' : DOT[props.row.state]))
 
 function onClick() {
   if (selectable.value) {

@@ -8,11 +8,15 @@ import (
 	"github.com/ILITA-hub/animeenigma/services/catalog/internal/domain"
 )
 
-// synthStatusVerified mirrors content-verify's domain.StatusVerified value.
-// Kept as a local literal for the same reason as SkipTimingRow / skipStatusDetected:
-// the constant lives under content-verify's internal/ tree, which Go's
+// synthStatusVerified / synthStatusUnreachable mirror content-verify's
+// domain.StatusVerified / domain.StatusUnreachable values. Kept as local
+// literals for the same reason as SkipTimingRow / skipStatusDetected: the
+// constants live under content-verify's internal/ tree, which Go's
 // internal-import rule forbids catalog from importing.
-const synthStatusVerified = "verified"
+const (
+	synthStatusVerified    = "verified"
+	synthStatusUnreachable = "unreachable"
+)
 
 // --- content-verify verdict WIRE mirror -------------------------------------
 //
@@ -76,6 +80,7 @@ type providerSummaryWire struct {
 	DubLangs     []string `json:"dub_langs"`
 	HardsubLangs []string `json:"hardsub_langs"`
 	Episodes     int      `json:"episodes,omitempty"`
+	Unreachable  bool     `json:"unreachable,omitempty"`
 }
 
 type providerVerdictWire struct {
@@ -98,9 +103,13 @@ func summarizeSynth(units []unitVerdictWire) providerSummaryWire {
 	dub := map[string]bool{}
 	hs := map[string]bool{}
 	verified := 0
+	unreachable := 0
 	for _, u := range units {
 		if u.Status == synthStatusVerified {
 			verified++
+		}
+		if u.Status == synthStatusUnreachable {
+			unreachable++
 		}
 		s.Episodes = max(s.Episodes, u.Episodes)
 		if u.Status == synthStatusVerified && u.RawAudio {
@@ -131,6 +140,8 @@ func summarizeSynth(units []unitVerdictWire) providerSummaryWire {
 	case verified > 0 || s.Raw || len(s.DubLangs) > 0 || len(s.HardsubLangs) > 0:
 		s.Status = "partial"
 	}
+	// Flagged only when every unit is unreachable (len>0 guaranteed above).
+	s.Unreachable = unreachable == len(units)
 	return s
 }
 
@@ -257,6 +268,7 @@ func SynthSummaries(report domain.CapabilityReport) map[string]domain.VerifySumm
 			DubLangs:     v.Summary.DubLangs,
 			HardsubLangs: v.Summary.HardsubLangs,
 			Episodes:     v.Summary.Episodes,
+			Unreachable:  v.Summary.Unreachable,
 		}
 	}
 	return out
